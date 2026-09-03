@@ -1,0 +1,6 @@
+{
+  "name": "GovSchool Order Management & Agent Portal",
+  "description": "Enterprise Order Management System and Agent Tracking Portal for Government School Orders (KV, JNV) with order lifecycles, dispatch tracking, invoices, payments, and role-based access control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

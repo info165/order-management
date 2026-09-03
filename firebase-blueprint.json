@@ -1,0 +1,305 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access control",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "ACCOUNTS", "DISPATCH", "AGENT"] },
+        "agentId": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "email", "role", "isActive"]
+    },
+    "Agent": {
+      "title": "Agent",
+      "description": "Educational sales agent / business associate",
+      "type": "object",
+      "properties": {
+        "agentId": { "type": "string" },
+        "agentCode": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "companyName": { "type": "string" },
+        "address": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["agentId", "agentCode", "name", "isActive"]
+    },
+    "School": {
+      "title": "School",
+      "description": "Government school or institution (KV, JNV, etc.)",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "schoolType": { "type": "string" },
+        "schoolCode": { "type": "string" },
+        "udiseCode": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "district": { "type": "string" },
+        "state": { "type": "string" },
+        "pinCode": { "type": "string" },
+        "principalName": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "region": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["schoolId", "schoolName", "schoolType"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Educational kit, lab item, or equipment catalog item",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "subcategory": { "type": "string" },
+        "description": { "type": "string" },
+        "sku": { "type": "string" },
+        "defaultPrice": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["productId", "name", "category", "isActive"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Central government school order document",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "financialYear": { "type": "string" },
+        "orderDate": { "type": "string" },
+        "agentId": { "type": "string" },
+        "agentName": { "type": "string" },
+        "agentCode": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "schoolType": { "type": "string" },
+        "schoolCode": { "type": "string" },
+        "orderType": { "type": "string" },
+        "category": { "type": "string" },
+        "purchaseOrderNumber": { "type": "string" },
+        "purchaseOrderDate": { "type": "string" },
+        "orderValue": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "grossOrderValue": { "type": "number" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "expectedDispatchDate": { "type": "string" },
+        "expectedDeliveryDate": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "invoiceDate": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "amountReceived": { "type": "number" },
+        "amountPending": { "type": "number" },
+        "lastPaymentDate": { "type": "string" },
+        "expectedPaymentDate": { "type": "string" },
+        "dispatchStatus": { "type": "string" },
+        "deliveryStatus": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "internalNotes": { "type": "string" },
+        "agentVisibleNotes": { "type": "string" },
+        "isArchived": { "type": "boolean" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["orderId", "orderNumber", "schoolName", "orderValue", "status", "paymentStatus", "dispatchStatus"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment installment or transaction record",
+      "type": "object",
+      "properties": {
+        "paymentId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMode": { "type": "string" },
+        "transactionReference": { "type": "string" },
+        "bankReference": { "type": "string" },
+        "remarks": { "type": "string" },
+        "proofDocumentId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["paymentId", "orderId", "paymentDate", "amount", "paymentMode"]
+    },
+    "Dispatch": {
+      "title": "Dispatch",
+      "description": "Logistics and courier tracking record",
+      "type": "object",
+      "properties": {
+        "dispatchId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "dispatchDate": { "type": "string" },
+        "dispatchMode": { "type": "string" },
+        "courierName": { "type": "string" },
+        "trackingNumber": { "type": "string" },
+        "lrNumber": { "type": "string" },
+        "dispatchFrom": { "type": "string" },
+        "deliveryTo": { "type": "string" },
+        "expectedDeliveryDate": { "type": "string" },
+        "actualDeliveryDate": { "type": "string" },
+        "dispatchRemarks": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["dispatchId", "orderId", "dispatchDate", "courierName", "trackingNumber"]
+    },
+    "Delivery": {
+      "title": "Delivery",
+      "description": "Delivery confirmation and proof of delivery",
+      "type": "object",
+      "properties": {
+        "deliveryId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "deliveryDate": { "type": "string" },
+        "receivedBy": { "type": "string" },
+        "receiverDesignation": { "type": "string" },
+        "deliveryRemarks": { "type": "string" },
+        "proofOfDelivery": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["deliveryId", "orderId", "deliveryDate"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Order attachment such as PO, Invoice, LR, or POD",
+      "type": "object",
+      "properties": {
+        "documentId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "documentType": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "visibleToAgent": { "type": "boolean" }
+      },
+      "required": ["documentId", "orderId", "documentType", "fileName", "visibleToAgent"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app alerts for agents and operations staff",
+      "type": "object",
+      "properties": {
+        "notificationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "orderId": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["notificationId", "userId", "title", "message", "isRead"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable security and operations audit log",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "previousValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["logId", "userId", "action", "entityType", "entityId", "timestamp"]
+    },
+    "OrderStatusHistory": {
+      "title": "OrderStatusHistory",
+      "description": "Timeline entries of order status transitions",
+      "type": "object",
+      "properties": {
+        "historyId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "previousStatus": { "type": "string" },
+        "newStatus": { "type": "string" },
+        "changedBy": { "type": "string" },
+        "changedByName": { "type": "string" },
+        "changedAt": { "type": "string" },
+        "comment": { "type": "string" },
+        "visibleToAgent": { "type": "boolean" }
+      },
+      "required": ["historyId", "orderId", "newStatus", "changedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and RBAC role assignments"
+    },
+    "/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/Agent" },
+      "description": "Business associates and agents directory"
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/School" },
+      "description": "Government school directory and contact info"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Product catalog and lab equipment"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Primary orders collection"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Recorded payments and transactions"
+    },
+    "/dispatches/{dispatchId}": {
+      "schema": { "$ref": "#/entities/Dispatch" },
+      "description": "Dispatch and courier tracking entries"
+    },
+    "/deliveries/{deliveryId}": {
+      "schema": { "$ref": "#/entities/Delivery" },
+      "description": "Proof of delivery and receipts"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/Document" },
+      "description": "Attached documents and receipts"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "In-app user notification items"
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Audit trail entries"
+    },
+    "/orderStatusHistory/{historyId}": {
+      "schema": { "$ref": "#/entities/OrderStatusHistory" },
+      "description": "Order lifecycle timeline entries"
+    }
+  }
+}

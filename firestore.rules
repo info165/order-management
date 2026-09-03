@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "info@funscholar.com" ||
+        (hasUserDoc() && currentUserDoc().role == "SUPER_ADMIN")
+      );
+    }
+
+    function isAdminOrOps() {
+      return isSuperAdmin() || (
+        hasUserDoc() &&
+        (currentUserDoc().role == "ADMIN" || currentUserDoc().role == "SUPER_ADMIN")
+      );
+    }
+
+    function isAccounts() {
+      return isAdminOrOps() || (
+        hasUserDoc() && currentUserDoc().role == "ACCOUNTS"
+      );
+    }
+
+    function isDispatch() {
+      return isAdminOrOps() || (
+        hasUserDoc() && currentUserDoc().role == "DISPATCH"
+      );
+    }
+
+    function isAgent() {
+      return hasUserDoc() && currentUserDoc().role == "AGENT";
+    }
+
+    function userAgentId() {
+      return currentUserDoc().agentId;
+    }
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdminOrOps());
+      allow create, update: if isSuperAdmin() || (isAdminOrOps() && request.auth.uid != userId);
+      allow delete: if isSuperAdmin();
+    }
+
+    // AGENTS COLLECTION
+    match /agents/{agentId} {
+      allow read: if isSignedIn() && (
+        isAdminOrOps() ||
+        (isAgent() && (resource.data.userId == request.auth.uid || resource.data.agentId == userAgentId()))
+      );
+      allow write: if isAdminOrOps();
+    }
+
+    // SCHOOLS MASTER
+    match /schools/{schoolId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOps();
+    }
+
+    // PRODUCTS MASTER
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOps();
+    }
+
+    // ORDERS
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+        isAdminOrOps() ||
+        isAccounts() ||
+        isDispatch() ||
+        (isAgent() && resource.data.agentId == userAgentId())
+      );
+      allow create, delete: if isAdminOrOps();
+      allow update: if isAdminOrOps() ||
+        (isAccounts() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'amountReceived', 'amountPending', 'lastPaymentDate', 'expectedPaymentDate', 'invoiceNumber', 'invoiceDate', 'updatedAt', 'updatedBy'])) ||
+        (isDispatch() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dispatchStatus', 'deliveryStatus', 'expectedDispatchDate', 'expectedDeliveryDate', 'updatedAt', 'updatedBy']));
+    }
+
+    // PAYMENTS
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (isAccounts() || isAdminOrOps());
+      allow create, update, delete: if isAccounts();
+    }
+
+    // DISPATCHES
+    match /dispatches/{dispatchId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isDispatch();
+    }
+
+    // DELIVERIES
+    match /deliveries/{deliveryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isDispatch();
+    }
+
+    // DOCUMENTS
+    match /documents/{documentId} {
+      allow read: if isSignedIn() && (
+        isAdminOrOps() ||
+        isAccounts() ||
+        isDispatch() ||
+        (isAgent() && resource.data.visibleToAgent == true)
+      );
+      allow create, update: if isAdminOrOps() || isAccounts() || isDispatch();
+      allow delete: if isAdminOrOps();
+    }
+
+    // NOTIFICATIONS
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+      allow create: if isSignedIn();
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // ACTIVITY LOGS (Append only)
+    match /activityLogs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // ORDER STATUS HISTORY
+    match /orderStatusHistory/{historyId} {
+      allow read: if isSignedIn() && (
+        isAdminOrOps() ||
+        isAccounts() ||
+        isDispatch() ||
+        (isAgent() && resource.data.visibleToAgent == true)
+      );
+      allow create: if isAdminOrOps() || isAccounts() || isDispatch();
+      allow update, delete: if false;
+    }
+
+    // SYSTEM SETTINGS
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Default catch-all rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
