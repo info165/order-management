@@ -501,15 +501,34 @@ export async function getOrderById(orderId: string, user: UserProfile): Promise<
 export async function checkPotentialDuplicateOrder(
   schoolName: string,
   purchaseOrderNumber: string,
+  orderNumber?: string,
   excludeOrderId?: string
 ): Promise<Order | null> {
-  if (!purchaseOrderNumber || !purchaseOrderNumber.trim()) return null;
+  const cleanPO = purchaseOrderNumber?.toLowerCase().trim();
+  const cleanOrderNum = orderNumber?.toLowerCase().trim();
+
   const match = memoryOrders.find(o => {
     if (excludeOrderId && o.orderId === excludeOrderId) return false;
     if (o.isDeleted) return false;
-    const samePO = o.purchaseOrderNumber.toLowerCase().trim() === purchaseOrderNumber.toLowerCase().trim();
-    const sameSchool = o.schoolName.toLowerCase().trim() === schoolName.toLowerCase().trim();
-    return samePO && sameSchool;
+
+    // Check duplicate orderNumber
+    if (cleanOrderNum && o.orderNumber && o.orderNumber.toLowerCase().trim() === cleanOrderNum) {
+      return true;
+    }
+
+    // Check duplicate purchaseOrderNumber (GeM PO)
+    if (cleanPO && o.purchaseOrderNumber && o.purchaseOrderNumber.toLowerCase().trim() === cleanPO) {
+      return true;
+    }
+
+    // Check same school + same PO if PO is specified
+    if (cleanPO && schoolName) {
+      const samePO = o.purchaseOrderNumber?.toLowerCase().trim() === cleanPO;
+      const sameSchool = o.schoolName?.toLowerCase().trim() === schoolName.toLowerCase().trim();
+      if (samePO && sameSchool) return true;
+    }
+
+    return false;
   });
   return match || null;
 }

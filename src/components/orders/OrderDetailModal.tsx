@@ -21,7 +21,10 @@ import {
   Check,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Camera,
+  Trash2,
+  Download
 } from 'lucide-react';
 import {
   Order,
@@ -41,6 +44,7 @@ import {
   addPayment,
   getDocumentsForOrder,
   uploadDocument,
+  deleteDocument,
   getTimelineForOrder,
   updateOrderStatus,
   updateDispatch,
@@ -110,8 +114,26 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   // Document upload states
   const [docType, setDocType] = useState<any>('Purchase Order');
   const [docFileName, setDocFileName] = useState('');
+  const [docFileData, setDocFileData] = useState<string>('');
   const [docVisibleToAgent, setDocVisibleToAgent] = useState(true);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+
+  // Attachment states for CN, POD, Invoices, and GeM Order Copy
+  const [gemOrderCopyUrl, setGemOrderCopyUrl] = useState(order.gemOrderCopyUrl || '');
+  const [gemOrderCopyFileName, setGemOrderCopyFileName] = useState(order.gemOrderCopyFileName || '');
+  const [cnCopyUrl, setCnCopyUrl] = useState(order.cnCopyUrl || '');
+  const [cnCopyFileName, setCnCopyFileName] = useState(order.cnCopyFileName || '');
+  const [podCopyUrl, setPodCopyUrl] = useState(order.podCopyUrl || '');
+  const [podCopyFileName, setPodCopyFileName] = useState(order.podCopyFileName || '');
+  const [gemInvoiceUrl, setGemInvoiceUrl] = useState(order.gemInvoiceUrl || '');
+  const [gemInvoiceFileName, setGemInvoiceFileName] = useState(order.gemInvoiceFileName || '');
+  const [companyInvoiceUrl, setCompanyInvoiceUrl] = useState(order.companyInvoiceUrl || '');
+  const [companyInvoiceFileName, setCompanyInvoiceFileName] = useState(order.companyInvoiceFileName || '');
+  const [ewayBillUrl, setEwayBillUrl] = useState(order.ewayBillUrl || '');
+  const [ewayBillFileName, setEwayBillFileName] = useState(order.ewayBillFileName || '');
+
+  // Document full preview modal state
+  const [previewDoc, setPreviewDoc] = useState<{ url: string; title: string; fileName: string } | null>(null);
 
   // Calling status & internal notes
   const [callingStatus, setCallingStatus] = useState(order.callingStatus || '');
@@ -139,6 +161,199 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   useEffect(() => {
     loadData();
   }, [order.orderId]);
+
+  // Upload handler for Consignment Note (CN Copy)
+  const handleCnFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setCnCopyUrl(dataUrl);
+      setCnCopyFileName(file.name);
+      try {
+        await updateOrder(order.orderId, { cnCopyUrl: dataUrl, cnCopyFileName: file.name }, currentUser);
+        await uploadDocument(
+          {
+            orderId: order.orderId,
+            documentType: 'Dispatch Receipt',
+            fileName: `CN_Copy_${file.name}`,
+            fileUrl: dataUrl,
+            fileSize: `${Math.round(file.size / 1024)} KB`,
+            uploadedBy: currentUser.name,
+            visibleToAgent: true
+          },
+          currentUser
+        );
+        await loadData();
+        onOrderUpdated();
+        alert('Consignment Note (CN Copy) successfully uploaded and linked to order.');
+      } catch (err: any) {
+        alert('Failed to save Consignment Note: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Upload handler for Proof of Delivery (POD Copy)
+  const handlePodFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setPodCopyUrl(dataUrl);
+      setPodCopyFileName(file.name);
+      try {
+        await updateOrder(order.orderId, { podCopyUrl: dataUrl, podCopyFileName: file.name }, currentUser);
+        await uploadDocument(
+          {
+            orderId: order.orderId,
+            documentType: 'Delivery Challan',
+            fileName: `POD_Signed_${file.name}`,
+            fileUrl: dataUrl,
+            fileSize: `${Math.round(file.size / 1024)} KB`,
+            uploadedBy: currentUser.name,
+            visibleToAgent: true
+          },
+          currentUser
+        );
+        await loadData();
+        onOrderUpdated();
+        alert('Proof of Delivery (POD Copy) successfully uploaded.');
+      } catch (err: any) {
+        alert('Failed to save POD: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Upload handler for Specific Order Documents (Invoice, GeM, E-way bill, CN, POD)
+  const handleQuickDocUpload = async (category: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const updates: Partial<Order> = {};
+      let docTypeMapped: any = 'Invoice';
+
+      if (category === 'gemOrderCopy') {
+        updates.gemOrderCopyUrl = dataUrl;
+        updates.gemOrderCopyFileName = file.name;
+        setGemOrderCopyUrl(dataUrl);
+        setGemOrderCopyFileName(file.name);
+        docTypeMapped = 'GeM Order Copy';
+      } else if (category === 'companyInvoice') {
+        updates.companyInvoiceUrl = dataUrl;
+        updates.companyInvoiceFileName = file.name;
+        setCompanyInvoiceUrl(dataUrl);
+        setCompanyInvoiceFileName(file.name);
+        docTypeMapped = 'Invoice';
+      } else if (category === 'gemInvoice') {
+        updates.gemInvoiceUrl = dataUrl;
+        updates.gemInvoiceFileName = file.name;
+        setGemInvoiceUrl(dataUrl);
+        setGemInvoiceFileName(file.name);
+        docTypeMapped = 'Invoice';
+      } else if (category === 'ewayBill') {
+        updates.ewayBillUrl = dataUrl;
+        updates.ewayBillFileName = file.name;
+        setEwayBillUrl(dataUrl);
+        setEwayBillFileName(file.name);
+        docTypeMapped = 'Dispatch Receipt';
+      } else if (category === 'cnCopy') {
+        updates.cnCopyUrl = dataUrl;
+        updates.cnCopyFileName = file.name;
+        setCnCopyUrl(dataUrl);
+        setCnCopyFileName(file.name);
+        docTypeMapped = 'Dispatch Receipt';
+      } else if (category === 'podCopy') {
+        updates.podCopyUrl = dataUrl;
+        updates.podCopyFileName = file.name;
+        setPodCopyUrl(dataUrl);
+        setPodCopyFileName(file.name);
+        docTypeMapped = 'Delivery Challan';
+      }
+
+      try {
+        await updateOrder(order.orderId, updates, currentUser);
+        await uploadDocument(
+          {
+            orderId: order.orderId,
+            documentType: docTypeMapped,
+            fileName: file.name,
+            fileUrl: dataUrl,
+            fileSize: `${Math.round(file.size / 1024)} KB`,
+            uploadedBy: currentUser.name,
+            visibleToAgent: true
+          },
+          currentUser
+        );
+        await loadData();
+        onOrderUpdated();
+        alert(`Document "${file.name}" uploaded and attached successfully.`);
+      } catch (err: any) {
+        alert('Document upload failed: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Delete attached document handler
+  const handleDeleteQuickDoc = async (category: string) => {
+    if (!confirm('Are you sure you want to remove this attached document?')) return;
+    const updates: Partial<Order> = {};
+    if (category === 'gemOrderCopy') {
+      updates.gemOrderCopyUrl = '';
+      updates.gemOrderCopyFileName = '';
+      setGemOrderCopyUrl('');
+      setGemOrderCopyFileName('');
+    } else if (category === 'companyInvoice') {
+      updates.companyInvoiceUrl = '';
+      updates.companyInvoiceFileName = '';
+      setCompanyInvoiceUrl('');
+      setCompanyInvoiceFileName('');
+    } else if (category === 'gemInvoice') {
+      updates.gemInvoiceUrl = '';
+      updates.gemInvoiceFileName = '';
+      setGemInvoiceUrl('');
+      setGemInvoiceFileName('');
+    } else if (category === 'ewayBill') {
+      updates.ewayBillUrl = '';
+      updates.ewayBillFileName = '';
+      setEwayBillUrl('');
+      setEwayBillFileName('');
+    } else if (category === 'cnCopy') {
+      updates.cnCopyUrl = '';
+      updates.cnCopyFileName = '';
+      setCnCopyUrl('');
+      setCnCopyFileName('');
+    } else if (category === 'podCopy') {
+      updates.podCopyUrl = '';
+      updates.podCopyFileName = '';
+      setPodCopyUrl('');
+      setPodCopyFileName('');
+    }
+
+    try {
+      await updateOrder(order.orderId, updates, currentUser);
+      await loadData();
+      onOrderUpdated();
+    } catch (err: any) {
+      alert('Failed to remove document: ' + err.message);
+    }
+  };
+
+  // Delete document from repository
+  const handleDeleteUploadedDocument = async (documentId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this document?')) return;
+    try {
+      await deleteDocument(documentId, currentUser);
+      await loadData();
+      onOrderUpdated();
+    } catch (err: any) {
+      alert('Failed to delete document: ' + err.message);
+    }
+  };
 
   // Handle Status Update
   const handleUpdateStatus = async (e: React.FormEvent) => {
@@ -265,15 +480,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         {
           orderId: order.orderId,
           documentType: docType,
-          fileName: docFileName.endsWith('.pdf') ? docFileName : `${docFileName}.pdf`,
-          fileUrl: `https://placehold.co/600x800/e2e8f0/1e293b?text=${encodeURIComponent(docFileName)}`,
-          fileSize: '340 KB',
+          fileName: docFileName.includes('.') ? docFileName : `${docFileName}.pdf`,
+          fileUrl: docFileData || `https://placehold.co/600x800/e2e8f0/1e293b?text=${encodeURIComponent(docFileName)}`,
+          fileSize: docFileData ? `${Math.round(docFileData.length * 0.75 / 1024)} KB` : '240 KB',
           uploadedBy: currentUser.name,
           visibleToAgent: isAgent ? true : docVisibleToAgent
         },
         currentUser
       );
       setDocFileName('');
+      setDocFileData('');
       await loadData();
       alert('Document attached successfully.');
     } catch (err: any) {
@@ -872,6 +1088,122 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       />
                     </div>
 
+                    {/* Consignment Note (CN / LR) Attachment Field */}
+                    <div className="bg-purple-50/60 p-3.5 rounded-xl border border-purple-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-purple-950 font-bold text-xs flex items-center gap-1.5">
+                          <Paperclip className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Consignment Note (CN) / Transporter LR Copy</span>
+                        </label>
+                        {cnCopyUrl ? (
+                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            <span>CN Attached</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-purple-600 font-medium">Upload PDF or scanned receipt</span>
+                        )}
+                      </div>
+
+                      {cnCopyUrl ? (
+                        <div className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-purple-200 gap-2">
+                          <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                            <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800 truncate">
+                              {cnCopyFileName || 'Consignment_Note_Copy.pdf'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewDoc({
+                                  url: cnCopyUrl,
+                                  title: 'Consignment Note (CN Copy)',
+                                  fileName: cnCopyFileName || 'Consignment_Note_Copy.pdf'
+                                })
+                              }
+                              className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-semibold rounded text-[11px] flex items-center gap-1 transition-colors"
+                            >
+                              <Eye className="w-3 h-3 text-purple-700" />
+                              <span>Preview</span>
+                            </button>
+                            <a
+                              href={cnCopyUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={cnCopyFileName || 'CN_Copy.pdf'}
+                              className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold rounded text-[11px] flex items-center gap-1 transition-colors"
+                            >
+                              <Download className="w-3 h-3 text-slate-600" />
+                              <span>Download</span>
+                            </a>
+                            <label className="cursor-pointer px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-medium transition-colors">
+                              <span>Replace</span>
+                              <input
+                                type="file"
+                                accept=".pdf,image/*"
+                                onChange={handleCnFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <label className="cursor-pointer p-1 text-slate-500 hover:text-purple-700 hover:bg-purple-100 rounded transition-colors" title="Scan with Camera">
+                              <Camera className="w-3.5 h-3.5" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleCnFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteQuickDoc('cnCopy')}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              title="Delete Consignment Note"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-purple-300 rounded-lg hover:bg-purple-100/50 cursor-pointer transition-colors text-center bg-white">
+                            <UploadCloud className="w-5 h-5 text-purple-600 mb-1" />
+                            <span className="text-xs font-semibold text-purple-900">
+                              Upload Consignment Note (CN Copy)
+                            </span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">
+                              Supports PDF, JPG, PNG scanned receipt
+                            </span>
+                            <input
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={handleCnFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-purple-300 rounded-lg hover:bg-purple-100/50 cursor-pointer transition-colors text-center bg-purple-50/30">
+                            <Camera className="w-5 h-5 text-purple-700 mb-1" />
+                            <span className="text-xs font-semibold text-purple-950">
+                              Scan with Camera
+                            </span>
+                            <span className="text-[10px] text-purple-600 mt-0.5">
+                              Snap photo directly from device
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={handleCnFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex justify-end">
                       <button
                         type="submit"
@@ -941,6 +1273,122 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         onChange={(e) => setDeliveryRemarks(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-emerald-300 text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
                       />
+                    </div>
+
+                    {/* Proof of Delivery (POD) Attachment Field */}
+                    <div className="bg-white p-3.5 rounded-xl border border-emerald-300 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-emerald-950 font-bold text-xs flex items-center gap-1.5">
+                          <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Proof of Delivery (POD) / Signed Delivery Slip</span>
+                        </label>
+                        {podCopyUrl ? (
+                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            <span>POD Attached</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-emerald-700 font-medium">Upload signed receiving copy</span>
+                        )}
+                      </div>
+
+                      {podCopyUrl ? (
+                        <div className="flex items-center justify-between bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-200 gap-2">
+                          <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                            <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800 truncate">
+                              {podCopyFileName || 'Proof_Of_Delivery_Signed.pdf'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewDoc({
+                                  url: podCopyUrl,
+                                  title: 'Proof of Delivery (POD Signed)',
+                                  fileName: podCopyFileName || 'Proof_Of_Delivery_Signed.pdf'
+                                })
+                              }
+                              className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-semibold rounded text-[11px] flex items-center gap-1 transition-colors"
+                            >
+                              <Eye className="w-3 h-3 text-emerald-700" />
+                              <span>Preview</span>
+                            </button>
+                            <a
+                              href={podCopyUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={podCopyFileName || 'POD_Signed.pdf'}
+                              className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold rounded text-[11px] flex items-center gap-1 transition-colors"
+                            >
+                              <Download className="w-3 h-3 text-slate-600" />
+                              <span>Download</span>
+                            </a>
+                            <label className="cursor-pointer px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-emerald-200 rounded text-[11px] font-medium transition-colors">
+                              <span>Replace</span>
+                              <input
+                                type="file"
+                                accept=".pdf,image/*"
+                                onChange={handlePodFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <label className="cursor-pointer p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-100 rounded transition-colors" title="Scan with Camera">
+                              <Camera className="w-3.5 h-3.5" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handlePodFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteQuickDoc('podCopy')}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              title="Delete POD"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-emerald-300 rounded-lg hover:bg-emerald-50/70 cursor-pointer transition-colors text-center bg-emerald-50/30">
+                            <UploadCloud className="w-5 h-5 text-emerald-600 mb-1" />
+                            <span className="text-xs font-semibold text-emerald-950">
+                              Upload Proof of Delivery (POD Copy)
+                            </span>
+                            <span className="text-[10px] text-slate-500 mt-0.5">
+                              Supports scanned PDF, JPG, PNG with signature
+                            </span>
+                            <input
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={handlePodFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-emerald-300 rounded-lg hover:bg-emerald-50/70 cursor-pointer transition-colors text-center bg-emerald-50/30">
+                            <Camera className="w-5 h-5 text-emerald-700 mb-1" />
+                            <span className="text-xs font-semibold text-emerald-950">
+                              Scan with Camera
+                            </span>
+                            <span className="text-[10px] text-emerald-600 mt-0.5">
+                              Capture receiving slip photo directly
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={handlePodFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex justify-end">
@@ -1150,10 +1598,557 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* TAB 5: DOCUMENTS & ATTACHMENTS */}
           {activeTab === 'documents' && (
             <div className="space-y-6">
-              {/* Document upload card */}
+              {/* Critical Compliance Documents Quick Vault */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Essential Compliance & Billing Vault</span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500">Fast Upload & File Verification</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                  {/* GeM Order Copy Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${gemOrderCopyUrl ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-amber-700" />
+                        <span>GeM Order Copy</span>
+                      </span>
+                      {gemOrderCopyUrl ? (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={gemOrderCopyFileName || 'GeM Contract & Official Sanction Order'}>
+                      {gemOrderCopyFileName || 'GeM Contract & Official Sanction Order'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {gemOrderCopyUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: gemOrderCopyUrl,
+                                title: 'GeM Order Copy / Contract',
+                                fileName: gemOrderCopyFileName || 'GeM_Order_Copy.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-amber-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={gemOrderCopyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={gemOrderCopyFileName || 'GeM_Order_Copy.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{gemOrderCopyUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('gemOrderCopy', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-amber-700 hover:bg-amber-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('gemOrderCopy', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {gemOrderCopyUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('gemOrderCopy')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete GeM Order Copy"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Company Tax Invoice Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${companyInvoiceUrl ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Tax Invoice</span>
+                      </span>
+                      {companyInvoiceUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={companyInvoiceFileName || 'Company Official Tax Invoice Copy'}>
+                      {companyInvoiceFileName || 'Company Official Tax Invoice Copy'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {companyInvoiceUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: companyInvoiceUrl,
+                                title: 'Company Tax Invoice',
+                                fileName: companyInvoiceFileName || 'Tax_Invoice.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-emerald-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={companyInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={companyInvoiceFileName || 'Tax_Invoice.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{companyInvoiceUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('companyInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('companyInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {companyInvoiceUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('companyInvoice')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete Tax Invoice"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* GeM Portal Invoice Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${gemInvoiceUrl ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-blue-700" />
+                        <span>GeM Portal Invoice</span>
+                      </span>
+                      {gemInvoiceUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={gemInvoiceFileName || 'Government e-Marketplace Invoice'}>
+                      {gemInvoiceFileName || 'Government e-Marketplace Invoice'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {gemInvoiceUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: gemInvoiceUrl,
+                                title: 'GeM Portal Invoice',
+                                fileName: gemInvoiceFileName || 'GeM_Invoice.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-blue-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={gemInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={gemInvoiceFileName || 'GeM_Invoice.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{gemInvoiceUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('gemInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('gemInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {gemInvoiceUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('gemInvoice')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete GeM Invoice"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* E-Way Bill Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${ewayBillUrl ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>E-Way Bill (EWB)</span>
+                      </span>
+                      {ewayBillUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={ewayBillFileName || 'Inter-State GST Transit E-Way Bill'}>
+                      {ewayBillFileName || 'Inter-State GST Transit E-Way Bill'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {ewayBillUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: ewayBillUrl,
+                                title: 'E-Way Bill (EWB)',
+                                fileName: ewayBillFileName || 'EWay_Bill.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-indigo-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={ewayBillUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={ewayBillFileName || 'EWay_Bill.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{ewayBillUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('ewayBill', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-indigo-700 hover:bg-indigo-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('ewayBill', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {ewayBillUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('ewayBill')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete E-Way Bill"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Consignment Note (CN Copy) Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${cnCopyUrl ? 'bg-purple-50/60 border-purple-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <Paperclip className="w-3.5 h-3.5 text-purple-700" />
+                        <span>Consignment Note (CN)</span>
+                      </span>
+                      {cnCopyUrl ? (
+                        <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={cnCopyFileName || 'Courier / Logistics Transporter Receipt'}>
+                      {cnCopyFileName || 'Courier / Logistics Transporter Receipt'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {cnCopyUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: cnCopyUrl,
+                                title: 'Consignment Note (CN Copy)',
+                                fileName: cnCopyFileName || 'CN_Copy.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-purple-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={cnCopyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={cnCopyFileName || 'CN_Copy.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{cnCopyUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={handleCnFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-purple-700 hover:bg-purple-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleCnFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      {cnCopyUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('cnCopy')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete Consignment Note"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Proof of Delivery (POD Copy) Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${podCopyUrl ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Proof of Delivery (POD)</span>
+                      </span>
+                      {podCopyUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={podCopyFileName || 'Signed School Delivery Challan'}>
+                      {podCopyFileName || 'Signed School Delivery Challan'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {podCopyUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: podCopyUrl,
+                                title: 'Proof of Delivery (POD Signed)',
+                                fileName: podCopyFileName || 'POD_Signed.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-emerald-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={podCopyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={podCopyFileName || 'POD_Signed.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{podCopyUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={handlePodFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handlePodFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      {podCopyUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('podCopy')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete POD"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* GeM CRAC Receipt Tile */}
+                  <div className="p-3.5 rounded-xl border bg-slate-50/70 border-slate-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-slate-700" />
+                        <span>GeM CRAC Acceptance</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">Official</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5">
+                      Consignee Receipt & Acceptance Certificate
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <label className="cursor-pointer px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>Attach CRAC</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('GeM Acceptance Copy', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-200 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('GeM Acceptance Copy', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* General Document upload card */}
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
-                  Attach Order Document / Bill / POD
+                  Upload Additional Document or File
                 </h3>
 
                 <form onSubmit={handleUploadDocument} className="space-y-4 text-xs">
@@ -1165,12 +2160,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         onChange={(e) => setDocType(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-slate-300 font-semibold text-slate-900 focus:outline-none"
                       >
-                        <option value="Purchase Order">Purchase Order / GeM Contract</option>
+                        <option value="GeM Order Copy">GeM Order Copy / Contract</option>
+                        <option value="Purchase Order">Purchase Order / Work Order</option>
                         <option value="Invoice">Tax Invoice / GeM Invoice</option>
                         <option value="Dispatch Receipt">Dispatch Receipt / Courier LR</option>
                         <option value="Delivery Challan">Delivery Challan / Proof of Delivery</option>
                         <option value="GeM Acceptance Copy">GeM Consignee Receipt (CRAC)</option>
                         <option value="Quotation">Quotation / Internal Spec</option>
+                        <option value="Payment Proof">Payment Proof / Bank Receipt</option>
+                        <option value="Inspection Report">Installation / Inspection Report</option>
+                        <option value="Other">Other Miscellaneous Document</option>
                       </select>
                     </div>
 
@@ -1186,26 +2185,65 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       />
                     </div>
 
-                    {!isAgent && (
-                      <div className="flex items-center">
-                        <label className="flex items-center gap-2 cursor-pointer mt-5">
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-1">Select File or Camera Scan</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (!docFileName) setDocFileName(file.name.replace(/\.[^/.]+$/, ''));
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setDocFileData(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200"
+                        />
+                        <label className="cursor-pointer p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200 transition-colors" title="Scan with Camera">
+                          <Camera className="w-4 h-4" />
                           <input
-                            type="checkbox"
-                            checked={docVisibleToAgent}
-                            onChange={(e) => setDocVisibleToAgent(e.target.checked)}
-                            className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (!docFileName) setDocFileName(`Scanned_${Date.now()}`);
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setDocFileData(reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
                           />
-                          <span className="text-slate-700 font-medium">Visible to Regional Agent</span>
                         </label>
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between pt-1">
+                    {!isAgent && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={docVisibleToAgent}
+                          onChange={(e) => setDocVisibleToAgent(e.target.checked)}
+                          className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
+                        />
+                        <span className="text-slate-700 font-medium">Visible to Regional Agent</span>
+                      </label>
+                    )}
                     <button
                       type="submit"
                       disabled={isUploadingDoc}
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-sm disabled:opacity-50"
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-sm disabled:opacity-50 ml-auto transition-colors"
                     >
                       {isUploadingDoc ? 'Uploading...' : 'Attach Document'}
                     </button>
@@ -1225,12 +2263,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       key={doc.documentId}
                       className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between gap-3 text-xs hover:border-slate-300 transition-colors"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                          <FileText className="w-5 h-5 text-amber-600" />
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center text-slate-600 shrink-0 border border-amber-200/60">
+                          <FileText className="w-5 h-5 text-amber-700" />
                         </div>
-                        <div>
-                          <div className="font-semibold text-slate-800 line-clamp-1">{doc.fileName}</div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800 truncate" title={doc.fileName}>{doc.fileName}</div>
                           <div className="text-[11px] text-slate-400 mt-0.5">
                             {doc.documentType} {doc.fileSize ? `• ${doc.fileSize}` : ''}
                           </div>
@@ -1240,16 +2278,39 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPreviewDoc({
+                              url: doc.fileUrl,
+                              title: doc.documentType || 'Order Document',
+                              fileName: doc.fileName
+                            })
+                          }
+                          className="p-1.5 rounded-lg text-slate-600 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                          title="Preview Document"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <a
                           href={doc.fileUrl}
                           target="_blank"
                           rel="noreferrer"
+                          download={doc.fileName || 'document.pdf'}
                           className="p-1.5 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100 transition-colors"
-                          title="Open Document"
+                          title="Download Document"
                         >
-                          <ExternalLink className="w-4 h-4" />
+                          <Download className="w-4 h-4" />
                         </a>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUploadedDocument(doc.documentId)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete Document"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   ))
@@ -1273,6 +2334,63 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Interactive In-Modal Document Preview Modal */}
+      {previewDoc && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+            {/* Header */}
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+              <div className="min-w-0 pr-4">
+                <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider">{previewDoc.title}</div>
+                <div className="text-sm font-bold text-white truncate">{previewDoc.fileName}</div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={previewDoc.url}
+                  download={previewDoc.fileName}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download File</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-auto bg-slate-100 p-4 flex items-center justify-center min-h-[420px]">
+              {previewDoc.url.startsWith('data:image/') ||
+              previewDoc.url.endsWith('.png') ||
+              previewDoc.url.endsWith('.jpg') ||
+              previewDoc.url.endsWith('.jpeg') ||
+              previewDoc.url.endsWith('.webp') ? (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.fileName}
+                  className="max-w-full max-h-[75vh] object-contain rounded-lg shadow border border-slate-200"
+                />
+              ) : (
+                <div className="w-full h-full min-h-[550px] bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex flex-col">
+                  <iframe
+                    src={previewDoc.url}
+                    title={previewDoc.fileName}
+                    className="w-full flex-1 border-0"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

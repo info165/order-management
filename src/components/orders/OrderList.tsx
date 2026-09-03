@@ -217,86 +217,78 @@ export const OrderList: React.FC<OrderListProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header & Primary Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>{isAgent ? 'My Assigned School Orders' : 'Central Order Registry'}</span>
-            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-              {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'}
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {isAgent
-              ? 'Real-time order statuses, logistics tracking, and delivery confirmations for your allocated schools.'
-              : 'Complete lifecycle management of Kendriya Vidyalaya, Navodaya Vidyalaya, and PM SHRI procurement orders.'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Export button */}
-          <div className="inline-flex rounded-lg shadow-sm border border-slate-300 overflow-hidden text-xs">
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="bg-white hover:bg-slate-50 text-slate-700 font-medium px-3 py-1.5 flex items-center gap-1.5 border-r border-slate-300 transition-colors"
-              title="Export displayed orders to Excel"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Export Excel</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="bg-white hover:bg-slate-50 text-slate-700 font-medium px-2 py-1.5 transition-colors"
-              title="Export as CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-            </button>
-          </div>
-
-          {!isAgent && (
-            <>
-              <button
-                type="button"
-                onClick={onOpenImport}
-                className="inline-flex items-center gap-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg border border-slate-300 transition-colors"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Import Sheet</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onOpenNewOrder}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg shadow-sm transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Create Order</span>
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Multi-Parameter Filter Toolbar */}
-      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-          {/* Search bar inside filter */}
-          <div className="relative lg:col-span-2">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+    <div className="space-y-2.5">
+      {/* Compact Top Action Bar with Integrated Controls */}
+      <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 shadow-xs space-y-2.5">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+          {/* Search bar shifted up */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search School, PO, Docket, ID..."
+              placeholder="Search School, GeM Order #, PO, Docket, ID..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-medium"
             />
           </div>
+
+          {/* Quick Counter & Action Buttons */}
+          <div className="flex items-center gap-2 justify-between md:justify-end flex-wrap">
+            <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+              {filteredOrders.length} {filteredOrders.length === 1 ? 'Order' : 'Orders'}
+            </span>
+
+            {/* Export buttons */}
+            <div className="inline-flex rounded-lg shadow-2xs border border-slate-300 overflow-hidden text-xs shrink-0">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="bg-white hover:bg-slate-50 text-slate-700 font-semibold px-2.5 py-1.5 flex items-center gap-1.5 border-r border-slate-200 transition-colors"
+                title="Export displayed orders to Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCSV}
+                className="bg-white hover:bg-slate-50 text-slate-700 font-medium px-2 py-1.5 transition-colors"
+                title="Export as CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+              </button>
+            </div>
+
+            {!isAgent && (
+              <>
+                <button
+                  type="button"
+                  onClick={onOpenImport}
+                  className="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-300 transition-colors shrink-0"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Import</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onOpenNewOrder}
+                  className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg shadow-xs transition-colors shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New Order</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Multi-Parameter Filters row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2 text-xs pt-1 border-t border-slate-100">
 
           {/* School System filter */}
           <div>
@@ -492,7 +484,7 @@ export const OrderList: React.FC<OrderListProps> = ({
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 select-none">
+            <thead className="bg-slate-50/90 text-slate-500 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-200 select-none">
               <tr>
                 {!isAgent && (
                   <th className="px-3 py-3 w-8 text-center">

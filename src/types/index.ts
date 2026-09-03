@@ -56,6 +56,8 @@ export interface School {
   contactPhone?: string;
   email?: string;
   region?: string;
+  status?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -67,6 +69,8 @@ export interface Product {
   subcategory?: string;
   description?: string;
   sku?: string;
+  hsnCode?: string;
+  unit?: string;
   defaultPrice?: number;
   standardPrice?: number;
   taxRate?: number;
@@ -168,16 +172,28 @@ export interface Order {
   deliveryStatus: 'Pending' | 'In Transit' | 'Delivered' | 'Returned';
   actualDeliveryDate?: string;
 
-  // Courier info
+  // Courier info & Logistics Documents
   courierName?: string; // "Delhivery", "India post", etc.
   docketNumber?: string; // Tracking number
   numberOfBoxes?: number | string;
   dispatchDate?: string;
+  gemOrderCopyUrl?: string;
+  gemOrderCopyFileName?: string;
+  cnCopyUrl?: string; // Consignment Note (CN) / LR attachment
+  cnCopyFileName?: string;
+  podCopyUrl?: string; // Proof of Delivery (POD) attachment
+  podCopyFileName?: string;
 
-  // Invoice & Payments
+  // Invoice, E-Way Bill & Payments
   invoiceNumber?: string;
   invoiceDate?: string;
   invoiceStatus?: 'PENDING' | 'UPLOADED' | 'VERIFIED';
+  gemInvoiceUrl?: string;
+  gemInvoiceFileName?: string;
+  ewayBillUrl?: string;
+  ewayBillFileName?: string;
+  companyInvoiceUrl?: string;
+  companyInvoiceFileName?: string;
   paymentStatus: PaymentStatus;
   totalAmount: number;
   amountReceived: number;
@@ -251,7 +267,24 @@ export interface DeliveryRecord {
 export interface OrderDocument {
   documentId: string;
   orderId: string;
-  documentType: 'Purchase Order' | 'Quotation' | 'Invoice' | 'Dispatch Receipt' | 'LR' | 'Courier Receipt' | 'Delivery Proof' | 'Payment Proof' | 'Other';
+  documentType:
+    | 'GeM Order Copy'
+    | 'Purchase Order'
+    | 'Quotation'
+    | 'Invoice'
+    | 'Dispatch Receipt'
+    | 'LR'
+    | 'Courier Receipt'
+    | 'Delivery Proof'
+    | 'Delivery Challan'
+    | 'Payment Proof'
+    | 'GeM Invoice'
+    | 'E-Way Bill'
+    | 'Company Tax Invoice'
+    | 'Consignment Note (CN)'
+    | 'Proof of Delivery (POD)'
+    | 'GeM Consignee Receipt (CRAC)'
+    | 'Other';
   fileName: string;
   fileUrl: string;
   fileSize?: string;
