@@ -31,6 +31,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ currentUser, onClose, 
   const [isProcessing, setIsProcessing] = useState(false);
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [clearPastData, setClearPastData] = useState(true);
   const [importSummary, setImportSummary] = useState<{ imported: number; errors: string[] } | null>(null);
 
   // Handle file select
@@ -103,22 +104,29 @@ export const ImportModal: React.FC<ImportModalProps> = ({ currentUser, onClose, 
           agentCommissionPercentage: v.agentCommissionPercentage || 10,
           category: v.category || 'Educational Equipment',
           orderValue: v.orderValue || 0,
-          taxAmount: v.taxAmount || Math.round((v.orderValue || 0) * 0.18),
-          grossOrderValue: v.grossOrderValue || Math.round((v.orderValue || 0) * 1.18),
-          totalAmount: v.grossOrderValue || Math.round((v.orderValue || 0) * 1.18),
+          taxAmount: 0,
+          grossOrderValue: v.orderValue || 0,
+          totalAmount: v.orderValue || 0,
           amountReceived: v.amountReceived || 0,
-          amountPending: v.amountPending || 0,
+          amountPending: v.paymentStatus === 'PAID' ? 0 : (v.orderValue || 0),
           paymentStatus: v.paymentStatus || 'PAYMENT_PENDING',
           status: v.status || 'PO_RECEIVED',
           dispatchStatus: v.dispatchStatus || 'NOT_READY',
           deliveryStatus: v.deliveryStatus || 'Pending',
           invoiceNumber: v.invoiceNumber,
           invoiceStatus: v.invoiceStatus || 'PENDING',
+          bidNumber: v.bidNumber,
+          company: v.company || 'FIPL',
+          bidSubmissionLastDate: v.bidSubmissionLastDate,
+          l1CompanyPrice: v.l1CompanyPrice,
+          l2CompanyPrice: v.l2CompanyPrice,
+          l3CompanyPrice: v.l3CompanyPrice,
+          invoiceDate: v.invoiceDate,
           courierName: v.courierName,
           docketNumber: v.docketNumber,
           numberOfBoxes: v.numberOfBoxes,
           dispatchDate: v.dispatchDate,
-          purchaseOrderNumber: v.orderNumber || `PO-IMP-${i + 1}`,
+          purchaseOrderNumber: v.purchaseOrderNumber || v.orderNumber || `PO-IMP-${i + 1}`,
           callingStatus: v.callingStatus,
           internalNotes: v.internalNotes,
           createdAt: now,
@@ -130,7 +138,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ currentUser, onClose, 
         };
       });
 
-      const res = await batchImportOrders(ordersToSave, currentUser);
+      const res = await batchImportOrders(ordersToSave, currentUser, clearPastData);
       setImportSummary(res);
       onImportComplete();
     } catch (err: any) {
@@ -343,14 +351,28 @@ export const ImportModal: React.FC<ImportModalProps> = ({ currentUser, onClose, 
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 text-slate-600 hover:text-slate-900 font-medium"
-          >
-            Cancel
-          </button>
+        <div className="px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-1.5 text-slate-600 hover:text-slate-900 font-medium"
+            >
+              Cancel
+            </button>
+
+            {step === 'preview' && (
+              <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium bg-amber-50/80 px-2.5 py-1.5 rounded-lg border border-amber-200">
+                <input
+                  type="checkbox"
+                  checked={clearPastData}
+                  onChange={(e) => setClearPastData(e.target.checked)}
+                  className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 border-slate-300"
+                />
+                <span>Clear all past data before importing sheet</span>
+              </label>
+            )}
+          </div>
 
           {step === 'preview' && !importSummary && (
             <button
@@ -359,7 +381,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ currentUser, onClose, 
               disabled={validCount === 0 || isImporting}
               className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shadow-sm disabled:opacity-50 flex items-center gap-2"
             >
-              <span>{isImporting ? 'Importing Orders...' : `Import ${validCount} Valid Orders`}</span>
+              <span>{isImporting ? 'Importing Orders...' : `Import ${validCount} Orders`}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}

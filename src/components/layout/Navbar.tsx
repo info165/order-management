@@ -21,10 +21,15 @@ import {
   Truck,
   CreditCard,
   PhoneCall,
-  Settings
+  Settings,
+  Database,
+  Cloud,
+  RefreshCw,
+  LogIn
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { getNotifications } from '../../services/dataService';
+import { getNotifications, syncAllDataToFirestore } from '../../services/dataService';
+import { resolvedConfig } from '../../firebase/config';
 import { NotificationItem } from '../../types';
 
 interface NavbarProps {
@@ -50,12 +55,42 @@ export const Navbar: React.FC<NavbarProps> = ({
   searchQuery = '',
   onSearch
 }) => {
-  const { currentUser, activeRole, isSuperAdmin, isAgent, switchPersona, availablePersonas, logout } = useAuth();
+  const {
+    currentUser,
+    firebaseUser,
+    activeRole,
+    isSuperAdmin,
+    isAgent,
+    switchPersona,
+    signInWithGoogle,
+    availablePersonas,
+    logout
+  } = useAuth();
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
   const [showThreeDotsMenu, setShowThreeDotsMenu] = useState(false);
+  const [isSyncingToFirebase, setIsSyncingToFirebase] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const personaRef = useRef<HTMLDivElement>(null);
+
+  const handleSyncToFirestore = async () => {
+    setIsSyncingToFirebase(true);
+    setSyncStatus('Syncing all records to Firestore...');
+    try {
+      const res = await syncAllDataToFirestore();
+      if (res.success) {
+        setSyncStatus(`Successfully pushed ${res.count} records directly to Firestore!`);
+      } else {
+        setSyncStatus(`Sync Notice: ${res.error}`);
+      }
+    } catch (e: any) {
+      setSyncStatus(`Sync failed: ${e?.message || e}`);
+    } finally {
+      setIsSyncingToFirebase(false);
+      setTimeout(() => setSyncStatus(null), 8000);
+    }
+  };
 
   // Close menus on outside click
   useEffect(() => {
@@ -257,6 +292,63 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
 
+                {/* Firebase Connection & Cloud Sync Box */}
+                <div className="p-3 bg-slate-950/60 border-t border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Cloud Firestore</span>
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono border border-amber-500/20">
+                      Live Sync
+                    </span>
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 break-all font-mono leading-tight bg-slate-900/80 p-1.5 rounded border border-slate-800">
+                    {resolvedConfig.projectId} ({resolvedConfig.firestoreDatabaseId || '(default)'})
+                  </div>
+
+                  {syncStatus && (
+                    <div className="text-[11px] p-2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 leading-snug">
+                      {syncStatus}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      disabled={isSyncingToFirebase}
+                      onClick={handleSyncToFirestore}
+                      className="flex-1 py-1.5 px-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-semibold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSyncingToFirebase ? 'animate-spin' : ''}`} />
+                      <span>{isSyncingToFirebase ? 'Pushing...' : 'Sync to Firestore'}</span>
+                    </button>
+
+                    {!firebaseUser ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await signInWithGoogle();
+                          } catch (e: any) {
+                            alert('Google sign-in error: ' + (e?.message || e));
+                          }
+                        }}
+                        className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs flex items-center justify-center gap-1 transition-colors"
+                        title="Sign in with your Google account to get verified Firestore token"
+                      >
+                        <LogIn className="w-3 h-3 text-emerald-400" />
+                        <span>Google</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-emerald-400 font-mono px-1">
+                        Auth ✓
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <div className="px-3 py-2 flex items-center justify-between bg-slate-950/40">
                   <span className="text-[11px] text-slate-400">Role-Based Access Control</span>
                   <button
@@ -435,8 +527,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 )}
 
-                {/* Quick Export Actions */}
-                <div className="py-1">
+                {/* Quick Export & Cloud Actions */}
+                <div className="py-1 border-t border-slate-800">
+                  <button
+                    type="button"
+                    disabled={isSyncingToFirebase}
+                    onClick={() => {
+                      handleSyncToFirestore();
+                      setShowThreeDotsMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-amber-300 font-medium transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 text-amber-400 ${isSyncingToFirebase ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingToFirebase ? 'Pushing to Firebase...' : 'Push All Data to Firebase'}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {

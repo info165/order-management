@@ -5,11 +5,12 @@ interface TrackingLinkProps {
   courierName?: string;
   docketNumber?: string;
   className?: string;
+  compact?: boolean;
 }
 
-export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', docketNumber, className = '' }) => {
+export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', docketNumber, className = '', compact = false }) => {
   if (!docketNumber || !docketNumber.trim()) {
-    return <span className="text-slate-400 italic text-xs">Tracking Pending</span>;
+    return <span className={`text-slate-400 italic whitespace-nowrap ${compact ? 'text-[11px]' : 'text-xs'}`}>Tracking Pending</span>;
   }
 
   const cleanDocket = docketNumber.split(/[,/]/)[0].trim();
@@ -27,9 +28,15 @@ export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', do
   }
 
   return (
-    <div className={`inline-flex items-center gap-1.5 font-mono text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors ${className}`}>
-      <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-      <span className="truncate max-w-[140px] select-all">{docketNumber}</span>
+    <div
+      className={`inline-flex items-center ${
+        compact ? 'gap-1 font-mono text-[11px] px-1.5 py-0.5' : 'gap-1.5 font-mono text-xs px-2 py-0.5'
+      } font-medium text-blue-700 bg-blue-50/90 rounded border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap ${className}`}
+    >
+      <Truck className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-blue-600 shrink-0`} />
+      <span className={`truncate select-all ${compact ? 'max-w-[110px]' : 'max-w-[140px]'}`} title={courierName ? `${courierName}: ${docketNumber}` : docketNumber}>
+        {docketNumber}
+      </span>
       {targetUrl ? (
         <a
           href={targetUrl}
@@ -39,7 +46,7 @@ export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', do
           className="text-blue-600 hover:text-blue-900 ml-0.5"
           onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLink className="w-3 h-3" />
+          <ExternalLink className={`${compact ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
         </a>
       ) : null}
     </div>

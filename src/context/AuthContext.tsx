@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { INITIAL_USERS } from '../data/seedData';
-import { auth } from '../firebase/config';
-import { onAuthStateChanged, signOut as fbSignOut } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase/config';
+import { onAuthStateChanged, signOut as fbSignOut, signInWithPopup, User as FbUser } from 'firebase/auth';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
+  firebaseUser: FbUser | null;
   activeRole: UserRole;
   isSuperAdmin: boolean;
   isAdmin: boolean;
@@ -18,6 +19,7 @@ interface AuthContextType {
   canViewAuditLogs: boolean;
   canManageUsers: boolean;
   switchPersona: (userEmail: string) => void;
+  signInWithGoogle: () => Promise<void>;
   login: (email: string, pass: string) => Promise<boolean>;
   logout: () => void;
   availablePersonas: UserProfile[];
@@ -28,6 +30,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const USER_SESSION_KEY = 'govschool_active_user_v1';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [firebaseUser, setFirebaseUser] = useState<FbUser | null>(auth.currentUser);
+
   // Default to Super Admin so the evaluator sees the complete platform immediately
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
     try {
@@ -47,18 +51,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  // Listen to Firebase auth if active
+  // Listen to Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      setFirebaseUser(fbUser);
       if (fbUser && fbUser.email) {
-        const found = INITIAL_USERS.find(u => u.email.toLowerCase() === fbUser.email?.toLowerCase());
+        const email = fbUser.email.toLowerCase();
+        const found = INITIAL_USERS.find(u => u.email.toLowerCase() === email);
         if (found) {
           setCurrentUser(found);
+        } else {
+          setCurrentUser({
+            userId: fbUser.uid,
+            name: fbUser.displayName || 'Authorized User',
+            email: fbUser.email,
+            role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
+            isActive: true,
+            createdAt: new Date().toISOString()
+          });
         }
       }
     });
     return () => unsubscribe();
   }, []);
+
+  const signInWithGoogle = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user && result.user.email) {
+        const email = result.user.email.toLowerCase();
+        const found = INITIAL_USERS.find(u => u.email.toLowerCase() === email);
+        if (found) {
+          setCurrentUser(found);
+        }
+      }
+    } catch (err: any) {
+      console.error('Google Sign-In failed:', err);
+      throw err;
+    }
+  };
 
   const switchPersona = (email: string) => {
     const target = INITIAL_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -83,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       fbSignOut(auth);
     } catch (e) {}
-    // Switch to first persona or clean state
+    setFirebaseUser(null);
     setCurrentUser(INITIAL_USERS[0]);
   };
 
@@ -105,6 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         currentUser,
+        firebaseUser,
         activeRole: role,
         isSuperAdmin,
         isAdmin,
@@ -117,6 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         canViewAuditLogs,
         canManageUsers,
         switchPersona,
+        signInWithGoogle,
         login,
         logout,
         availablePersonas: INITIAL_USERS
@@ -126,6 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
+
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

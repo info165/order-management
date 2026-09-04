@@ -43,20 +43,31 @@ import {
 
 // In-memory runtime storage with localStorage backup for resilient and instantaneous user experience
 const STORAGE_KEYS = {
-  ORDERS: 'govschool_orders_v1',
-  SCHOOLS: 'govschool_schools_v1',
-  AGENTS: 'govschool_agents_v1',
-  PRODUCTS: 'govschool_products_v1',
-  PAYMENTS: 'govschool_payments_v1',
-  DISPATCHES: 'govschool_dispatches_v1',
-  DELIVERIES: 'govschool_deliveries_v1',
-  DOCUMENTS: 'govschool_documents_v1',
-  NOTIFICATIONS: 'govschool_notifications_v1',
-  AUDIT_LOGS: 'govschool_audit_v1',
-  TIMELINES: 'govschool_timelines_v1',
-  SETTINGS: 'govschool_settings_v1',
-  USERS: 'govschool_users_v1'
+  ORDERS: 'govschool_orders_v3',
+  SCHOOLS: 'govschool_schools_v3',
+  AGENTS: 'govschool_agents_v3',
+  PRODUCTS: 'govschool_products_v3',
+  PAYMENTS: 'govschool_payments_v3',
+  DISPATCHES: 'govschool_dispatches_v3',
+  DELIVERIES: 'govschool_deliveries_v3',
+  DOCUMENTS: 'govschool_documents_v3',
+  NOTIFICATIONS: 'govschool_notifications_v3',
+  AUDIT_LOGS: 'govschool_audit_v3',
+  TIMELINES: 'govschool_timelines_v3',
+  SETTINGS: 'govschool_settings_v3',
+  USERS: 'govschool_users_v3'
 };
+
+// Immediately purge stale mock cache from previous sessions
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('govschool_') && !key.endsWith('_v3')) {
+        localStorage.removeItem(key);
+      }
+    });
+  }
+} catch (_) {}
 
 function loadStorage<T>(key: string, fallback: T): T {
   try {
@@ -76,13 +87,41 @@ function saveStorage<T>(key: string, val: T): void {
   }
 }
 
-// Global active in-memory datasets
-let memoryOrders: Order[] = loadStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS);
+// Ensure every order has an independent serial number and that orderValue is the uninflated final figure
+function sanitizeOrderData(orders: Order[]): Order[] {
+  return orders.map((o, idx) => {
+    const finalVal = o.orderValue || 0;
+    const isPaid = o.paymentStatus === 'PAID';
+    return {
+      ...o,
+      serialNumber: o.serialNumber ?? (idx + 1),
+      orderValue: finalVal,
+      taxAmount: 0,
+      grossOrderValue: finalVal,
+      totalAmount: finalVal,
+      amountReceived: isPaid ? finalVal : (o.amountReceived || 0),
+      amountPending: isPaid ? 0 : Math.max(0, finalVal - (o.amountReceived || 0))
+    };
+  });
+}
+
+// Global active in-memory datasets initialized from the 121 real sheet records
+let memoryOrders: Order[] = sanitizeOrderData(loadStorage(STORAGE_KEYS.ORDERS, INITIAL_ORDERS));
 let memorySchools: School[] = loadStorage(STORAGE_KEYS.SCHOOLS, INITIAL_SCHOOLS);
 let memoryAgents: Agent[] = loadStorage(STORAGE_KEYS.AGENTS, INITIAL_AGENTS);
 let memoryProducts: Product[] = loadStorage(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 let memorySettings: SystemSettings = loadStorage(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
 let memoryUsers: UserProfile[] = loadStorage(STORAGE_KEYS.USERS, INITIAL_USERS);
+
+// If storage had fewer orders than the master 121 sheet dataset, re-align to master dataset
+if (memoryOrders.length === 0 || memoryOrders.length < 50) {
+  memoryOrders = sanitizeOrderData([...INITIAL_ORDERS]);
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+}
+if (memorySchools.length === 0) {
+  memorySchools = [...INITIAL_SCHOOLS];
+  saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
+}
 
 let memoryPayments: PaymentTransaction[] = loadStorage(STORAGE_KEYS.PAYMENTS, [
   {
@@ -341,29 +380,110 @@ export async function initializeFirestoreSeed() {
     const ordersSnap = await getDocs(query(collection(db, 'orders'), limit(1)));
     if (ordersSnap.empty) {
       console.log('Seeding initial data to Firestore...');
-      for (const order of memoryOrders) {
-        await setDoc(doc(db, 'orders', order.orderId), order);
-      }
-      for (const school of memorySchools) {
-        await setDoc(doc(db, 'schools', school.schoolId), school);
-      }
-      for (const agent of memoryAgents) {
-        await setDoc(doc(db, 'agents', agent.agentId), agent);
-      }
-      for (const product of memoryProducts) {
-        await setDoc(doc(db, 'products', product.productId), product);
-      }
-      for (const user of memoryUsers) {
-        await setDoc(doc(db, 'users', user.userId), user);
-      }
-      await setDoc(doc(db, 'settings', 'global'), memorySettings);
+      await syncAllDataToFirestore();
       console.log('Firestore initial seed completed.');
     }
-  } catch (e) {
-    // Sandboxed or offline; local memory layer active
-    console.log('Using local persistent storage engine for Government School portal.');
+  } catch (e: any) {
+    // Sandboxed or unauthenticated; local memory layer active
+    console.log('Local persistent storage active (Firestore offline/permission notice:', e?.message || e, ')');
   }
 }
+
+// Explicit sync helper to push all active memory datasets to Cloud Firestore
+export async function syncAllDataToFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    let count = 0;
+    for (const order of memoryOrders) {
+      await setDoc(doc(db, 'orders', order.orderId), order, { merge: true });
+      count++;
+    }
+    for (const school of memorySchools) {
+      await setDoc(doc(db, 'schools', school.schoolId), school, { merge: true });
+      count++;
+    }
+    for (const agent of memoryAgents) {
+      await setDoc(doc(db, 'agents', agent.agentId), agent, { merge: true });
+      count++;
+    }
+    for (const product of memoryProducts) {
+      await setDoc(doc(db, 'products', product.productId), product, { merge: true });
+      count++;
+    }
+    for (const user of memoryUsers) {
+      await setDoc(doc(db, 'users', user.userId), user, { merge: true });
+      count++;
+    }
+    await setDoc(doc(db, 'settings', 'global'), memorySettings, { merge: true });
+    return { success: true, count };
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.error('Firestore sync error:', errMsg);
+    return { success: false, count: 0, error: errMsg };
+  }
+}
+
+// Clear all past data and re-initialize purely with the 121 real sheet records
+export async function clearAllPastDataAndResyncWithSheet(user: UserProfile): Promise<{ success: boolean; count: number; firestoreSynced: boolean; error?: string }> {
+  try {
+    if (user.role === 'AGENT') throw new Error('Unauthorized');
+
+    // Wipe cached keys
+    Object.values(STORAGE_KEYS).forEach(k => {
+      try { localStorage.removeItem(k); } catch (_) {}
+    });
+
+    memoryOrders = [...INITIAL_ORDERS];
+    memorySchools = [...INITIAL_SCHOOLS];
+    memoryAgents = [...INITIAL_AGENTS];
+    memoryProducts = [...INITIAL_PRODUCTS];
+
+    saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+    saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
+    saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
+    saveStorage(STORAGE_KEYS.PRODUCTS, memoryProducts);
+
+    let firestoreSynced = false;
+    try {
+      const syncRes = await syncAllDataToFirestore();
+      firestoreSynced = syncRes.success;
+    } catch (e) {
+      console.warn('Firestore sync during reset notice:', e);
+    }
+
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'CLEAR_AND_RESET_SHEET',
+      entityType: 'ORDER',
+      entityId: 'ALL',
+      newValue: `Cleared all past data and initialized exactly ${memoryOrders.length} spreadsheet orders`
+    });
+
+    return { success: true, count: memoryOrders.length, firestoreSynced };
+  } catch (err: any) {
+    return { success: false, count: 0, firestoreSynced: false, error: err.message };
+  }
+}
+
+// Clear all orders completely from memory and storage (ready for fresh upload)
+export async function clearAllOrders(user: UserProfile): Promise<{ success: boolean; clearedCount: number }> {
+  if (user.role === 'AGENT') throw new Error('Unauthorized');
+  const count = memoryOrders.length;
+  memoryOrders = [];
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'CLEAR_ORDERS',
+    entityType: 'ORDER',
+    entityId: 'ALL',
+    newValue: `Completely cleared ${count} past orders from workspace`
+  });
+
+  return { success: true, clearedCount: count };
+}
+
 
 // ----------------------------------------------------
 // FILTER & SEARCH INTERFACES
@@ -545,9 +665,21 @@ export async function createOrder(
   const orderId = `${memorySettings.orderIdPrefix}-${String(currentCount).padStart(5, '0')}`;
   const now = new Date().toISOString();
 
+  const maxSerial = memoryOrders.reduce((max, o) => Math.max(max, o.serialNumber || 0), 0);
+  const serialNumber = maxSerial + 1;
+  const finalVal = orderInput.orderValue || 0;
+  const isPaid = orderInput.paymentStatus === 'PAID';
+
   const newOrder: Order = {
     ...orderInput,
+    serialNumber,
     orderId,
+    orderValue: finalVal,
+    taxAmount: 0,
+    grossOrderValue: finalVal,
+    totalAmount: finalVal,
+    amountReceived: isPaid ? finalVal : (orderInput.amountReceived || 0),
+    amountPending: isPaid ? 0 : Math.max(0, finalVal - (orderInput.amountReceived || 0)),
     createdAt: now,
     updatedAt: now,
     createdBy: user.userId,
@@ -616,9 +748,18 @@ export async function updateOrder(
   }
 
   const now = new Date().toISOString();
+  const finalVal = updates.orderValue !== undefined ? updates.orderValue : existing.orderValue;
+  const isPaid = (updates.paymentStatus || existing.paymentStatus) === 'PAID';
+
   const updated: Order = {
     ...existing,
     ...updates,
+    serialNumber: existing.serialNumber ?? (idx + 1),
+    orderValue: finalVal,
+    taxAmount: 0,
+    grossOrderValue: finalVal,
+    totalAmount: finalVal,
+    amountPending: isPaid ? 0 : (updates.amountPending !== undefined ? updates.amountPending : existing.amountPending),
     updatedAt: now,
     updatedBy: user.name
   };
@@ -1320,16 +1461,21 @@ export async function updateSystemSettings(newSettings: Partial<SystemSettings>,
 }
 
 // Batch import helper
-export async function batchImportOrders(ordersToImport: Order[], user: UserProfile): Promise<{ imported: number; errors: string[] }> {
+export async function batchImportOrders(ordersToImport: Order[], user: UserProfile, replaceAll: boolean = false): Promise<{ imported: number; errors: string[] }> {
   if (user.role === 'AGENT') throw new Error('Unauthorized');
   let count = 0;
   const errors: string[] = [];
+
+  if (replaceAll) {
+    memoryOrders = [];
+  }
 
   for (const ord of ordersToImport) {
     try {
       const existing = memoryOrders.find(o => o.orderId === ord.orderId || (o.purchaseOrderNumber === ord.purchaseOrderNumber && o.schoolName === ord.schoolName));
       if (!existing) {
         memoryOrders.push(ord);
+        syncDocToFirestore('orders', ord.orderId, ord);
         count++;
       }
     } catch (e: any) {
@@ -1345,7 +1491,7 @@ export async function batchImportOrders(ordersToImport: Order[], user: UserProfi
     action: 'BATCH_IMPORT',
     entityType: 'ORDER',
     entityId: 'IMPORT',
-    newValue: `Imported ${count} orders from spreadsheet`
+    newValue: `Imported ${count} orders from spreadsheet${replaceAll ? ' (cleared all past orders first)' : ''}`
   });
 
   return { imported: count, errors };

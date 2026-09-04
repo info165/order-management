@@ -5,10 +5,18 @@ interface StatusBadgeProps {
   status: OrderStatus | PaymentStatus | DispatchStatus | string;
   type?: 'order' | 'payment' | 'dispatch';
   className?: string;
+  compact?: boolean;
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order', className = '' }) => {
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order', className = '', compact = false }) => {
   let label = status.replace(/_/g, ' ');
+  if (compact) {
+    if (status === 'PAYMENT_PENDING') label = 'PAYMENT DUE';
+    else if (status === 'READY_FOR_DISPATCH') label = 'READY';
+    else if (status === 'IN_TRANSIT') label = 'IN TRANSIT';
+    else if (status === 'INVOICE_GENERATED') label = 'INVOICED';
+    else if (status === 'PARTIALLY_PAID') label = 'PARTIAL';
+  }
   let colorStyles = 'bg-slate-100 text-slate-700 border-slate-200';
 
   if (type === 'order') {
@@ -88,9 +96,11 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
 
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs tracking-wide uppercase border whitespace-nowrap ${colorStyles} ${className}`}
+      className={`inline-flex items-center ${
+        compact ? 'px-1.5 py-0.5 text-[10.5px] font-semibold tracking-normal' : 'px-2 py-0.5 text-xs tracking-wide'
+      } rounded uppercase border whitespace-nowrap ${colorStyles} ${className}`}
     >
-      <span className="w-1.5 h-1.5 rounded-full mr-1.5 shrink-0 opacity-80 bg-current" />
+      <span className={`${compact ? 'w-1.5 h-1.5 mr-1' : 'w-1.5 h-1.5 mr-1.5'} rounded-full shrink-0 opacity-80 bg-current`} />
       {label}
     </span>
   );

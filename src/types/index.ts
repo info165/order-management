@@ -124,6 +124,7 @@ export interface OrderItem {
 }
 
 export interface Order {
+  serialNumber?: number; // Independent sequential integer: 1, 2, 3...
   orderId: string; // e.g. ORD-2026-00001
   orderNumber: string;
   financialYear: string; // e.g. "2026-27"
@@ -155,6 +156,11 @@ export interface Order {
   purchaseOrderDate?: string;
   bidNumber?: string;
   contractNumber?: string;
+  company?: string;
+  bidSubmissionLastDate?: string;
+  l1CompanyPrice?: string;
+  l2CompanyPrice?: string;
+  l3CompanyPrice?: string;
 
   // Financials
   orderValue: number;

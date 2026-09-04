@@ -70,6 +70,20 @@ export function parseFileToJSON(file: File): Promise<SpreadsheetRow[]> {
   });
 }
 
+function getField(row: SpreadsheetRow, ...candidates: string[]): string {
+  const rowKeys = Object.keys(row);
+  for (const cand of candidates) {
+    const candNorm = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const rKey of rowKeys) {
+      const rKeyNorm = rKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (rKeyNorm === candNorm && row[rKey] !== undefined && row[rKey] !== null) {
+        return String(row[rKey]).trim();
+      }
+    }
+  }
+  return '';
+}
+
 export function validateSpreadsheetRows(
   rows: SpreadsheetRow[],
   agentLookup: { [name: string]: { id: string; name: string; code: string } }
@@ -80,45 +94,42 @@ export function validateSpreadsheetRows(
     const errors: string[] = [];
     const rowNum = index + 2; // +1 for 0-index, +1 for header row
 
-    // Find school name
-    const rawSchool =
-      row['SCHOOL NAME'] ||
-      row['School Name'] ||
-      row['school'] ||
-      row['schoolName'] ||
-      '';
-    const schoolName = String(rawSchool).trim();
+    // Check if empty or separator row
+    const rawSchool = getField(row, 'SCHOOL NAME', 'School Name', 'school', 'schoolName');
+    const rawItem = getField(row, 'ITEM', 'Item', 'category', 'product', 'Description');
+    const rawContract = getField(row, 'CONTRACT/ORDER NO', 'CONTRACT NO', 'Order Number', 'order_no', 'contractNumber');
+    const rawBid = getField(row, 'Bid Number', 'Bid No', 'bidNumber', 'bid');
+
+    // Ignore completely empty row or trailing garbage rows
+    if (!rawSchool && !rawItem && !rawContract && !rawBid) {
+      return;
+    }
+
+    const schoolName = rawSchool;
     if (!schoolName) {
       errors.push('Missing School Name');
     }
 
     // Determine School Type
     let schoolType = 'Government School';
-    if (schoolName.toUpperCase().includes('JNV') || schoolName.toUpperCase().includes('NAVODAYA')) {
+    if (/JNV|NAVODAYA/i.test(schoolName)) {
       schoolType = 'Jawahar Navodaya Vidyalaya';
-    } else if (schoolName.toUpperCase().includes('PM SHRI')) {
+    } else if (/PM SHRI/i.test(schoolName)) {
       schoolType = 'PM SHRI School';
-    } else if (schoolName.toUpperCase().includes('KV') || schoolName.toUpperCase().includes('KENDRIYA VIDYALAYA')) {
+    } else if (/KV|KENDRIYA VIDYALAYA/i.test(schoolName)) {
       schoolType = 'Kendriya Vidyalaya';
     }
 
     // Order value / L1 Price
-    const rawPrice =
-      row['L1 PRICE'] ||
-      row['Price'] ||
-      row['orderValue'] ||
-      row['Amount'] ||
-      '0';
-    // Clean formatted strings like "24,998.25"
-    const cleanedPrice = String(rawPrice).replace(/[₹,\s]/g, '');
+    const rawPrice = getField(row, 'L1 PRICE', 'Price', 'orderValue', 'Amount', 'Total');
+    const cleanedPrice = rawPrice.replace(/[₹,\s]/g, '');
     const orderValue = parseFloat(cleanedPrice) || 0;
     if (orderValue <= 0) {
       errors.push('Order Value must be a valid positive amount');
     }
 
     // Agent / Dealer
-    const rawDealer = row['DEALER'] || row['Dealer'] || row['Agent'] || row['agentName'] || '';
-    const dealerName = String(rawDealer).trim();
+    const dealerName = getField(row, 'DEALER', 'Dealer', 'Agent', 'agentName');
     let agentId = 'AGT-DIRECT';
     let agentName = 'In-House / Direct Tender';
     let agentCode = 'AGT-DIR';
@@ -134,21 +145,22 @@ export function validateSpreadsheetRows(
         agentCode = match.code;
       } else {
         agentName = dealerName;
+        agentCode = `AGT-${dealerName.slice(0, 3).toUpperCase()}`;
       }
     }
 
     // Courier & Tracking
-    const courierName = String(row['COURIER NAME'] || row['Courier'] || '').trim();
-    const docketNumber = String(row['DOCKET NUMBER'] || row['Docket'] || row['Tracking'] || '').trim();
-    const numberOfBoxes = String(row['NUMBER OF BOXES'] || row['Boxes'] || '1').trim();
-    const dispatchDate = String(row['DATE OF DISPATCH'] || row['Dispatch Date'] || '').trim();
+    const courierName = getField(row, 'COURIER NAME', 'Courier', 'courierName');
+    const docketNumber = getField(row, 'DOCKET NUMBER', 'Docket', 'Tracking', 'docketNumber');
+    const numberOfBoxes = getField(row, 'NUMBER OF BOXES', 'Boxes', 'numberOfBoxes') || '1';
+    const dispatchDate = getField(row, 'DATE OF DISPATCH', 'Dispatch Date', 'dispatchDate');
 
     // Payment status
-    const rawPayment = String(row['PAYMENT RECEIVED FROM SCHOOLS'] || row['Payment Status'] || '').toUpperCase();
+    const rawPayment = getField(row, 'PAYMENT RECEIVED FROM SCHOOLS', 'PAYMENT  RECEIVED FROM SCHOOLS', 'Payment Status', 'paymentStatus').toUpperCase();
     let paymentStatus: PaymentStatus = 'PAYMENT_PENDING';
     let amountReceived = 0;
-    const taxAmount = Math.round(orderValue * 0.18);
-    const grossOrderValue = orderValue + taxAmount;
+    const taxAmount = 0;
+    const grossOrderValue = orderValue;
     let amountPending = grossOrderValue;
 
     if (rawPayment.includes('PAID') || rawPayment.includes('RECEIVED')) {
@@ -162,7 +174,7 @@ export function validateSpreadsheetRows(
     let status: OrderStatus = 'PO_RECEIVED';
     let deliveryStatus: 'Pending' | 'In Transit' | 'Delivered' = 'Pending';
 
-    const rawDelh = String(row['DELHIVERY STATUS'] || row['POD STATUS'] || '').toUpperCase();
+    const rawDelh = getField(row, 'DELHIVERY STATUS', 'POD STATUS', 'Delivery Status').toUpperCase();
     if (rawDelh.includes('DELIVERED')) {
       dispatchStatus = 'DELIVERED';
       status = 'DELIVERED';
@@ -173,15 +185,28 @@ export function validateSpreadsheetRows(
       deliveryStatus = 'In Transit';
     }
 
-    const itemCategory = String(row['ITEM'] || row['Category'] || 'Educational Kit').trim();
-    const contractNo = String(row['CONTRACT/ORDER NO'] || row['Order Number'] || `ORD-IMP-${index + 1}`).trim();
-    const invoiceNo = String(row['GEM INVOICE NUMBER'] || row['Invoice Number'] || '').trim();
+    const itemCategory = rawItem || 'Educational Kit';
+    const bidNumber = rawBid;
+    const contractNo = rawContract || (bidNumber ? `BID-${bidNumber.replace(/[^A-Za-z0-9]/g, '')}` : `ORD-IMP-${index + 1}`);
+    const invoiceNo = getField(row, 'GEM INVOICE NUMBER', 'Invoice Number', 'invoiceNumber');
+    const invoiceDate = getField(row, 'GEM INVOICE DATE', 'Invoice Date', 'invoiceDate');
+    const company = getField(row, 'COMPANY', 'Company', 'companyName') || 'FIPL';
+    const bidDate = getField(row, 'Bid Submission Last Date', 'bidSubmissionLastDate');
+    const l1Comp = getField(row, 'L1 Company/Price', 'L1 Company / Price');
+    const l2Comp = getField(row, 'L2 Company/Price', 'L2 Company / Price');
+    const l3Comp = getField(row, 'L3 Company/Price', 'L3 Company / Price');
+    const shippingStatus = getField(row, 'SHIPPING STATUS', 'Shipping Status');
+    const callingStatus = getField(row, 'CALLING STATUS', 'Calling Status');
+    const remarks = getField(row, 'REMARKS', 'Remarks', 'Notes', 'internalNotes');
 
     const parsedData: Partial<Order> = {
       orderNumber: contractNo,
+      purchaseOrderNumber: contractNo,
+      contractNumber: contractNo,
+      bidNumber: bidNumber || undefined,
       schoolName,
       schoolType: schoolType as any,
-      orderType: 'GeM Direct',
+      orderType: bidNumber ? 'GeM Bid' : 'GeM Direct',
       category: itemCategory,
       orderValue,
       taxAmount,
@@ -192,6 +217,11 @@ export function validateSpreadsheetRows(
       agentId,
       agentName,
       agentCode,
+      company,
+      bidSubmissionLastDate: bidDate || undefined,
+      l1CompanyPrice: l1Comp || undefined,
+      l2CompanyPrice: l2Comp || undefined,
+      l3CompanyPrice: l3Comp || undefined,
       status,
       dispatchStatus,
       deliveryStatus,
@@ -201,9 +231,10 @@ export function validateSpreadsheetRows(
       numberOfBoxes: numberOfBoxes || undefined,
       dispatchDate: dispatchDate || undefined,
       invoiceNumber: invoiceNo || undefined,
+      invoiceDate: invoiceDate || undefined,
       invoiceStatus: invoiceNo ? 'UPLOADED' : 'PENDING',
-      callingStatus: String(row['CALLING STATUS'] || '').trim() || undefined,
-      internalNotes: String(row['REMARKS'] || '').trim() || undefined
+      callingStatus: callingStatus || undefined,
+      internalNotes: remarks || undefined
     };
 
     results.push({

@@ -181,7 +181,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
     setShowCategoryDropdown(false);
     const prod = products.find(p => p.name === cat || p.category === cat);
     if (prod && prod.standardPrice) {
-      setTotalInclusiveOrderValue(Math.round(prod.standardPrice * 1.18));
+      setTotalInclusiveOrderValue(prod.standardPrice);
     }
   };
 
@@ -204,7 +204,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       );
       setProducts(prev => [createdProd, ...prev]);
       setCategory(createdProd.name);
-      setTotalInclusiveOrderValue(Math.round((newCategoryPrice || 50000) * 1.18));
+      setTotalInclusiveOrderValue(newCategoryPrice || 50000);
       setShowCategoryDropdown(false);
       setShowNewCategoryModal(false);
     } catch (err: any) {
@@ -342,8 +342,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           agentCode,
           agentCommissionPercentage,
           category,
-          orderValue: baseOrderValue,
-          taxAmount: gstAmount,
+          orderValue: totalInclusiveOrderValue,
+          taxAmount: 0,
           grossOrderValue: totalInclusiveOrderValue,
           totalAmount: totalInclusiveOrderValue,
           amountReceived: 0,
