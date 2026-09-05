@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, UserPlus, Lock, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { ShieldCheck, UserPlus, Lock, CheckCircle, AlertTriangle, X, Trash2 } from 'lucide-react';
 import { UserProfile, UserRole } from '../../types';
-import { getUsers, updateUserRole } from '../../services/dataService';
+import { getUsers, updateUserRole, deleteUser } from '../../services/dataService';
+import { useAuth } from '../../context/AuthContext';
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   SUPER_ADMIN: 'Root authority with full access to user management, audit logs, and system settings.',
@@ -21,6 +22,9 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({ currentUser })
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [newRole, setNewRole] = useState<UserRole>('AGENT');
+
+  const { refreshUsers } = useAuth();
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -47,7 +51,32 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({ currentUser })
     try {
       await updateUserRole(editingUser.userId, newRole, currentUser);
       setEditingUser(null);
+      setFeedbackNotice(`Role updated to ${newRole} for ${editingUser.name}`);
+      setTimeout(() => setFeedbackNotice(null), 3000);
       await loadUsers();
+      await refreshUsers();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteUser = async (user: UserProfile) => {
+    if (user.email.toLowerCase() === 'info@funscholar.com') {
+      alert('Cannot delete the root Super Admin account.');
+      return;
+    }
+
+    const confirm = window.confirm(
+      `SECURITY CONFIRMATION:\nAre you sure you want to permanently delete user "${user.name}" (${user.email})?\n\nThis will revoke all access and purge their credentials.`
+    );
+    if (!confirm) return;
+
+    try {
+      await deleteUser(user.userId, currentUser);
+      setFeedbackNotice(`User account "${user.name}" has been permanently deleted.`);
+      setTimeout(() => setFeedbackNotice(null), 3500);
+      await loadUsers();
+      await refreshUsers();
     } catch (err: any) {
       alert(err.message);
     }
@@ -83,6 +112,14 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({ currentUser })
           </div>
         ))}
       </div>
+
+      {/* Feedback Notice */}
+      {feedbackNotice && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{feedbackNotice}</span>
+        </div>
+      )}
 
       {/* User Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -134,18 +171,29 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({ currentUser })
                     </td>
                     <td className="px-4 py-3 text-right">
                       {isRoot ? (
-                        <span className="text-[11px] text-slate-400 italic">Locked</span>
+                        <span className="text-[11px] text-slate-400 italic font-mono">Permanent Root</span>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingUser(u);
-                            setNewRole(u.role);
-                          }}
-                          className="text-amber-600 hover:text-amber-700 font-semibold text-[11px]"
-                        >
-                          Modify Role
-                        </button>
+                        <div className="flex items-center justify-end gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingUser(u);
+                              setNewRole(u.role);
+                            }}
+                            className="text-amber-600 hover:text-amber-700 font-semibold text-[11px] px-2 py-1 bg-amber-50 hover:bg-amber-100 rounded transition-colors"
+                          >
+                            Modify Role
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u)}
+                            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 p-1 rounded font-semibold text-[11px] flex items-center gap-1 transition-colors"
+                            title={`Delete ${u.name}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

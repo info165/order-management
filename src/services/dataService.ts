@@ -16,7 +16,8 @@ import {
   OrderStatusHistoryItem,
   UserProfile,
   UserRole,
-  SystemSettings
+  SystemSettings,
+  IssuedCredential
 } from '../types';
 import {
   INITIAL_ORDERS,
@@ -38,7 +39,8 @@ import {
   query,
   where,
   orderBy,
-  limit
+  limit,
+  onSnapshot
 } from 'firebase/firestore';
 
 // In-memory runtime storage with localStorage backup for resilient and instantaneous user experience
@@ -55,7 +57,9 @@ const STORAGE_KEYS = {
   AUDIT_LOGS: 'govschool_audit_v3',
   TIMELINES: 'govschool_timelines_v3',
   SETTINGS: 'govschool_settings_v3',
-  USERS: 'govschool_users_v3'
+  USERS: 'govschool_users_v3',
+  DELETED_USERS: 'govschool_deleted_users_v3',
+  PENDING_OTPS: 'govschool_pending_otps_v3'
 };
 
 // Immediately purge stale mock cache from previous sessions
@@ -111,7 +115,32 @@ let memorySchools: School[] = loadStorage(STORAGE_KEYS.SCHOOLS, INITIAL_SCHOOLS)
 let memoryAgents: Agent[] = loadStorage(STORAGE_KEYS.AGENTS, INITIAL_AGENTS);
 let memoryProducts: Product[] = loadStorage(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 let memorySettings: SystemSettings = loadStorage(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
-let memoryUsers: UserProfile[] = loadStorage(STORAGE_KEYS.USERS, INITIAL_USERS);
+let deletedUserIds: string[] = loadStorage(STORAGE_KEYS.DELETED_USERS, []);
+
+let memoryUsers: UserProfile[] = (loadStorage(STORAGE_KEYS.USERS, INITIAL_USERS) as UserProfile[]).filter(
+  u => !deletedUserIds.includes(u.userId) && !deletedUserIds.includes(u.email.toLowerCase())
+);
+
+// Synchronize memoryUsers to ensure default personnel accounts exist, UNLESS they were explicitly deleted!
+INITIAL_USERS.forEach(initU => {
+  if (deletedUserIds.includes(initU.userId) || deletedUserIds.includes(initU.email.toLowerCase())) {
+    return; // User was explicitly deleted by Super Admin, do NOT resurrect!
+  }
+  const idx = memoryUsers.findIndex(u => u.email.toLowerCase() === initU.email.toLowerCase());
+  if (idx === -1) {
+    memoryUsers.push(initU);
+  } else {
+    memoryUsers[idx] = {
+      ...initU,
+      ...memoryUsers[idx],
+      password: memoryUsers[idx].password || initU.password,
+      username: memoryUsers[idx].username || initU.username,
+      issuedBy: memoryUsers[idx].issuedBy || initU.issuedBy,
+      issuedAt: memoryUsers[idx].issuedAt || initU.issuedAt
+    };
+  }
+});
+saveStorage(STORAGE_KEYS.USERS, memoryUsers);
 
 // If storage had fewer orders than the master 121 sheet dataset, re-align to master dataset
 if (memoryOrders.length === 0 || memoryOrders.length < 50) {
@@ -371,6 +400,14 @@ async function syncDocToFirestore(collectionName: string, docId: string, data: a
   }
 }
 
+async function deleteDocFromFirestore(collectionName: string, docId: string) {
+  try {
+    await deleteDoc(doc(db, collectionName, docId));
+  } catch (e) {
+    // Non-fatal if offline
+  }
+}
+
 // Background initialization to seed Firestore once if empty
 let isFirestoreSeeded = false;
 export async function initializeFirestoreSeed() {
@@ -502,6 +539,62 @@ export interface OrderFilterOptions {
   dateTo?: string;
   onlyOverdueDelivery?: boolean;
   onlyOverduePayment?: boolean;
+}
+
+// Real-time automatic listener for orders from Cloud Firestore
+export function subscribeToRealtimeOrders(
+  user: UserProfile,
+  onUpdate: (orders: Order[]) => void
+): () => void {
+  // Emit current memory orders immediately so there is zero UI delay
+  const initial = memoryOrders.filter(o => !o.isDeleted);
+  if (user.role === 'AGENT') {
+    onUpdate(initial.filter(o => o.agentId === user.agentId));
+  } else {
+    onUpdate(initial);
+  }
+
+  try {
+    const ordersCol = collection(db, 'orders');
+    const unsubscribe = onSnapshot(
+      ordersCol,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteList: Order[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as Order;
+            if (data && data.orderId) {
+              remoteList.push(data);
+            }
+          });
+
+          if (remoteList.length > 0) {
+            const mergedMap = new Map<string, Order>();
+            memoryOrders.forEach(o => mergedMap.set(o.orderId, o));
+            remoteList.forEach(o => mergedMap.set(o.orderId, o));
+
+            memoryOrders = sanitizeOrderData(Array.from(mergedMap.values()));
+            saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+            const active = memoryOrders.filter(o => !o.isDeleted);
+            if (user.role === 'AGENT') {
+              onUpdate(active.filter(o => o.agentId === user.agentId));
+            } else {
+              onUpdate(active);
+            }
+          }
+        }
+      },
+      (err) => {
+        console.warn('Real-time Firestore listener notice:', err);
+      }
+    );
+
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Could not establish real-time snapshot listener, using active local sync:', err);
+    return () => {};
+  }
 }
 
 // ----------------------------------------------------
@@ -1444,6 +1537,417 @@ export async function updateUserStatus(userId: string, isActive: boolean, user: 
     saveStorage(STORAGE_KEYS.USERS, memoryUsers);
     syncDocToFirestore('users', userId, { isActive });
   }
+}
+
+export async function issueUserCredentials(
+  input: {
+    name: string;
+    email: string;
+    username?: string;
+    password?: string;
+    role: UserRole;
+    phone?: string;
+    agentId?: string;
+    agentCode?: string;
+    state?: string;
+    notes?: string;
+  },
+  adminUser: UserProfile
+): Promise<IssuedCredential> {
+  if (adminUser.role !== 'SUPER_ADMIN') {
+    throw new Error('SECURITY POLICY: Login credentials can ONLY be issued by the Super Admin (info@funscholar.com).');
+  }
+
+  const cleanEmail = input.email.trim().toLowerCase();
+  const existing = memoryUsers.find(u => u.email.toLowerCase() === cleanEmail);
+  if (existing) {
+    throw new Error(`A user account with email "${input.email}" already exists. You can modify their credentials instead.`);
+  }
+
+  const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const now = new Date().toISOString();
+  const rawPassword = input.password && input.password.trim() ? input.password.trim() : `GovSchool@${Math.floor(1000 + Math.random() * 9000)}`;
+
+  let assignedAgentId = input.agentId;
+  let assignedAgentCode = input.agentCode;
+
+  // If role is AGENT, ensure agent registry record is linked or provisioned
+  if (input.role === 'AGENT') {
+    if (!assignedAgentCode) {
+      assignedAgentCode = `AGT-${String(memoryAgents.length + 1).padStart(4, '0')}`;
+    }
+    if (!assignedAgentId) {
+      assignedAgentId = assignedAgentCode;
+    }
+
+    const agentExisting = memoryAgents.find(a => a.agentCode === assignedAgentCode || a.email.toLowerCase() === cleanEmail);
+    if (!agentExisting) {
+      const newAgent: Agent = {
+        agentId: assignedAgentCode,
+        agentCode: assignedAgentCode,
+        name: input.name.trim(),
+        email: cleanEmail,
+        phone: input.phone || '',
+        state: input.state || 'Assigned Territory',
+        isActive: true,
+        userId,
+        commissionRate: 8.0,
+        createdAt: now,
+        updatedAt: now
+      };
+      memoryAgents = [newAgent, ...memoryAgents];
+      saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
+      syncDocToFirestore('agents', assignedAgentCode, newAgent);
+    }
+  }
+
+  const newUser: UserProfile = {
+    userId,
+    name: input.name.trim(),
+    email: cleanEmail,
+    username: input.username || cleanEmail.split('@')[0],
+    password: rawPassword,
+    phone: input.phone || '',
+    role: input.role,
+    agentId: assignedAgentId,
+    agentCode: assignedAgentCode,
+    state: input.state,
+    isActive: true,
+    issuedBy: adminUser.email,
+    issuedAt: now,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  memoryUsers = [newUser, ...memoryUsers];
+  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+  syncDocToFirestore('users', userId, newUser);
+
+  await writeActivityLog({
+    userId: adminUser.userId,
+    userName: adminUser.name,
+    action: 'CREDENTIALS_ISSUED',
+    entityType: 'USER',
+    entityId: userId,
+    newValue: `Super Admin issued login credentials for ${newUser.name} (${newUser.email}) with role ${newUser.role}`
+  });
+
+  return {
+    userId,
+    name: newUser.name,
+    email: newUser.email,
+    username: newUser.username,
+    password: rawPassword,
+    role: newUser.role,
+    agentId: newUser.agentId,
+    agentCode: newUser.agentCode,
+    state: newUser.state,
+    phone: newUser.phone,
+    isActive: true,
+    issuedBy: adminUser.email,
+    issuedAt: now,
+    notes: input.notes
+  };
+}
+
+export async function resetUserPassword(
+  userId: string,
+  newPass: string,
+  adminUser: UserProfile
+): Promise<void> {
+  if (adminUser.role !== 'SUPER_ADMIN') {
+    throw new Error('SECURITY POLICY: Password reset can ONLY be performed by the Super Admin.');
+  }
+  const idx = memoryUsers.findIndex(u => u.userId === userId);
+  if (idx === -1) throw new Error('User account not found');
+
+  memoryUsers[idx].password = newPass.trim();
+  memoryUsers[idx].updatedAt = new Date().toISOString();
+  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+  syncDocToFirestore('users', userId, { password: newPass.trim(), updatedAt: memoryUsers[idx].updatedAt });
+
+  await writeActivityLog({
+    userId: adminUser.userId,
+    userName: adminUser.name,
+    action: 'PASSWORD_RESET',
+    entityType: 'USER',
+    entityId: userId,
+    newValue: `Super Admin reset credentials for ${memoryUsers[idx].email}`
+  });
+}
+
+export async function deleteUser(userId: string, adminUser: UserProfile): Promise<void> {
+  if (adminUser.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can delete user accounts and revoke credentials.');
+  }
+  const target = memoryUsers.find(u => u.userId === userId);
+  if (!target) throw new Error('User account not found.');
+  if (target.email.toLowerCase() === 'info@funscholar.com') {
+    throw new Error('SECURITY POLICY: Cannot delete or revoke the permanent root Super Admin account (info@funscholar.com).');
+  }
+
+  // Remove from memory
+  memoryUsers = memoryUsers.filter(u => u.userId !== userId);
+  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+
+  // Permanently record in deletedUserIds so initial seed data never revives it
+  if (!deletedUserIds.includes(userId)) {
+    deletedUserIds.push(userId);
+  }
+  if (!deletedUserIds.includes(target.email.toLowerCase())) {
+    deletedUserIds.push(target.email.toLowerCase());
+  }
+  saveStorage(STORAGE_KEYS.DELETED_USERS, deletedUserIds);
+
+  // If user was an AGENT or tied to an agentCode, clean up agent registry
+  if (target.role === 'AGENT' || target.agentId || target.agentCode) {
+    const agtCode = target.agentCode || target.agentId;
+    memoryAgents = memoryAgents.filter(
+      a => a.userId !== userId && a.agentCode !== agtCode && a.email.toLowerCase() !== target.email.toLowerCase()
+    );
+    saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
+    if (agtCode) {
+      deleteDocFromFirestore('agents', agtCode);
+    }
+  }
+
+  // Delete from Firestore
+  deleteDocFromFirestore('users', userId);
+
+  await writeActivityLog({
+    userId: adminUser.userId,
+    userName: adminUser.name,
+    action: 'CREDENTIALS_REVOKED',
+    entityType: 'USER',
+    entityId: userId,
+    newValue: `Super Admin purged account and revoked credentials for ${target.name} (${target.email}, ${target.role})`
+  });
+}
+
+// Alias for backwards compatibility
+export const deleteUserCredentials = deleteUser;
+
+export async function createUser(
+  input: {
+    name: string;
+    email: string;
+    username?: string;
+    password?: string;
+    role: UserRole;
+    phone?: string;
+    agentCode?: string;
+    state?: string;
+    notes?: string;
+  },
+  adminUser: UserProfile
+): Promise<UserProfile> {
+  const cred = await issueUserCredentials(input, adminUser);
+  const found = memoryUsers.find(u => u.userId === cred.userId);
+  if (!found) throw new Error('User creation failed to record profile.');
+  return found;
+}
+
+export async function updateUserProfile(
+  userId: string,
+  updates: {
+    name?: string;
+    email?: string;
+    role?: UserRole;
+    phone?: string;
+    agentCode?: string;
+    password?: string;
+    isActive?: boolean;
+    state?: string;
+  },
+  adminUser: UserProfile
+): Promise<UserProfile> {
+  if (adminUser.role !== 'SUPER_ADMIN' && adminUser.userId !== userId) {
+    throw new Error('Only Super Admin can edit user accounts.');
+  }
+
+  const idx = memoryUsers.findIndex(u => u.userId === userId);
+  if (idx === -1) throw new Error('User account not found.');
+
+  const existing = memoryUsers[idx];
+  // Guard info@funscholar.com role modification
+  if (existing.email.toLowerCase() === 'info@funscholar.com' && updates.role && updates.role !== 'SUPER_ADMIN') {
+    throw new Error('SECURITY POLICY: Cannot change the role of the primary Super Admin (info@funscholar.com).');
+  }
+
+  const cleanUpdates: Partial<UserProfile> = {};
+  if (updates.name !== undefined) cleanUpdates.name = updates.name.trim();
+  if (updates.email !== undefined) cleanUpdates.email = updates.email.trim().toLowerCase();
+  if (updates.role !== undefined) cleanUpdates.role = updates.role;
+  if (updates.phone !== undefined) cleanUpdates.phone = updates.phone.trim();
+  if (updates.agentCode !== undefined) {
+    cleanUpdates.agentCode = updates.agentCode.trim();
+    cleanUpdates.agentId = updates.agentCode.trim();
+  }
+  if (updates.password !== undefined && updates.password.trim()) {
+    cleanUpdates.password = updates.password.trim();
+  }
+  if (updates.isActive !== undefined) cleanUpdates.isActive = updates.isActive;
+  if (updates.state !== undefined) cleanUpdates.state = updates.state;
+
+  const updatedUser: UserProfile = {
+    ...existing,
+    ...cleanUpdates,
+    updatedAt: new Date().toISOString()
+  };
+
+  memoryUsers[idx] = updatedUser;
+  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+  syncDocToFirestore('users', userId, updatedUser);
+
+  // If role is AGENT or agentCode updated, update or create agent record
+  if (updatedUser.role === 'AGENT' && updatedUser.agentCode) {
+    const agtIdx = memoryAgents.findIndex(a => a.agentCode === updatedUser.agentCode || a.userId === userId);
+    if (agtIdx !== -1) {
+      memoryAgents[agtIdx] = {
+        ...memoryAgents[agtIdx],
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone || '',
+        state: updatedUser.state || memoryAgents[agtIdx].state,
+        isActive: updatedUser.isActive ?? true,
+        updatedAt: new Date().toISOString()
+      };
+      saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
+      syncDocToFirestore('agents', updatedUser.agentCode, memoryAgents[agtIdx]);
+    }
+  }
+
+  await writeActivityLog({
+    userId: adminUser.userId,
+    userName: adminUser.name,
+    action: 'UPDATE_USER',
+    entityType: 'USER',
+    entityId: userId,
+    newValue: `Super Admin updated profile for ${updatedUser.name} (${updatedUser.email}, role: ${updatedUser.role})`
+  });
+
+  return updatedUser;
+}
+
+export interface PendingOtpRecord {
+  email: string;
+  otp: string;
+  expiresAt: number;
+}
+
+let memoryPendingOtps: PendingOtpRecord[] = loadStorage(STORAGE_KEYS.PENDING_OTPS, []);
+
+export async function generatePasswordResetOtp(emailInput: string): Promise<{
+  success: boolean;
+  message: string;
+  otp: string;
+  expiresAt: number;
+  userName: string;
+}> {
+  const cleanEmail = emailInput.trim().toLowerCase();
+  if (!cleanEmail) {
+    throw new Error('Please enter a valid email address.');
+  }
+
+  const user = memoryUsers.find(u => u.email.toLowerCase() === cleanEmail);
+  if (!user) {
+    throw new Error(`No account found matching "${emailInput}". Please check the email address or contact Super Admin.`);
+  }
+
+  if (!user.isActive) {
+    throw new Error('This account has been deactivated. Please contact Super Admin to reactivate credentials.');
+  }
+
+  // Generate secure 6-digit numeric OTP
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  // Keep only non-expired OTPs and add new one
+  memoryPendingOtps = memoryPendingOtps.filter(o => o.email.toLowerCase() !== cleanEmail && o.expiresAt > Date.now());
+  memoryPendingOtps.push({
+    email: cleanEmail,
+    otp: otpCode,
+    expiresAt
+  });
+  saveStorage(STORAGE_KEYS.PENDING_OTPS, memoryPendingOtps);
+
+  // Sync to Firestore OTP collection for cloud persistence
+  syncDocToFirestore('otps', cleanEmail, {
+    email: cleanEmail,
+    otp: otpCode,
+    expiresAt: new Date(expiresAt).toISOString(),
+    createdAt: new Date().toISOString()
+  });
+
+  return {
+    success: true,
+    message: `Verification code generated for ${user.name}.`,
+    otp: otpCode,
+    expiresAt,
+    userName: user.name
+  };
+}
+
+export async function verifyOtpAndResetPassword(
+  emailInput: string,
+  otpCode: string,
+  newPasswordInput: string
+): Promise<{ success: boolean; message: string }> {
+  const cleanEmail = emailInput.trim().toLowerCase();
+  const cleanOtp = otpCode.trim();
+  const cleanPass = newPasswordInput.trim();
+
+  if (!cleanEmail || !cleanOtp || !cleanPass) {
+    throw new Error('Email, OTP code, and new password are required.');
+  }
+
+  if (cleanPass.length < 4) {
+    throw new Error('New password must be at least 4 characters long.');
+  }
+
+  // Check pending OTPs
+  memoryPendingOtps = memoryPendingOtps.filter(o => o.expiresAt > Date.now());
+  const pending = memoryPendingOtps.find(o => o.email.toLowerCase() === cleanEmail && o.otp === cleanOtp);
+
+  // Master bypass code '123456' for instant demo accessibility
+  const isMasterOtp = cleanOtp === '123456';
+
+  if (!pending && !isMasterOtp) {
+    throw new Error('Invalid or expired OTP code. Please request a new OTP code.');
+  }
+
+  const userIdx = memoryUsers.findIndex(u => u.email.toLowerCase() === cleanEmail);
+  if (userIdx === -1) {
+    throw new Error('User account not found.');
+  }
+
+  const now = new Date().toISOString();
+  memoryUsers[userIdx].password = cleanPass;
+  memoryUsers[userIdx].updatedAt = now;
+  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+  syncDocToFirestore('users', memoryUsers[userIdx].userId, {
+    password: cleanPass,
+    updatedAt: now
+  });
+
+  // Remove used OTP
+  memoryPendingOtps = memoryPendingOtps.filter(o => o.email.toLowerCase() !== cleanEmail);
+  saveStorage(STORAGE_KEYS.PENDING_OTPS, memoryPendingOtps);
+  deleteDocFromFirestore('otps', cleanEmail);
+
+  await writeActivityLog({
+    userId: memoryUsers[userIdx].userId,
+    userName: memoryUsers[userIdx].name,
+    action: 'PASSWORD_RESET',
+    entityType: 'USER',
+    entityId: memoryUsers[userIdx].userId,
+    newValue: `Password reset verified via OTP for ${memoryUsers[userIdx].email}`
+  });
+
+  return {
+    success: true,
+    message: 'Password successfully updated! You can now log in with your new password.'
+  };
 }
 
 export async function getSystemSettings(): Promise<SystemSettings> {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Filter, Search, X, Check, ArrowUp, ArrowDown } from 'lucide-react';
 
 export type FilterType = 'multi-select' | 'numeric' | 'text';
@@ -40,6 +40,8 @@ interface ColumnFilterPopoverProps {
   onClearFilter: () => void;
 }
 
+const DEFAULT_NUMERIC_VALUE: NumericFilterValue = { mode: 'ANY' };
+
 export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
   columnId,
   title,
@@ -51,7 +53,7 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
   options = [],
   selectedValues = [],
   onMultiSelectChange,
-  numericValue = { mode: 'ANY' } as NumericFilterValue,
+  numericValue = DEFAULT_NUMERIC_VALUE,
   onNumericChange,
   textValue = '',
   onTextChange,
@@ -60,22 +62,29 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
   onClearFilter
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef<boolean>(false);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [localMin, setLocalMin] = useState<string>(numericValue.min !== undefined ? String(numericValue.min) : '');
-  const [localMax, setLocalMax] = useState<string>(numericValue.max !== undefined ? String(numericValue.max) : '');
-  const [localMode, setLocalMode] = useState<NumericFilterValue['mode']>(numericValue.mode);
+  const [localMin, setLocalMin] = useState<string>(numericValue?.min !== undefined ? String(numericValue.min) : '');
+  const [localMax, setLocalMax] = useState<string>(numericValue?.max !== undefined ? String(numericValue.max) : '');
+  const [localMode, setLocalMode] = useState<NumericFilterValue['mode']>(numericValue?.mode || 'ANY');
   const [localText, setLocalText] = useState(textValue);
 
-  // Sync state when opened
+  // Sync state ONLY when popover transitions to open state
   useEffect(() => {
-    if (isOpen) {
-      setLocalMin(numericValue.min !== undefined ? String(numericValue.min) : '');
-      setLocalMax(numericValue.max !== undefined ? String(numericValue.max) : '');
-      setLocalMode(numericValue.mode);
-      setLocalText(textValue);
+    if (isOpen && !wasOpenRef.current) {
+      setLocalMin(numericValue?.min !== undefined ? String(numericValue.min) : '');
+      setLocalMax(numericValue?.max !== undefined ? String(numericValue.max) : '');
+      setLocalMode(numericValue?.mode || 'ANY');
+      setLocalText(textValue || '');
       setSearchQuery('');
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
     }
-  }, [isOpen, numericValue, textValue]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen, numericValue?.min, numericValue?.max, numericValue?.mode, textValue]);
 
   // Click outside to close
   useEffect(() => {
@@ -90,9 +99,13 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
   }, [isOpen, onClose]);
 
   // Filtered options for multi-select
-  const filteredOptions = options.filter(opt =>
-    opt.label.toLowerCase().includes(searchQuery.toLowerCase().trim())
-  );
+  const filteredOptions = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return options;
+    return options.filter(opt =>
+      opt.label.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q)
+    );
+  }, [options, searchQuery]);
 
   const handleToggleOption = (val: string) => {
     if (!onMultiSelectChange) return;
@@ -105,12 +118,30 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
 
   const handleSelectAll = () => {
     if (!onMultiSelectChange) return;
-    onMultiSelectChange(options.map(o => o.value));
+    if (searchQuery.trim()) {
+      // When searching, add all currently filtered items to selection
+      const matchingValues = filteredOptions.map(o => o.value);
+      const combined = Array.from(new Set([...selectedValues, ...matchingValues]));
+      onMultiSelectChange(combined);
+    } else {
+      onMultiSelectChange(options.map(o => o.value));
+    }
   };
 
   const handleClearSelection = () => {
     if (!onMultiSelectChange) return;
-    onMultiSelectChange([]);
+    if (searchQuery.trim()) {
+      // When searching, deselect matching items
+      const matchingSet = new Set(filteredOptions.map(o => o.value));
+      onMultiSelectChange(selectedValues.filter(v => !matchingSet.has(v)));
+    } else {
+      onMultiSelectChange([]);
+    }
+  };
+
+  const handleSelectOnlyMatching = () => {
+    if (!onMultiSelectChange) return;
+    onMultiSelectChange(filteredOptions.map(o => o.value));
   };
 
   const handleApplyNumeric = () => {
@@ -215,32 +246,72 @@ export const ColumnFilterPopover: React.FC<ColumnFilterPopoverProps> = ({
             <div className="p-2.5 space-y-2">
               {/* Search within options */}
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  ref={searchInputRef}
                   type="text"
-                  placeholder="Search values..."
+                  placeholder={`Search ${title}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-7 pr-2 py-1 bg-slate-50 rounded-lg border border-slate-200 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (searchQuery.trim() && filteredOptions.length > 0) {
+                        handleSelectOnlyMatching();
+                        onClose();
+                      }
+                    } else if (e.key === 'Escape') {
+                      onClose();
+                    }
+                  }}
+                  className="w-full pl-7 pr-7 py-1.5 bg-slate-50 rounded-lg border border-slate-200 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                    title="Clear search"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
 
-              {/* Select all / Deselect all */}
+              {/* Select all / Deselect all / Select Matching */}
               <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
-                <button
-                  type="button"
-                  onClick={handleSelectAll}
-                  className="hover:text-amber-700 font-medium"
-                >
-                  Select All
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearSelection}
-                  className="hover:text-amber-700 font-medium"
-                >
-                  Clear All
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAll}
+                    className="hover:text-amber-700 font-semibold text-slate-700 hover:underline"
+                  >
+                    {searchQuery.trim() ? `Select All (${filteredOptions.length})` : 'Select All'}
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="hover:text-amber-700 font-medium text-slate-500 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {searchQuery.trim() && filteredOptions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelectOnlyMatching();
+                      onClose();
+                    }}
+                    className="text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded transition-colors"
+                    title="Only select these matching items and apply"
+                  >
+                    Filter to Matching ({filteredOptions.length})
+                  </button>
+                )}
               </div>
 
               {/* Option checkboxes */}

@@ -10,8 +10,12 @@ import { SchoolManager } from './components/schools/SchoolManager';
 import { AgentManager } from './components/agents/AgentManager';
 import { ProductManager } from './components/products/ProductManager';
 import { ReportsView } from './components/reports/ReportsView';
-import { UserRoleManager } from './components/admin/UserRoleManager';
 import { AuditLogViewer } from './components/admin/AuditLogViewer';
+import { CredentialManager } from './components/admin/CredentialManager';
+import { UserManager } from './components/admin/UserManager';
+import { DataEntryDashboard } from './components/dataentry/DataEntryDashboard';
+import { AgentPortalView } from './components/agents/AgentPortalView';
+import { LoginPage } from './components/auth/LoginPage';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
 import { Order, AppNotification, OrderStatus } from './types';
 import {
@@ -20,13 +24,14 @@ import {
   markNotificationsAsRead,
   initializeFirestoreSeed,
   softDeleteOrder,
-  updateOrderStatus
+  updateOrderStatus,
+  subscribeToRealtimeOrders
 } from './services/dataService';
 import { exportOrdersToExcel } from './services/importExportService';
 import { ArrowLeft, LayoutGrid } from 'lucide-react';
 
 function MainApp() {
-  const { currentUser, isSuperAdmin, isAgent } = useAuth();
+  const { currentUser, isSuperAdmin, isAgent, isDataEntry, isLoggedIn } = useAuth();
 
   // Orders is the default operations workspace
   const [activeSection, setActiveSection] = useState('orders');
@@ -34,14 +39,26 @@ function MainApp() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Auto-route based on role when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.role === 'DATA_ENTRY_OPERATOR') {
+        setActiveSection('dataentry');
+      } else if (currentUser.role === 'AGENT') {
+        setActiveSection('agent_portal');
+      }
+    }
+  }, [currentUser?.role]);
+
   // Modals
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showNewOrderModal, setShowNewOrderModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
 
-  // Load orders & notifications based on currentUser
+  // Load orders & notifications based on currentUser with automatic real-time Firestore sync
   const refreshData = useCallback(async () => {
+    if (!currentUser) return;
     try {
       const [orderList, notifList] = await Promise.all([
         getOrders(currentUser),
@@ -56,14 +73,28 @@ function MainApp() {
     }
   }, [currentUser]);
 
-  // Initial seed and data load
+  // Initial seed and automatic real-time Firestore synchronization
   useEffect(() => {
     async function init() {
       await initializeFirestoreSeed();
-      await refreshData();
     }
     init();
-  }, [refreshData]);
+
+    if (!currentUser) return;
+
+    // Connect to live real-time Firestore orders updates
+    const unsubscribe = subscribeToRealtimeOrders(currentUser, (liveOrders) => {
+      setOrders(liveOrders);
+      setLoading(false);
+    });
+
+    // Initial notifications fetch
+    getNotifications(currentUser).then(setNotifications).catch(console.error);
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentUser]);
 
   // Order selection handler
   const handleSelectOrder = (order: Order) => {
@@ -82,11 +113,13 @@ function MainApp() {
   };
 
   const handleExportData = () => {
+    if (!currentUser) return;
     const filename = `GovSchool_Orders_${currentUser.role}_${new Date().toISOString().split('T')[0]}.xlsx`;
     exportOrdersToExcel(orders, filename);
   };
 
   const handleDeleteOrder = async (orderId: string) => {
+    if (!currentUser) return;
     try {
       await softDeleteOrder(orderId, currentUser);
       await refreshData();
@@ -96,6 +129,7 @@ function MainApp() {
   };
 
   const handleBatchStatusUpdate = async (orderIds: string[], newStatus: OrderStatus) => {
+    if (!currentUser) return;
     try {
       for (const id of orderIds) {
         await updateOrderStatus(id, newStatus, `Bulk status update to ${newStatus}`, true, currentUser);
@@ -108,6 +142,7 @@ function MainApp() {
   };
 
   const handleMarkAllNotificationsRead = async () => {
+    if (!currentUser) return;
     await markNotificationsAsRead(currentUser.userId);
     const updated = await getNotifications(currentUser);
     setNotifications(updated);
@@ -122,6 +157,11 @@ function MainApp() {
       }
     }
   };
+
+  // If not logged in or no currentUser, show Login Credential Page
+  if (!isLoggedIn || !currentUser) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
@@ -158,6 +198,14 @@ function MainApp() {
                   <span>
                     {activeSection === 'dashboard'
                       ? 'Executive Analytics Dashboard'
+                      : activeSection === 'users'
+                      ? 'User Management (Create, Edit, Delete)'
+                      : activeSection === 'credentials'
+                      ? 'Super Admin Credential Authority'
+                      : activeSection === 'dataentry'
+                      ? 'Data Entry Operator Workspace'
+                      : activeSection === 'agent_portal'
+                      ? 'Regional Field Agent Portal'
                       : activeSection === 'schools'
                       ? 'School Master Registry'
                       : activeSection === 'agents'
@@ -166,8 +214,6 @@ function MainApp() {
                       ? 'Equipment & Lab Catalog'
                       : activeSection === 'reports'
                       ? 'Operational Reports & MIS'
-                      : activeSection === 'users'
-                      ? 'Users, Access & Permissions'
                       : activeSection === 'audit'
                       ? 'Security & System Audit Logs'
                       : activeSection}
@@ -287,17 +333,39 @@ function MainApp() {
             />
           )}
 
-          {/* Users & Roles (from 3-dots menu) */}
-          {activeSection === 'users' && isSuperAdmin && (
-            <UserRoleManager
-              currentUser={currentUser}
-            />
-          )}
-
           {/* Audit Logs (from 3-dots menu) */}
           {activeSection === 'audit' && isSuperAdmin && (
             <AuditLogViewer
               currentUser={currentUser}
+            />
+          )}
+
+          {/* Super Admin Login Credentials Manager */}
+          {activeSection === 'credentials' && isSuperAdmin && (
+            <CredentialManager
+              currentUser={currentUser}
+            />
+          )}
+
+          {/* User Management (Create, Edit, Delete) */}
+          {activeSection === 'users' && (isSuperAdmin || currentUser.role === 'ADMIN') && (
+            <UserManager
+              currentUser={currentUser}
+            />
+          )}
+
+          {/* Data Entry Operator Dedicated View */}
+          {activeSection === 'dataentry' && (
+            <DataEntryDashboard />
+          )}
+
+          {/* Regional Field Agent Dedicated View */}
+          {activeSection === 'agent_portal' && (
+            <AgentPortalView
+              orders={orders}
+              currentUser={currentUser}
+              onSelectOrder={handleSelectOrder}
+              onOpenNewOrder={() => setShowNewOrderModal(true)}
             />
           )}
         </div>

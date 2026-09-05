@@ -656,10 +656,58 @@ export const OrderList: React.FC<OrderListProps> = ({
                 onChange={(e) => setSelectedFY(e.target.value)}
                 className="px-2 py-1 rounded border border-slate-200 bg-white text-slate-800 text-xs font-medium focus:outline-none"
               >
-                <option value="ALL">All Financial Years</option>
+                <option value="ALL">All FY</option>
                 <option value="2026-27">2026-27</option>
                 <option value="2025-26">2025-26</option>
                 <option value="2024-25">2024-25</option>
+              </select>
+            </div>
+
+            {/* Quick School selector */}
+            <div className="flex items-center gap-1 text-slate-600">
+              <span className="text-[11px] font-medium text-slate-400">School:</span>
+              <select
+                value={colSelectedSchools.length === 1 ? colSelectedSchools[0] : (colSelectedSchools.length > 1 ? 'MULTIPLE' : 'ALL')}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'ALL') setColSelectedSchools([]);
+                  else if (val !== 'MULTIPLE') setColSelectedSchools([val]);
+                }}
+                className="px-2 py-1 rounded border border-slate-200 bg-white text-slate-800 text-xs font-medium focus:outline-none max-w-[190px] truncate"
+              >
+                <option value="ALL">All Schools ({schoolOptions.length})</option>
+                {colSelectedSchools.length > 1 && (
+                  <option value="MULTIPLE">Selected ({colSelectedSchools.length} schools)</option>
+                )}
+                {schoolOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label} ({opt.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Quick Status selector */}
+            <div className="flex items-center gap-1 text-slate-600">
+              <span className="text-[11px] font-medium text-slate-400">Status:</span>
+              <select
+                value={colSelectedStatuses.length === 1 ? colSelectedStatuses[0] : (colSelectedStatuses.length > 1 ? 'MULTIPLE' : 'ALL')}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'ALL') setColSelectedStatuses([]);
+                  else if (val !== 'MULTIPLE') setColSelectedStatuses([val]);
+                }}
+                className="px-2 py-1 rounded border border-slate-200 bg-white text-slate-800 text-xs font-medium focus:outline-none"
+              >
+                <option value="ALL">All Statuses</option>
+                {colSelectedStatuses.length > 1 && (
+                  <option value="MULTIPLE">Selected ({colSelectedStatuses.length})</option>
+                )}
+                {statusOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label} ({opt.count})
+                  </option>
+                ))}
               </select>
             </div>
 

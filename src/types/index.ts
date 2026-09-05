@@ -2,20 +2,43 @@
  * Core TypeScript Definitions for Government School Order Management & Agent Portal
  */
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'ACCOUNTS' | 'DISPATCH' | 'AGENT';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'DATA_ENTRY_OPERATOR' | 'ACCOUNTS' | 'DISPATCH' | 'AGENT';
 
 export interface UserProfile {
   userId: string;
   name: string;
   email: string;
+  username?: string;
+  password?: string;
   phone?: string;
   role: UserRole;
   agentId?: string; // Links to Agent if role is AGENT
   agentCode?: string;
+  state?: string;
   isActive: boolean;
+  issuedBy?: string; // Super Admin who issued credentials
+  issuedAt?: string;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  mustChangePassword?: boolean;
+}
+
+export interface IssuedCredential {
+  userId: string;
+  name: string;
+  email: string;
+  username?: string;
+  password?: string;
+  role: UserRole;
+  agentId?: string;
+  agentCode?: string;
+  state?: string;
+  phone?: string;
+  isActive: boolean;
+  issuedBy: string;
+  issuedAt: string;
+  notes?: string;
 }
 
 export interface Agent {
