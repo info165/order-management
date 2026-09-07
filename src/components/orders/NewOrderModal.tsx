@@ -243,10 +243,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   }, [orderNumber, purchaseOrderNumber, schoolName]);
 
   // Mathematical GST calculation (Total Order Value is inclusive of 18% GST)
-  // GST @ 18% = Order Value × 18 / 118
-  // Taxable Value = Order Value − GST
-  const gstAmount = Math.round((totalInclusiveOrderValue * 18) / 118);
-  const baseOrderValue = totalInclusiveOrderValue - gstAmount;
+  // Taxable Value = Inclusive Value / 1.18
+  // GST Amount = Inclusive Value - Taxable Value
+  const taxableValue = Number((totalInclusiveOrderValue / 1.18).toFixed(2));
+  const gstAmount = Number((totalInclusiveOrderValue - taxableValue).toFixed(2));
+  const baseOrderValue = taxableValue;
   const grossOrderValue = totalInclusiveOrderValue;
 
   // Expected delivery date
@@ -343,7 +344,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           agentCommissionPercentage,
           category,
           orderValue: totalInclusiveOrderValue,
-          taxAmount: 0,
+          taxAmount: gstAmount,
           grossOrderValue: totalInclusiveOrderValue,
           totalAmount: totalInclusiveOrderValue,
           amountReceived: 0,
@@ -814,23 +815,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
             {/* Reverse GST Breakdown Card */}
             <div className="bg-white p-3 rounded-xl border border-amber-200/80 shadow-xs grid grid-cols-3 gap-3 text-center">
               <div className="p-2 rounded-lg bg-slate-50">
-                <div className="text-[10px] uppercase font-bold text-slate-500">Total Order Value (Incl. 18% GST)</div>
+                <div className="text-[10px] uppercase font-bold text-slate-500">Order Value (Incl. 18% GST)</div>
                 <div className="text-sm font-black text-slate-900 mt-0.5">
                   <CurrencyFormatter amount={totalInclusiveOrderValue} />
                 </div>
               </div>
 
               <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-200">
-                <div className="text-[10px] uppercase font-bold text-amber-800">18% GST Component (Subtracted)</div>
+                <div className="text-[10px] uppercase font-bold text-amber-800">GST @ 18%</div>
                 <div className="text-sm font-bold text-amber-700 mt-0.5">
-                  - <CurrencyFormatter amount={gstAmount} />
+                  <CurrencyFormatter amount={gstAmount} showDecimals={true} />
                 </div>
               </div>
 
               <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200">
-                <div className="text-[10px] uppercase font-bold text-emerald-800">Net Base Value (Excl. GST)</div>
+                <div className="text-[10px] uppercase font-bold text-emerald-800">Taxable Value (Excl. GST)</div>
                 <div className="text-sm font-bold text-emerald-700 mt-0.5">
-                  <CurrencyFormatter amount={baseOrderValue} />
+                  <CurrencyFormatter amount={taxableValue} showDecimals={true} />
                 </div>
               </div>
             </div>

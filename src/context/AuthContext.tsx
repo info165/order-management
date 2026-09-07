@@ -10,6 +10,7 @@ interface AuthContextType {
   firebaseUser: FbUser | null;
   activeRole: UserRole | 'GUEST';
   isLoggedIn: boolean;
+  authLoading: boolean;
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isDataEntry: boolean;
@@ -31,25 +32,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USER_SESSION_KEY = 'govschool_active_user_v2';
+const USER_SESSION_KEY = 'govschool_auth_session_v3';
+
+// Clean up any stale legacy session keys
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('govschool_active_user_v2');
+  }
+} catch (_) {}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<FbUser | null>(auth.currentUser);
   const [allUsers, setAllUsers] = useState<UserProfile[]>(INITIAL_USERS);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // Default to Super Admin for smooth initial load, or read from storage
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem(USER_SESSION_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.email) {
-          return parsed;
-        }
-      }
-    } catch (e) {}
-    return INITIAL_USERS[0]; // Default to Super Admin: info@funscholar.com
-  });
+  // Default to null for unauthenticated state - NEVER default to Super Admin
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   const refreshUsers = async () => {
     try {
@@ -79,31 +77,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
-  // Listen to Firebase auth state
+  // Listen to Firebase auth state and restore session before deciding whether to show app
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser && fbUser.email) {
         const email = fbUser.email.toLowerCase();
-        const found = allUsers.find(u => u.email.toLowerCase() === email);
-        if (found) {
-          setCurrentUser(found);
-        } else {
-          const newFbProfile: UserProfile = {
-            userId: fbUser.uid,
-            name: fbUser.displayName || 'Authorized Staff',
-            email: fbUser.email,
-            role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          setCurrentUser(newFbProfile);
+        try {
+          const list = await getUsers();
+          setAllUsers(list);
+          const found = list.find(u => u.email.toLowerCase() === email);
+          if (found) {
+            setCurrentUser(found);
+          } else {
+            const newFbProfile: UserProfile = {
+              userId: fbUser.uid,
+              name: fbUser.displayName || 'Authorized Staff',
+              email: fbUser.email,
+              role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
+              isActive: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            setCurrentUser(newFbProfile);
+          }
+        } catch (e) {
+          console.error('Error fetching user during Firebase auth resolution:', e);
+        }
+      } else {
+        // Firebase has no active session; check if an authenticated session exists from username/password login
+        try {
+          const saved = localStorage.getItem(USER_SESSION_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && parsed.email && parsed.userId) {
+              const list = await getUsers();
+              setAllUsers(list);
+              const found = list.find(u => u.userId === parsed.userId || u.email.toLowerCase() === parsed.email.toLowerCase());
+              if (found && found.isActive) {
+                setCurrentUser(found);
+              } else {
+                setCurrentUser(null);
+                localStorage.removeItem(USER_SESSION_KEY);
+              }
+            } else {
+              setCurrentUser(null);
+            }
+          } else {
+            setCurrentUser(null);
+          }
+        } catch (e) {
+          setCurrentUser(null);
         }
       }
+      setAuthLoading(false);
     });
     return () => unsubscribe();
-  }, [allUsers]);
+  }, []);
 
   const signInWithGoogle = async () => {
     try {
@@ -212,6 +242,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUser,
         activeRole: role as UserRole,
         isLoggedIn: currentUser !== null,
+        authLoading,
         isSuperAdmin,
         isAdmin,
         isDataEntry,

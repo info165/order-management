@@ -13,7 +13,7 @@ export function formatINR(amount: number, showDecimals = false): string {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: (showDecimals || hasFractions) ? 2 : 0,
-    minimumFractionDigits: (showDecimals && hasFractions) ? 2 : 0
+    minimumFractionDigits: showDecimals ? 2 : (hasFractions ? 2 : 0)
   }).format(amount);
 }
 

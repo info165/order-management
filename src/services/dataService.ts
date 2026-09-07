@@ -94,13 +94,15 @@ function saveStorage<T>(key: string, val: T): void {
 // Ensure every order has an independent serial number and that orderValue is the uninflated final figure
 function sanitizeOrderData(orders: Order[]): Order[] {
   return orders.map((o, idx) => {
-    const finalVal = o.orderValue || 0;
+    const finalVal = o.grossOrderValue || o.totalAmount || o.orderValue || 0;
+    const taxable = Number((finalVal / 1.18).toFixed(2));
+    const gst = Number((finalVal - taxable).toFixed(2));
     const isPaid = o.paymentStatus === 'PAID';
     return {
       ...o,
       serialNumber: o.serialNumber ?? (idx + 1),
       orderValue: finalVal,
-      taxAmount: 0,
+      taxAmount: gst,
       grossOrderValue: finalVal,
       totalAmount: finalVal,
       amountReceived: isPaid ? finalVal : (o.amountReceived || 0),

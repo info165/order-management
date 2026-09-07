@@ -28,10 +28,10 @@ import {
   subscribeToRealtimeOrders
 } from './services/dataService';
 import { exportOrdersToExcel } from './services/importExportService';
-import { ArrowLeft, LayoutGrid } from 'lucide-react';
+import { ArrowLeft, LayoutGrid, Building2 } from 'lucide-react';
 
 function MainApp() {
-  const { currentUser, isSuperAdmin, isAgent, isDataEntry, isLoggedIn } = useAuth();
+  const { currentUser, isSuperAdmin, isAgent, isDataEntry, isLoggedIn, authLoading } = useAuth();
 
   // Orders is the default operations workspace
   const [activeSection, setActiveSection] = useState('orders');
@@ -157,6 +157,23 @@ function MainApp() {
       }
     }
   };
+
+  // While Firebase authentication is checking/restoring the existing session, do not show the dashboard
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-200">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center font-bold text-slate-950 shadow-lg animate-pulse">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <div className="text-center space-y-1">
+            <h2 className="text-base font-bold text-white tracking-tight">GovSchool Order ERP</h2>
+            <p className="text-xs text-slate-400">Verifying authorized session...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // If not logged in or no currentUser, show Login Credential Page
   if (!isLoggedIn || !currentUser) {

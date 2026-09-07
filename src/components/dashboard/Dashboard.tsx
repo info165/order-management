@@ -36,10 +36,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Compute Metrics
   const metrics = useMemo(() => {
     const totalCount = orders.length;
-    const totalValue = orders.reduce((acc, o) => acc + (o.orderValue || 0), 0);
-    const grossTotal = orders.reduce((acc, o) => acc + (o.grossOrderValue || o.totalAmount || o.orderValue || 0), 0);
+    const totalValue = orders.reduce((acc, o) => acc + (o.grossOrderValue || o.totalAmount || o.orderValue || 0), 0);
+    const grossTotal = totalValue;
     const totalReceived = orders.reduce((acc, o) => acc + (o.amountReceived || 0), 0);
-    const totalPending = orders.reduce((acc, o) => acc + (o.amountPending ?? Math.max(0, (o.grossOrderValue || o.orderValue) - (o.amountReceived || 0))), 0);
+    const totalPending = orders.reduce((acc, o) => acc + (o.amountPending ?? Math.max(0, (o.grossOrderValue || o.totalAmount || o.orderValue || 0) - (o.amountReceived || 0))), 0);
 
     const inTransit = orders.filter(o => o.dispatchStatus === 'DISPATCHED' || o.deliveryStatus === 'In Transit').length;
     const delivered = orders.filter(o => o.status === 'DELIVERED' || o.deliveryStatus === 'Delivered').length;

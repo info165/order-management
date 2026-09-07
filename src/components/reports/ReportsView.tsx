@@ -23,22 +23,24 @@ interface ReportsViewProps {
 export const ReportsView: React.FC<ReportsViewProps> = ({ orders, currentUser }) => {
   const isAgent = currentUser.role === 'AGENT';
 
-  // Overall calculations
-  const totalValue = useMemo(() => orders.reduce((acc, o) => acc + o.orderValue, 0), [orders]);
-  const grossValue = useMemo(() => orders.reduce((acc, o) => acc + (o.grossOrderValue || o.totalAmount || o.orderValue), 0), [orders]);
+  // Overall calculations (Order Value is inclusive of 18% GST)
+  const totalValue = useMemo(() => orders.reduce((acc, o) => acc + (o.grossOrderValue || o.totalAmount || o.orderValue || 0), 0), [orders]);
+  const taxableValue = useMemo(() => Number((totalValue / 1.18).toFixed(2)), [totalValue]);
   const totalReceived = useMemo(() => orders.reduce((acc, o) => acc + (o.amountReceived || 0), 0), [orders]);
-  const totalPending = useMemo(() => orders.reduce((acc, o) => acc + (o.amountPending ?? Math.max(0, o.orderValue - (o.amountReceived || 0))), 0), [orders]);
+  const totalPending = useMemo(() => Math.max(0, totalValue - totalReceived), [totalValue, totalReceived]);
 
   // State-wise Breakdown
   const stateSummary = useMemo(() => {
     const map: { [state: string]: { count: number; value: number; received: number; pending: number } } = {};
     orders.forEach(o => {
       const st = o.state || 'Other State';
+      const orderVal = o.grossOrderValue || o.totalAmount || o.orderValue || 0;
+      const rec = o.amountReceived || 0;
       if (!map[st]) map[st] = { count: 0, value: 0, received: 0, pending: 0 };
       map[st].count += 1;
-      map[st].value += o.orderValue;
-      map[st].received += (o.amountReceived || 0);
-      map[st].pending += (o.amountPending ?? Math.max(0, o.orderValue - (o.amountReceived || 0)));
+      map[st].value += orderVal;
+      map[st].received += rec;
+      map[st].pending += Math.max(0, orderVal - rec);
     });
     return Object.entries(map).sort((a, b) => b[1].value - a[1].value);
   }, [orders]);
@@ -98,12 +100,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, currentUser })
       {/* Financial Health Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-          <span className="text-[11px] text-slate-400 uppercase font-semibold">Total GeM Contract Value</span>
+          <span className="text-[11px] text-slate-400 uppercase font-semibold">Total GeM Contract Value (Incl. GST)</span>
           <div className="text-2xl font-bold font-mono text-slate-900">
             <CurrencyFormatter amount={totalValue} />
           </div>
           <div className="text-xs text-slate-500">
-            Gross with 18% GST: <CurrencyFormatter amount={grossValue} />
+            Taxable Excl. GST: <CurrencyFormatter amount={taxableValue} showDecimals={true} />
           </div>
         </div>
 
@@ -113,7 +115,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, currentUser })
             <CurrencyFormatter amount={totalReceived} />
           </div>
           <div className="text-xs text-emerald-600 font-medium">
-            {grossValue > 0 ? `${Math.round((totalReceived / grossValue) * 100)}% realization rate` : '0%'}
+            {totalValue > 0 ? `${Math.round((totalReceived / totalValue) * 100)}% realization rate` : '0%'}
           </div>
         </div>
 

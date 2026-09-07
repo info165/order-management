@@ -103,7 +103,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [isSubmittingDelivery, setIsSubmittingDelivery] = useState(false);
 
   // Payment form states
-  const [paymentAmount, setPaymentAmount] = useState<number>(order.amountPending ?? order.orderValue);
+  const [paymentAmount, setPaymentAmount] = useState<number>(
+    order.amountPending ?? Math.max(0, (order.grossOrderValue || order.totalAmount || order.orderValue) - (order.amountReceived || 0))
+  );
   const [paymentMode, setPaymentMode] = useState<any>('PFMS');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [transactionRef, setTransactionRef] = useState('');
@@ -623,37 +625,52 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Financial & Metric Ribbon */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="text-[11px] text-slate-500 font-medium uppercase">Order Value (Excl GST)</div>
-                  <div className="text-base font-bold text-slate-900 mt-1 font-mono">
-                    <CurrencyFormatter amount={order.orderValue} />
-                  </div>
-                </div>
+              {(() => {
+                const inclusiveOrderValue = order.grossOrderValue || order.totalAmount || order.orderValue || 0;
+                const taxableValue = Number((inclusiveOrderValue / 1.18).toFixed(2));
+                const gstAmount = Number((inclusiveOrderValue - taxableValue).toFixed(2));
+                const amountReceived = order.amountReceived || 0;
+                const amountPending = Math.max(0, inclusiveOrderValue - amountReceived);
 
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="text-[11px] text-slate-500 font-medium uppercase">GST Amount (18%)</div>
-                  <div className="text-base font-bold text-slate-700 mt-1 font-mono">
-                    <CurrencyFormatter amount={order.taxAmount || Math.round(order.orderValue * 0.18)} />
-                  </div>
-                </div>
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="text-[11px] text-slate-500 font-medium uppercase">Order Value (Excl GST)</div>
+                      <div className="text-base font-bold text-slate-900 mt-1 font-mono">
+                        <CurrencyFormatter amount={taxableValue} showDecimals={true} />
+                      </div>
+                    </div>
 
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="text-[11px] text-slate-500 font-medium uppercase">Amount Received</div>
-                  <div className="text-base font-bold text-emerald-700 mt-1 font-mono">
-                    <CurrencyFormatter amount={order.amountReceived || 0} />
-                  </div>
-                </div>
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="text-[11px] text-slate-500 font-medium uppercase">GST Amount (18%)</div>
+                      <div className="text-base font-bold text-slate-700 mt-1 font-mono">
+                        <CurrencyFormatter amount={gstAmount} showDecimals={true} />
+                      </div>
+                    </div>
 
-                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="text-[11px] text-slate-500 font-medium uppercase">Amount Pending</div>
-                  <div className="text-base font-bold text-amber-700 mt-1 font-mono">
-                    <CurrencyFormatter
-                      amount={order.amountPending ?? Math.max(0, (order.grossOrderValue || order.orderValue) - (order.amountReceived || 0))}
-                    />
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="text-[11px] text-slate-500 font-medium uppercase">Order Value (Incl GST)</div>
+                      <div className="text-base font-bold text-slate-900 mt-1 font-mono">
+                        <CurrencyFormatter amount={inclusiveOrderValue} />
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="text-[11px] text-slate-500 font-medium uppercase">Amount Received</div>
+                      <div className="text-base font-bold text-emerald-700 mt-1 font-mono">
+                        <CurrencyFormatter amount={amountReceived} />
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+                      <div className="text-[11px] text-slate-500 font-medium uppercase">Amount Pending</div>
+                      <div className="text-base font-bold text-amber-700 mt-1 font-mono">
+                        <CurrencyFormatter amount={amountPending} />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* School, Contract, and Agent Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1420,7 +1437,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
                 <div className="flex items-center gap-6">
                   <div>
-                    <span className="text-[11px] text-slate-400 uppercase font-semibold block">Total Invoiced</span>
+                    <span className="text-[11px] text-slate-400 uppercase font-semibold block">Total Invoiced (Incl. GST)</span>
                     <span className="text-base font-bold font-mono text-slate-900">
                       <CurrencyFormatter amount={order.grossOrderValue || order.totalAmount || order.orderValue} />
                     </span>
@@ -1434,10 +1451,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
 
                   <div>
-                    <span className="text-[11px] text-slate-400 uppercase font-semibold block">Outstanding</span>
+                    <span className="text-[11px] text-slate-400 uppercase font-semibold block">Amount Pending</span>
                     <span className="text-base font-bold font-mono text-amber-700">
                       <CurrencyFormatter
-                        amount={order.amountPending ?? Math.max(0, (order.grossOrderValue || order.orderValue) - (order.amountReceived || 0))}
+                        amount={order.amountPending ?? Math.max(0, (order.grossOrderValue || order.totalAmount || order.orderValue) - (order.amountReceived || 0))}
                       />
                     </span>
                   </div>
