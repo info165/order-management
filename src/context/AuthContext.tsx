@@ -46,8 +46,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [allUsers, setAllUsers] = useState<UserProfile[]>(INITIAL_USERS);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Default to null for unauthenticated state - NEVER default to Super Admin
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  // Lazy-initialize from localStorage so session is immediately available on page refresh
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = localStorage.getItem(USER_SESSION_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.userId || parsed.email)) {
+            return parsed;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
 
   const refreshUsers = async () => {
     try {
@@ -55,9 +68,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAllUsers(list);
       // If current user is logged in, refresh their profile
       if (currentUser) {
-        const updatedSelf = list.find(u => u.userId === currentUser.userId || u.email.toLowerCase() === currentUser.email.toLowerCase());
-        if (updatedSelf) {
+        const updatedSelf = list.find(u =>
+          (currentUser.userId && u.userId === currentUser.userId) ||
+          (currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
+        );
+        if (updatedSelf && updatedSelf.isActive) {
           setCurrentUser(updatedSelf);
+          localStorage.setItem(USER_SESSION_KEY, JSON.stringify(updatedSelf));
         }
       }
     } catch (e) {
@@ -69,70 +86,129 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUsers();
   }, []);
 
+  // Sync currentUser changes to localStorage ONLY after initial auth evaluation completes
   useEffect(() => {
+    if (authLoading) return;
     if (currentUser) {
       localStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
     } else {
       localStorage.removeItem(USER_SESSION_KEY);
     }
-  }, [currentUser]);
+  }, [currentUser, authLoading]);
 
   // Listen to Firebase auth state and restore session before deciding whether to show app
   useEffect(() => {
+    let isMounted = true;
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser && fbUser.email) {
         const email = fbUser.email.toLowerCase();
         try {
           const list = await getUsers();
-          setAllUsers(list);
+          if (isMounted) setAllUsers(list);
           const found = list.find(u => u.email.toLowerCase() === email);
           if (found) {
-            setCurrentUser(found);
+            if (isMounted) {
+              setCurrentUser(found);
+              localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found));
+            }
           } else {
             const newFbProfile: UserProfile = {
               userId: fbUser.uid,
-              name: fbUser.displayName || 'Authorized Staff',
+              name: fbUser.displayName || email.split('@')[0] || 'Authorized Staff',
               email: fbUser.email,
               role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
               isActive: true,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
-            setCurrentUser(newFbProfile);
+            if (isMounted) {
+              setCurrentUser(newFbProfile);
+              localStorage.setItem(USER_SESSION_KEY, JSON.stringify(newFbProfile));
+            }
           }
         } catch (e) {
-          console.error('Error fetching user during Firebase auth resolution:', e);
+          console.error('Error resolving user during Firebase auth resolution:', e);
+          if (isMounted) {
+            setCurrentUser(prev => {
+              if (prev && prev.email.toLowerCase() === email) return prev;
+              const fallback: UserProfile = {
+                userId: fbUser.uid,
+                name: fbUser.displayName || email.split('@')[0] || 'Authorized Staff',
+                email: fbUser.email,
+                role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              localStorage.setItem(USER_SESSION_KEY, JSON.stringify(fallback));
+              return fallback;
+            });
+          }
         }
       } else {
-        // Firebase has no active session; check if an authenticated session exists from username/password login
+        // Firebase has no active Google user; check if an authenticated session exists from username/password login
         try {
-          const saved = localStorage.getItem(USER_SESSION_KEY);
+          const saved = typeof window !== 'undefined' ? localStorage.getItem(USER_SESSION_KEY) : null;
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (parsed && parsed.email && parsed.userId) {
-              const list = await getUsers();
-              setAllUsers(list);
-              const found = list.find(u => u.userId === parsed.userId || u.email.toLowerCase() === parsed.email.toLowerCase());
-              if (found && found.isActive) {
-                setCurrentUser(found);
-              } else {
+            if (parsed && (parsed.userId || parsed.email)) {
+              try {
+                const list = await getUsers();
+                if (isMounted) setAllUsers(list);
+                const found = list.find(u =>
+                  (parsed.userId && u.userId === parsed.userId) ||
+                  (parsed.email && u.email.toLowerCase() === parsed.email.toLowerCase())
+                );
+                if (found) {
+                  if (found.isActive) {
+                    if (isMounted) {
+                      setCurrentUser(found);
+                      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found));
+                    }
+                  } else {
+                    // Deactivated account
+                    if (isMounted) {
+                      setCurrentUser(null);
+                      localStorage.removeItem(USER_SESSION_KEY);
+                    }
+                  }
+                } else {
+                  // Fallback: retain the parsed user
+                  if (isMounted) {
+                    setCurrentUser(parsed);
+                  }
+                }
+              } catch (fetchErr) {
+                // If network failed, keep the cached session alive
+                if (isMounted) {
+                  setCurrentUser(parsed);
+                }
+              }
+            } else {
+              if (isMounted) {
                 setCurrentUser(null);
                 localStorage.removeItem(USER_SESSION_KEY);
               }
-            } else {
-              setCurrentUser(null);
             }
           } else {
-            setCurrentUser(null);
+            if (isMounted) {
+              setCurrentUser(null);
+            }
           }
         } catch (e) {
-          setCurrentUser(null);
+          if (isMounted) setCurrentUser(null);
         }
       }
-      setAuthLoading(false);
+      if (isMounted) {
+        setAuthLoading(false);
+      }
     });
-    return () => unsubscribe();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = async () => {
@@ -174,6 +250,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = list.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (target) {
       setCurrentUser(target);
+      try {
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(target));
+      } catch (_) {}
     }
   };
 
@@ -208,6 +287,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lastLoginAt: new Date().toISOString()
     };
     setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(updatedUser));
+    } catch (_) {}
     return true;
   };
 

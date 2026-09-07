@@ -2,7 +2,7 @@
  * Firebase Client Configuration & Service Initializer
  */
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, Auth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
 import defaultConfig from '../../firebase-applet-config.json';
 
@@ -27,6 +27,14 @@ if (!getApps().length) {
 }
 
 export const auth: Auth = getAuth(app);
+
+// Keep Firebase auth session active across page refreshes
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('Firebase Auth persistence notice:', err);
+  });
+}
+
 export const googleProvider = new GoogleAuthProvider();
 
 // Use provisioned firestore database ID (supports custom named databases or standard '(default)')

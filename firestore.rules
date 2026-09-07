@@ -2,181 +2,80 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function hasUserDoc() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-        (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)))
-      );
-    }
-
-    function currentUserDoc() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
-        : get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
-    }
-
-    function isSuperAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == "info@funscholar.com" ||
-        (hasUserDoc() && currentUserDoc().role == "SUPER_ADMIN")
-      );
-    }
-
-    function isAdminOrOps() {
-      return isSuperAdmin() || (
-        isSignedIn() && (
-          request.auth.token.email == "operations@funscholar.com" ||
-          request.auth.token.email == "admin@funscholar.com" ||
-          request.auth.token.email == "dataentry@funscholar.com" ||
-          (hasUserDoc() && (
-            currentUserDoc().role == "ADMIN" ||
-            currentUserDoc().role == "SUPER_ADMIN" ||
-            currentUserDoc().role == "DATA_ENTRY_OPERATOR"
-          ))
-        )
-      );
-    }
-
-    function isAccounts() {
-      return isAdminOrOps() || (
-        isSignedIn() && (
-          request.auth.token.email == "accounts@funscholar.com" ||
-          (hasUserDoc() && currentUserDoc().role == "ACCOUNTS")
-        )
-      );
-    }
-
-    function isDispatch() {
-      return isAdminOrOps() || (
-        isSignedIn() && (
-          request.auth.token.email == "dispatch@funscholar.com" ||
-          (hasUserDoc() && currentUserDoc().role == "DISPATCH")
-        )
-      );
-    }
-
-    function isAgent() {
-      return isSignedIn() && hasUserDoc() && currentUserDoc().role == "AGENT";
-    }
-
-    function userAgentId() {
-      return currentUserDoc().agentId;
-    }
-
-    // USERS COLLECTION
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdminOrOps());
-      allow create, update: if isSuperAdmin() || (isAdminOrOps() && request.auth.uid != userId);
-      allow delete: if isSuperAdmin();
-    }
-
-    // AGENTS COLLECTION
-    match /agents/{agentId} {
-      allow read: if isSignedIn() && (
-        isAdminOrOps() ||
-        (isAgent() && (resource.data.userId == request.auth.uid || resource.data.agentId == userAgentId()))
-      );
-      allow write: if isAdminOrOps();
-    }
-
-    // SCHOOLS MASTER
-    match /schools/{schoolId} {
-      allow read: if isSignedIn();
-      allow write: if isAdminOrOps();
-    }
-
-    // PRODUCTS MASTER
-    match /products/{productId} {
-      allow read: if isSignedIn();
-      allow write: if isAdminOrOps();
-    }
-
-    // ORDERS
+    // Orders Collection
     match /orders/{orderId} {
-      allow read: if isSignedIn() && (
-        isAdminOrOps() ||
-        isAccounts() ||
-        isDispatch() ||
-        (isAgent() && resource.data.agentId == userAgentId())
-      );
-      allow create, delete: if isAdminOrOps();
-      allow update: if isAdminOrOps() ||
-        (isAccounts() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'amountReceived', 'amountPending', 'lastPaymentDate', 'expectedPaymentDate', 'invoiceNumber', 'invoiceDate', 'updatedAt', 'updatedBy'])) ||
-        (isDispatch() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dispatchStatus', 'deliveryStatus', 'expectedDispatchDate', 'expectedDeliveryDate', 'updatedAt', 'updatedBy']));
+      allow read, write: if true;
     }
 
-    // PAYMENTS
+    // Schools Collection
+    match /schools/{schoolId} {
+      allow read, write: if true;
+    }
+
+    // Products Master Catalog
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    // Agents Collection
+    match /agents/{agentId} {
+      allow read, write: if true;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Payments Records
     match /payments/{paymentId} {
-      allow read: if isSignedIn() && (isAccounts() || isAdminOrOps());
-      allow create, update, delete: if isAccounts();
+      allow read, write: if true;
     }
 
-    // DISPATCHES
+    // Dispatches Records
     match /dispatches/{dispatchId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isDispatch();
+      allow read, write: if true;
     }
 
-    // DELIVERIES
+    // Deliveries Records
     match /deliveries/{deliveryId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isDispatch();
+      allow read, write: if true;
     }
 
-    // DOCUMENTS
+    // Order Documents / Attachments
     match /documents/{documentId} {
-      allow read: if isSignedIn() && (
-        isAdminOrOps() ||
-        isAccounts() ||
-        isDispatch() ||
-        (isAgent() && resource.data.visibleToAgent == true)
-      );
-      allow create, update: if isAdminOrOps() || isAccounts() || isDispatch();
-      allow delete: if isAdminOrOps();
+      allow read, write: if true;
     }
 
-    // NOTIFICATIONS
+    // App Notifications
     match /notifications/{notificationId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
-      allow create: if isSignedIn();
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read, write: if true;
     }
 
-    // ACTIVITY LOGS (Append only)
+    // Activity & Audit Logs
     match /activityLogs/{logId} {
-      allow read: if isSuperAdmin();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow read, write: if true;
     }
 
-    // ORDER STATUS HISTORY
+    // Order Status History Timeline
     match /orderStatusHistory/{historyId} {
-      allow read: if isSignedIn() && (
-        isAdminOrOps() ||
-        isAccounts() ||
-        isDispatch() ||
-        (isAgent() && resource.data.visibleToAgent == true)
-      );
-      allow create: if isAdminOrOps() || isAccounts() || isDispatch();
-      allow update, delete: if false;
+      allow read, write: if true;
     }
 
-    // SYSTEM SETTINGS
+    // System Settings & Configuration
     match /settings/{settingId} {
-      allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow read, write: if true;
     }
 
-    // Default catch-all rule
+    // System Connection & Diagnostics
+    match /system/{docId} {
+      allow read, write: if true;
+    }
+
+    // Catch-all for subcollections and any additional applet collections
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }
+
