@@ -75,11 +75,11 @@ export const OrderList: React.FC<OrderListProps> = ({
   const [colSelectedDispatchStatuses, setColSelectedDispatchStatuses] = useState<string[]>([]);
   const [colSelectedPaymentStatuses, setColSelectedPaymentStatuses] = useState<string[]>([]);
 
-  // Sorting state
+  // Sorting state - default to SL. NO. ascending (1, 2, 3...)
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: 'asc' | 'desc';
-  } | null>(null);
+  } | null>({ key: 'serialNumber', direction: 'asc' });
 
   // Row selection state
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -221,7 +221,7 @@ export const OrderList: React.FC<OrderListProps> = ({
     ].map(opt => ({ ...opt, count: counts.get(opt.value) || 0 }));
   }, [orders]);
 
-  // Handle Sort Toggles
+  // Handle Sort Toggles - Always defaults to SL. NO. ascending
   const handleSort = (columnKey: string) => {
     setSortConfig(prev => {
       if (!prev || prev.key !== columnKey) {
@@ -230,7 +230,8 @@ export const OrderList: React.FC<OrderListProps> = ({
       if (prev.direction === 'asc') {
         return { key: columnKey, direction: 'desc' };
       }
-      return null;
+      // Return to default SL. NO. ascending order
+      return { key: 'serialNumber', direction: 'asc' };
     });
   };
 
@@ -275,7 +276,7 @@ export const OrderList: React.FC<OrderListProps> = ({
     setColSelectedStatuses([]);
     setColSelectedDispatchStatuses([]);
     setColSelectedPaymentStatuses([]);
-    setSortConfig(null);
+    setSortConfig({ key: 'serialNumber', direction: 'asc' });
   };
 
   // Core Filtering Pipeline
@@ -410,9 +411,11 @@ export const OrderList: React.FC<OrderListProps> = ({
     isAgent
   ]);
 
-  // Core Sorting Pipeline
+  // Core Sorting Pipeline - Defaults strictly to SL. NO. ascending (1, 2, 3...)
   const sortedOrders = useMemo(() => {
-    if (!sortConfig) return filteredOrders;
+    if (!sortConfig) {
+      return [...filteredOrders].sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+    }
 
     const { key, direction } = sortConfig;
     const factor = direction === 'asc' ? 1 : -1;
@@ -423,8 +426,8 @@ export const OrderList: React.FC<OrderListProps> = ({
 
       switch (key) {
         case 'serialNumber':
-          valA = a.serialNumber || 0;
-          valB = b.serialNumber || 0;
+          valA = a.serialNumber !== undefined && a.serialNumber !== null ? a.serialNumber : Infinity;
+          valB = b.serialNumber !== undefined && b.serialNumber !== null ? b.serialNumber : Infinity;
           return (valA - valB) * factor;
 
         case 'contract':

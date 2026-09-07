@@ -8,11 +8,16 @@ service cloud.firestore {
     }
 
     function hasUserDoc() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        (request.auth.token.email != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email)))
+      );
     }
 
     function currentUserDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
     }
 
     function isSuperAdmin() {
@@ -24,25 +29,39 @@ service cloud.firestore {
 
     function isAdminOrOps() {
       return isSuperAdmin() || (
-        hasUserDoc() &&
-        (currentUserDoc().role == "ADMIN" || currentUserDoc().role == "SUPER_ADMIN")
+        isSignedIn() && (
+          request.auth.token.email == "operations@funscholar.com" ||
+          request.auth.token.email == "admin@funscholar.com" ||
+          request.auth.token.email == "dataentry@funscholar.com" ||
+          (hasUserDoc() && (
+            currentUserDoc().role == "ADMIN" ||
+            currentUserDoc().role == "SUPER_ADMIN" ||
+            currentUserDoc().role == "DATA_ENTRY_OPERATOR"
+          ))
+        )
       );
     }
 
     function isAccounts() {
       return isAdminOrOps() || (
-        hasUserDoc() && currentUserDoc().role == "ACCOUNTS"
+        isSignedIn() && (
+          request.auth.token.email == "accounts@funscholar.com" ||
+          (hasUserDoc() && currentUserDoc().role == "ACCOUNTS")
+        )
       );
     }
 
     function isDispatch() {
       return isAdminOrOps() || (
-        hasUserDoc() && currentUserDoc().role == "DISPATCH"
+        isSignedIn() && (
+          request.auth.token.email == "dispatch@funscholar.com" ||
+          (hasUserDoc() && currentUserDoc().role == "DISPATCH")
+        )
       );
     }
 
     function isAgent() {
-      return hasUserDoc() && currentUserDoc().role == "AGENT";
+      return isSignedIn() && hasUserDoc() && currentUserDoc().role == "AGENT";
     }
 
     function userAgentId() {

@@ -394,20 +394,43 @@ let memoryTimelines: OrderStatusHistoryItem[] = loadStorage(STORAGE_KEYS.TIMELIN
   }
 ]);
 
-// Helper to push to Firestore in background without blocking UI
-async function syncDocToFirestore(collectionName: string, docId: string, data: any) {
+// Recursively remove undefined values from Firestore payloads to prevent Firestore serialization errors
+function cleanFirestorePayload<T>(obj: T): T {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(cleanFirestorePayload) as unknown as T;
+  }
+  if (obj instanceof Date) {
+    return obj;
+  }
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = cleanFirestorePayload(value);
+    }
+  }
+  return cleaned as T;
+}
+
+// Helper to push to Firestore with reliable error propagation
+export async function syncDocToFirestore(collectionName: string, docId: string, data: any): Promise<void> {
+  const cleaned = cleanFirestorePayload(data);
   try {
-    await setDoc(doc(db, collectionName, docId), data, { merge: true });
-  } catch (e) {
-    // Non-fatal if offline
+    await setDoc(doc(db, collectionName, docId), cleaned, { merge: true });
+  } catch (err: any) {
+    console.error(`Firebase Firestore write failed for ${collectionName}/${docId}:`, err);
+    throw new Error(err?.message || `Failed to save to Firebase (${collectionName}/${docId})`);
   }
 }
 
-async function deleteDocFromFirestore(collectionName: string, docId: string) {
+export async function deleteDocFromFirestore(collectionName: string, docId: string): Promise<void> {
   try {
     await deleteDoc(doc(db, collectionName, docId));
-  } catch (e) {
-    // Non-fatal if offline
+  } catch (err: any) {
+    console.error(`Firebase Firestore delete failed for ${collectionName}/${docId}:`, err);
+    throw new Error(err?.message || `Failed to delete from Firebase (${collectionName}/${docId})`);
   }
 }
 
@@ -425,7 +448,7 @@ export async function initializeFirestoreSeed() {
     }
   } catch (e: any) {
     // Sandboxed or unauthenticated; local memory layer active
-    console.log('Local persistent storage active (Firestore offline/permission notice:', e?.message || e, ')');
+    console.log('Local persistent storage active (Firestore notice:', e?.message || e, ')');
   }
 }
 
@@ -434,26 +457,29 @@ export async function syncAllDataToFirestore(): Promise<{ success: boolean; coun
   try {
     let count = 0;
     for (const order of memoryOrders) {
-      await setDoc(doc(db, 'orders', order.orderId), order, { merge: true });
+      await syncDocToFirestore('orders', order.orderId, order);
       count++;
     }
     for (const school of memorySchools) {
-      await setDoc(doc(db, 'schools', school.schoolId), school, { merge: true });
+      await syncDocToFirestore('schools', school.schoolId, school);
       count++;
     }
     for (const agent of memoryAgents) {
-      await setDoc(doc(db, 'agents', agent.agentId), agent, { merge: true });
+      await syncDocToFirestore('agents', agent.agentId, agent);
       count++;
     }
     for (const product of memoryProducts) {
-      await setDoc(doc(db, 'products', product.productId), product, { merge: true });
+      await syncDocToFirestore('products', product.productId, product);
       count++;
     }
     for (const user of memoryUsers) {
-      await setDoc(doc(db, 'users', user.userId), user, { merge: true });
+      await syncDocToFirestore('users', user.userId, user);
+      if (user.email) {
+        await syncDocToFirestore('users', user.email.toLowerCase(), user);
+      }
       count++;
     }
-    await setDoc(doc(db, 'settings', 'global'), memorySettings, { merge: true });
+    await syncDocToFirestore('settings', 'global', memorySettings);
     return { success: true, count };
   } catch (err: any) {
     const errMsg = err?.message || String(err);
@@ -549,8 +575,11 @@ export function subscribeToRealtimeOrders(
   user: UserProfile,
   onUpdate: (orders: Order[]) => void
 ): () => void {
-  // Emit current memory orders immediately so there is zero UI delay
-  const initial = memoryOrders.filter(o => !o.isDeleted);
+  // Emit current memory orders immediately sorted by serialNumber ascending
+  const initial = memoryOrders
+    .filter(o => !o.isDeleted)
+    .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+
   if (user.role === 'AGENT') {
     onUpdate(initial.filter(o => o.agentId === user.agentId));
   } else {
@@ -576,10 +605,14 @@ export function subscribeToRealtimeOrders(
             memoryOrders.forEach(o => mergedMap.set(o.orderId, o));
             remoteList.forEach(o => mergedMap.set(o.orderId, o));
 
-            memoryOrders = sanitizeOrderData(Array.from(mergedMap.values()));
+            memoryOrders = sanitizeOrderData(Array.from(mergedMap.values()))
+              .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
             saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
-            const active = memoryOrders.filter(o => !o.isDeleted);
+            const active = memoryOrders
+              .filter(o => !o.isDeleted)
+              .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+
             if (user.role === 'AGENT') {
               onUpdate(active.filter(o => o.agentId === user.agentId));
             } else {
@@ -604,7 +637,33 @@ export function subscribeToRealtimeOrders(
 // ORDERS SERVICE
 // ----------------------------------------------------
 export async function getOrders(user: UserProfile, filters?: OrderFilterOptions): Promise<Order[]> {
-  let list = [...memoryOrders].filter(o => !o.isDeleted);
+  // Sync latest order records from Firestore so Super Admin and Admin always view fresh data
+  try {
+    const snap = await getDocs(collection(db, 'orders'));
+    if (!snap.empty) {
+      const remoteOrders: Order[] = [];
+      snap.forEach(d => {
+        const data = d.data() as Order;
+        if (data && data.orderId) {
+          remoteOrders.push(data);
+        }
+      });
+      if (remoteOrders.length > 0) {
+        const map = new Map<string, Order>();
+        memoryOrders.forEach(o => map.set(o.orderId, o));
+        remoteOrders.forEach(o => map.set(o.orderId, o));
+        memoryOrders = sanitizeOrderData(Array.from(map.values()))
+          .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+        saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+      }
+    }
+  } catch (err) {
+    console.warn('Firestore read in getOrders fallback to cached orders:', err);
+  }
+
+  let list = [...memoryOrders]
+    .filter(o => !o.isDeleted)
+    .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
 
   // STRICT AGENT ISOLATION MANDATE:
   // If user is AGENT, they CANNOT see another agent's orders or unassigned orders.
@@ -757,12 +816,23 @@ export async function createOrder(
     throw new Error('Agents cannot create orders directly. Please contact operations.');
   }
 
-  const currentCount = memoryOrders.length + 1;
-  const orderId = `${memorySettings.orderIdPrefix}-${String(currentCount).padStart(5, '0')}`;
-  const now = new Date().toISOString();
-
-  const maxSerial = memoryOrders.reduce((max, o) => Math.max(max, o.serialNumber || 0), 0);
+  // Calculate highest existing serial number reliably
+  const maxSerial = memoryOrders.reduce((max, o) => {
+    const num = typeof o.serialNumber === 'number' ? o.serialNumber : parseInt(String(o.serialNumber), 10);
+    return Math.max(max, isNaN(num) ? 0 : num);
+  }, 0);
   const serialNumber = maxSerial + 1;
+
+  const currentCount = memoryOrders.length + 1;
+  const orderIdNumber = Math.max(currentCount, serialNumber);
+  let orderId = `${memorySettings.orderIdPrefix || 'ORD-2026'}-${String(orderIdNumber).padStart(5, '0')}`;
+  let collisionCounter = 1;
+  while (memoryOrders.some(o => o.orderId === orderId)) {
+    orderId = `${memorySettings.orderIdPrefix || 'ORD-2026'}-${String(orderIdNumber + collisionCounter).padStart(5, '0')}`;
+    collisionCounter++;
+  }
+
+  const now = new Date().toISOString();
   const finalVal = orderInput.orderValue || 0;
   const isPaid = orderInput.paymentStatus === 'PAID';
 
@@ -784,9 +854,13 @@ export async function createOrder(
     isDeleted: false
   };
 
-  memoryOrders = [newOrder, ...memoryOrders];
+  // FIRST persist to Firestore and await confirmation!
+  // If Firestore rejects, the error is thrown and UI handles it directly
+  await syncDocToFirestore('orders', orderId, newOrder);
+
+  // Maintain ascending order of serialNumber
+  memoryOrders = [...memoryOrders, newOrder].sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-  syncDocToFirestore('orders', orderId, newOrder);
 
   // Initial timeline entry
   const timelineItem: OrderStatusHistoryItem = {
@@ -860,9 +934,14 @@ export async function updateOrder(
     updatedBy: user.name
   };
 
+  // FIRST persist to Firestore and await confirmation!
+  // If Firebase rejects the update, it will throw an error to the caller
+  // so the caller can display the real error to the user!
+  await syncDocToFirestore('orders', orderId, updated);
+
   memoryOrders[idx] = updated;
+  memoryOrders.sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-  syncDocToFirestore('orders', orderId, updated);
 
   // If agent assignment changed, record specific audit log
   if (updates.agentId && updates.agentId !== existing.agentId) {
@@ -951,7 +1030,7 @@ export async function updateOrderSchoolDetails(
     };
     memorySchools[schoolIdx] = updatedSchool;
     saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-    syncDocToFirestore('schools', existingSchool.schoolId, updatedSchool);
+    await syncDocToFirestore('schools', existingSchool.schoolId, updatedSchool);
   } else {
     // Register matching school in master structure without creating duplicate
     const newSchoolId = targetOrder.schoolId || `SCH-${String(memorySchools.length + 1).padStart(4, '0')}`;
@@ -969,7 +1048,7 @@ export async function updateOrderSchoolDetails(
     };
     memorySchools.push(updatedSchool);
     saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-    syncDocToFirestore('schools', newSchoolId, updatedSchool);
+    await syncDocToFirestore('schools', newSchoolId, updatedSchool);
   }
 
   // Update target order with new school details
@@ -982,6 +1061,9 @@ export async function updateOrderSchoolDetails(
     updatedAt: now,
     updatedBy: user.name
   };
+
+  // FIRST persist target order to Firebase Firestore and await confirmation!
+  await syncDocToFirestore('orders', orderId, updatedOrder);
 
   memoryOrders[orderIdx] = updatedOrder;
 
@@ -1006,15 +1088,6 @@ export async function updateOrderSchoolDetails(
   }
 
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-
-  await syncDocToFirestore('orders', orderId, {
-    schoolName: trimmedName,
-    schoolContactPhone: trimmedPhone,
-    schoolAddress: trimmedAddress,
-    schoolId: updatedOrder.schoolId,
-    updatedAt: now,
-    updatedBy: user.name
-  });
 
   await writeActivityLog({
     userId: user.userId,
@@ -1078,17 +1151,11 @@ export async function updateOrderAgent(
     updatedBy: user.name
   };
 
+  // FIRST persist updated order to Firebase Firestore and await confirmation!
+  await syncDocToFirestore('orders', orderId, updatedOrder);
+
   memoryOrders[orderIdx] = updatedOrder;
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-
-  await syncDocToFirestore('orders', orderId, {
-    agentId: newAgentId,
-    agentName,
-    agentCode,
-    ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
-    updatedAt: now,
-    updatedBy: user.name
-  });
 
   await writeActivityLog({
     userId: user.userId,
@@ -1157,14 +1224,12 @@ export async function bulkUpdateOrderAgent(
     return o;
   });
 
-  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-
-  // Use efficient Firebase batch updates
+  // Persist each updated order to Firestore and await
   try {
     const batch = writeBatch(db);
     for (const ord of updatedOrders) {
       const orderRef = doc(db, 'orders', ord.orderId);
-      batch.update(orderRef, {
+      const cleaned = cleanFirestorePayload({
         agentId: newAgentId,
         agentName,
         agentCode,
@@ -1172,11 +1237,17 @@ export async function bulkUpdateOrderAgent(
         updatedAt: now,
         updatedBy: user.name
       });
+      batch.update(orderRef, cleaned);
     }
     await batch.commit();
   } catch (err) {
-    console.warn('Firebase batch update fallback (local storage updated):', err);
+    console.warn('Firebase batch update fallback to sequential sync:', err);
+    for (const ord of updatedOrders) {
+      await syncDocToFirestore('orders', ord.orderId, ord);
+    }
   }
+
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
   await writeActivityLog({
     userId: user.userId,
