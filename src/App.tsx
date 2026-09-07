@@ -101,8 +101,10 @@ function MainApp() {
     setSelectedOrder(order);
   };
 
-  const handleOrderUpdated = (updated: Order) => {
-    setSelectedOrder(updated);
+  const handleOrderUpdated = (updated?: Order) => {
+    if (updated) {
+      setSelectedOrder(updated);
+    }
     refreshData();
   };
 

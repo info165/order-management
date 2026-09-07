@@ -14,14 +14,15 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Columns
+  Columns,
+  UserCheck
 } from 'lucide-react';
-import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile } from '../../types';
+import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile, Agent } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExportService';
-import { clearAllOrders, clearAllPastDataAndResyncWithSheet } from '../../services/dataService';
+import { clearAllOrders, clearAllPastDataAndResyncWithSheet, getAgents, bulkUpdateOrderAgent } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
 
@@ -85,6 +86,43 @@ export const OrderList: React.FC<OrderListProps> = ({
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchTargetStatus, setBatchTargetStatus] = useState<OrderStatus>('READY_FOR_DISPATCH');
   const [isResetting, setIsResetting] = useState(false);
+
+  const canManageOrders = !isAgent && (isAdmin || currentUser.role === 'DATA_ENTRY_OPERATOR' || currentUser.role === 'ACCOUNTS' || currentUser.role === 'DISPATCH');
+
+  // Bulk Agent Reassignment state
+  const [agentsList, setAgentsList] = useState<Agent[]>([]);
+  const [bulkSelectedAgentId, setBulkSelectedAgentId] = useState('');
+  const [isApplyingBulkAgent, setIsApplyingBulkAgent] = useState(false);
+  const [bulkAgentMessage, setBulkAgentMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    getAgents().then(setAgentsList).catch(console.error);
+  }, []);
+
+  const handleApplyBulkAgent = async () => {
+    if (!bulkSelectedAgentId || selectedOrderIds.length === 0) return;
+    setIsApplyingBulkAgent(true);
+    setBulkAgentMessage(null);
+    try {
+      // Respects selection strictly: applies ONLY to the selected order IDs
+      await bulkUpdateOrderAgent(selectedOrderIds, bulkSelectedAgentId, currentUser);
+
+      // Notify parent to refresh data immediately without requiring a manual page refresh
+      if (onOrdersUpdated) {
+        onOrdersUpdated();
+      }
+
+      const count = selectedOrderIds.length;
+      setSelectedOrderIds([]);
+      setBulkSelectedAgentId('');
+      setBulkAgentMessage(`Assigned ${count} order(s) to agent!`);
+      setTimeout(() => setBulkAgentMessage(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to bulk reassign agent.');
+    } finally {
+      setIsApplyingBulkAgent(false);
+    }
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -769,34 +807,88 @@ export const OrderList: React.FC<OrderListProps> = ({
 
       {/* Batch Action Floating Bar if items selected */}
       {selectedOrderIds.length > 0 && !isAgent && (
-        <div className="bg-slate-900 text-white px-4 py-2.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150 shadow-md">
-          <div className="flex items-center gap-3">
-            <span className="font-semibold text-amber-400">
-              {selectedOrderIds.length} {selectedOrderIds.length === 1 ? 'order' : 'orders'} selected (Total: ₹{selectedValueSum.toLocaleString('en-IN')})
+        <div className="bg-slate-900 text-white px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in duration-150 shadow-lg border border-slate-800">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-semibold text-amber-400 whitespace-nowrap">
+              {selectedOrderIds.length} {selectedOrderIds.length === 1 ? 'Order' : 'Orders'} Selected
             </span>
-            <span className="text-slate-500">|</span>
+
+            {/* Bulk Change Agent Control */}
+            {canManageOrders && (
+              <>
+                <span className="text-slate-600 hidden sm:inline">|</span>
+                <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700">
+                  <select
+                    value={bulkSelectedAgentId}
+                    onChange={(e) => setBulkSelectedAgentId(e.target.value)}
+                    className="bg-slate-900 text-white text-xs px-2 py-1 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+                    disabled={isApplyingBulkAgent}
+                    title="Select Agent for Bulk Reassignment"
+                  >
+                    <option value="">Change Agent...</option>
+                    {agentsList.map(agt => (
+                      <option key={agt.agentId} value={agt.agentId}>
+                        {agt.name} ({agt.agentCode})
+                      </option>
+                    ))}
+                    <option value="AGT-DIRECT">In-House / Direct</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={handleApplyBulkAgent}
+                    disabled={!bulkSelectedAgentId || isApplyingBulkAgent}
+                    className={`font-bold px-3 py-1 rounded-md transition-colors flex items-center gap-1 text-xs ${
+                      bulkSelectedAgentId && !isApplyingBulkAgent
+                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer shadow-xs'
+                        : 'bg-slate-700 text-slate-400 cursor-not-allowed border border-slate-600'
+                    }`}
+                  >
+                    {isApplyingBulkAgent ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                        <span>Applying...</span>
+                      </>
+                    ) : (
+                      <span>Apply</span>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            <span className="text-slate-600 hidden sm:inline">|</span>
+
             <button
               type="button"
               onClick={() => setBatchModalOpen(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg transition-colors"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-2.5 py-1 rounded-lg transition-colors border border-slate-700 cursor-pointer"
             >
-              Update Status in Bulk
+              Update Status
             </button>
             <button
               type="button"
               onClick={handleExportExcel}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-2.5 py-1 rounded-lg transition-colors border border-slate-700"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-2.5 py-1 rounded-lg transition-colors border border-slate-700 cursor-pointer"
             >
               Export Selected
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setSelectedOrderIds([])}
-            className="text-slate-400 hover:text-white font-medium"
-          >
-            Deselect All
-          </button>
+
+          <div className="flex items-center gap-3 ml-auto">
+            {bulkAgentMessage && (
+              <span className="text-emerald-400 font-medium text-xs animate-in fade-in">
+                {bulkAgentMessage}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setSelectedOrderIds([])}
+              className="text-slate-400 hover:text-white font-medium cursor-pointer"
+            >
+              Deselect All
+            </button>
+          </div>
         </div>
       )}
 

@@ -24,7 +24,9 @@ import {
   MapPin,
   Camera,
   Trash2,
-  Download
+  Download,
+  Edit2,
+  UserCheck
 } from 'lucide-react';
 import {
   Order,
@@ -34,7 +36,8 @@ import {
   OrderDocument,
   OrderStatusHistoryItem,
   UserProfile,
-  DeliveryRecord
+  DeliveryRecord,
+  Agent
 } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
@@ -49,14 +52,17 @@ import {
   updateOrderStatus,
   updateDispatch,
   markDelivered,
-  updateOrder
+  updateOrder,
+  updateOrderSchoolDetails,
+  updateOrderAgent,
+  getAgents
 } from '../../services/dataService';
 
 interface OrderDetailModalProps {
   order: Order;
   currentUser: UserProfile;
   onClose: () => void;
-  onOrderUpdated: () => void;
+  onOrderUpdated: (updated?: Order) => void;
 }
 
 type TabType = 'overview' | 'status' | 'dispatch' | 'payments' | 'documents';
@@ -71,6 +77,85 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const isAccounts = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN' || currentUser.role === 'ACCOUNTS';
   const isDispatch = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN' || currentUser.role === 'DISPATCH';
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
+  const canManageOrders = !isAgent && (isAdmin || currentUser.role === 'DATA_ENTRY_OPERATOR' || isAccounts || isDispatch);
+
+  // Local active order state to allow instantaneous updates
+  const [activeOrder, setActiveOrder] = useState<Order>(order);
+
+  useEffect(() => {
+    setActiveOrder(order);
+  }, [order]);
+
+  // School contact details edit state
+  const [isEditingSchool, setIsEditingSchool] = useState(false);
+  const [schoolFormName, setSchoolFormName] = useState(order.schoolName || '');
+  const [schoolFormPhone, setSchoolFormPhone] = useState(order.schoolContactPhone || '');
+  const [schoolFormAddress, setSchoolFormAddress] = useState(order.schoolAddress || '');
+  const [isSavingSchool, setIsSavingSchool] = useState(false);
+  const [schoolSaveError, setSchoolSaveError] = useState<string | null>(null);
+
+  // Agent selector edit state
+  const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(order.agentId || 'AGT-DIRECT');
+  const [isSavingAgent, setIsSavingAgent] = useState(false);
+  const [agentSaveError, setAgentSaveError] = useState<string | null>(null);
+  const [agentSaveSuccess, setAgentSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    getAgents().then(setAvailableAgents).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    setSchoolFormName(activeOrder.schoolName || '');
+    setSchoolFormPhone(activeOrder.schoolContactPhone || '');
+    setSchoolFormAddress(activeOrder.schoolAddress || '');
+    setSelectedAgentId(activeOrder.agentId || 'AGT-DIRECT');
+  }, [activeOrder]);
+
+  const handleSaveSchoolDetails = async () => {
+    if (!schoolFormName.trim()) {
+      setSchoolSaveError('School Name is required.');
+      return;
+    }
+    setIsSavingSchool(true);
+    setSchoolSaveError(null);
+    try {
+      const result = await updateOrderSchoolDetails(
+        activeOrder.orderId,
+        {
+          schoolName: schoolFormName.trim(),
+          phone: schoolFormPhone.trim(),
+          address: schoolFormAddress.trim()
+        },
+        currentUser
+      );
+      setActiveOrder(result.order);
+      setIsEditingSchool(false);
+      onOrderUpdated(result.order);
+    } catch (err: any) {
+      setSchoolSaveError(err.message || 'Failed to save school details');
+    } finally {
+      setIsSavingSchool(false);
+    }
+  };
+
+  const handleSaveAgent = async () => {
+    if (!selectedAgentId) return;
+    setIsSavingAgent(true);
+    setAgentSaveError(null);
+    setAgentSaveSuccess(false);
+    try {
+      const updated = await updateOrderAgent(activeOrder.orderId, selectedAgentId, currentUser);
+      setActiveOrder(updated);
+      setAgentSaveSuccess(true);
+      setTimeout(() => setAgentSaveSuccess(false), 3000);
+      onOrderUpdated(updated);
+    } catch (err: any) {
+      setAgentSaveError(err.message || 'Failed to update agent');
+    } finally {
+      setIsSavingAgent(false);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
@@ -676,63 +761,163 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* School & Contact Card */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                    <Building className="w-4 h-4 text-slate-500" />
-                    <span>School & Institutional Details</span>
-                  </h3>
-
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">School Name:</span>
-                      <span className="font-semibold text-slate-800 text-sm">{order.schoolName}</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">Institution System:</span>
-                        <span className="font-medium text-slate-700">{order.schoolType}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">School Code / UDISE:</span>
-                        <span className="font-mono text-slate-700">{order.schoolCode || 'N/A'}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">State / UT:</span>
-                        <span className="font-medium text-slate-700">{order.state || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">District:</span>
-                        <span className="font-medium text-slate-700">{order.district || 'N/A'}</span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Delivery Address:</span>
-                      <span className="text-slate-600 flex items-start gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
-                        <span>{order.schoolAddress || `${order.schoolName}, ${order.state || 'India'}`}</span>
-                      </span>
-                    </div>
-
-                    {(order.principalName || order.schoolContactPhone) && (
-                      <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="text-slate-400 block text-[11px]">Principal / Contact:</span>
-                          <span className="font-medium text-slate-800">{order.principalName || 'Principal'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[11px]">Phone / Mobile:</span>
-                          <span className="font-mono text-slate-700 flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-400" />
-                            <span>{order.schoolContactPhone || 'Available on PO'}</span>
-                          </span>
-                        </div>
-                      </div>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Building className="w-4 h-4 text-slate-500" />
+                      <span>School & Institutional Details</span>
+                    </h3>
+                    {!isAgent && canManageOrders && !isEditingSchool && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSchoolFormName(activeOrder.schoolName || '');
+                          setSchoolFormPhone(activeOrder.schoolContactPhone || '');
+                          setSchoolFormAddress(activeOrder.schoolAddress || '');
+                          setSchoolSaveError(null);
+                          setIsEditingSchool(true);
+                        }}
+                        className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-700 font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Edit School Name, Phone Number, and Address"
+                      >
+                        <Edit2 className="w-3 h-3 text-amber-600" />
+                        <span>Edit</span>
+                      </button>
                     )}
                   </div>
+
+                  {isEditingSchool ? (
+                    <div className="space-y-3 text-xs bg-amber-50/40 p-3.5 rounded-lg border border-amber-200 animate-in fade-in duration-150">
+                      <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5 text-amber-900">
+                        <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Edit School Contact Details</span>
+                      </div>
+
+                      {schoolSaveError && (
+                        <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                          {schoolSaveError}
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="text-slate-600 font-semibold block mb-1">
+                          School Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={schoolFormName}
+                          onChange={(e) => setSchoolFormName(e.target.value)}
+                          placeholder="Enter School Name"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          disabled={isSavingSchool}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-slate-600 font-semibold block mb-1">
+                          School Phone Number
+                        </label>
+                        <input
+                          type="text"
+                          value={schoolFormPhone}
+                          onChange={(e) => setSchoolFormPhone(e.target.value)}
+                          placeholder="e.g. +91 98765 43210"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          disabled={isSavingSchool}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-slate-600 font-semibold block mb-1">
+                          School Address
+                        </label>
+                        <textarea
+                          value={schoolFormAddress}
+                          onChange={(e) => setSchoolFormAddress(e.target.value)}
+                          placeholder="Full school address, district, state"
+                          rows={2}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          disabled={isSavingSchool}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleSaveSchoolDetails}
+                          disabled={isSavingSchool}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors flex items-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSavingSchool ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Save</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsEditingSchool(false);
+                            setSchoolSaveError(null);
+                          }}
+                          disabled={isSavingSchool}
+                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium text-xs transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[11px] font-medium uppercase">School Name:</span>
+                        <span className="font-bold text-slate-900 text-sm">{activeOrder.schoolName}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 block text-[11px] font-medium uppercase">School Phone Number:</span>
+                        <span className="font-mono font-medium text-slate-800 text-xs flex items-center gap-1.5 mt-0.5">
+                          <Phone className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{activeOrder.schoolContactPhone || 'Not provided'}</span>
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 block text-[11px] font-medium uppercase">School Address:</span>
+                        <span className="text-slate-700 text-xs flex items-start gap-1.5 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                          <span>{activeOrder.schoolAddress || `${activeOrder.schoolName}, ${activeOrder.state || 'India'}`}</span>
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">Institution System:</span>
+                          <span className="font-medium text-slate-700">{activeOrder.schoolType}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">School Code / UDISE:</span>
+                          <span className="font-mono text-slate-700">{activeOrder.schoolCode || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">State / UT:</span>
+                          <span className="font-medium text-slate-700">{activeOrder.state || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[11px]">District:</span>
+                          <span className="font-medium text-slate-700">{activeOrder.district || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Contract & GeM Specifications */}
@@ -746,56 +931,118 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="text-slate-400 block text-[11px]">Contract / Order No:</span>
-                        <span className="font-mono font-semibold text-slate-800">{order.orderNumber}</span>
+                        <span className="font-mono font-semibold text-slate-800">{activeOrder.orderNumber}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[11px]">GeM PO Number:</span>
-                        <span className="font-mono text-slate-700">{order.purchaseOrderNumber || 'GEMC-5116877'}</span>
+                        <span className="font-mono text-slate-700">{activeOrder.purchaseOrderNumber || 'GEMC-5116877'}</span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="text-slate-400 block text-[11px]">Order Date:</span>
-                        <span className="font-mono text-slate-700">{order.orderDate}</span>
+                        <span className="font-mono text-slate-700">{activeOrder.orderDate}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[11px]">Category / Package:</span>
-                        <span className="font-medium text-slate-800">{order.category}</span>
+                        <span className="font-medium text-slate-800">{activeOrder.category}</span>
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100">
-                      <span className="text-slate-400 block text-[11px]">Assigned Regional Agent:</span>
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs">
-                            {order.agentName.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-900">{order.agentName}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{order.agentCode}</div>
-                          </div>
-                        </div>
-                        {order.agentCommissionPercentage && (
-                          <div className="text-right">
-                            <span className="text-[10px] text-slate-400 block">Agreed Margin</span>
-                            <span className="font-mono font-semibold text-amber-800">
-                              {order.agentCommissionPercentage}%
-                            </span>
-                          </div>
+                    {/* Assigned Agent Selection */}
+                    <div className="pt-2.5 border-t border-slate-100 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-600 font-semibold text-xs flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Assigned Agent</span>
+                        </label>
+                        {activeOrder.agentCommissionPercentage !== undefined && (
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            Margin: <strong className="text-amber-800">{activeOrder.agentCommissionPercentage}%</strong>
+                          </span>
                         )}
                       </div>
+
+                      {!isAgent && canManageOrders ? (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={selectedAgentId}
+                              onChange={(e) => {
+                                setSelectedAgentId(e.target.value);
+                                setAgentSaveSuccess(false);
+                              }}
+                              className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                              disabled={isSavingAgent}
+                            >
+                              {availableAgents.map(agt => (
+                                <option key={agt.agentId} value={agt.agentId}>
+                                  {agt.name} ({agt.agentCode})
+                                </option>
+                              ))}
+                              <option value="AGT-DIRECT">In-House / Direct</option>
+                            </select>
+
+                            <button
+                              type="button"
+                              onClick={handleSaveAgent}
+                              disabled={isSavingAgent || selectedAgentId === (activeOrder.agentId || 'AGT-DIRECT')}
+                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors shrink-0 flex items-center gap-1 shadow-xs ${
+                                selectedAgentId !== (activeOrder.agentId || 'AGT-DIRECT') && !isSavingAgent
+                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer'
+                                  : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                              }`}
+                              title={selectedAgentId !== (activeOrder.agentId || 'AGT-DIRECT') ? "Save new agent assignment" : "Select an agent to reassign"}
+                            >
+                              {isSavingAgent ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Save Agent</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {agentSaveSuccess && (
+                            <div className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-emerald-600" />
+                              <span>Agent successfully reassigned and saved!</span>
+                            </div>
+                          )}
+
+                          {agentSaveError && (
+                            <div className="text-[11px] text-rose-600 font-medium">
+                              {agentSaveError}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                          <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs">
+                            {(activeOrder.agentName || 'A').charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900 text-xs">{activeOrder.agentName}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{activeOrder.agentCode}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
                       <div>
                         <span className="text-slate-400 block text-[11px]">Invoice Number:</span>
-                        <span className="font-mono text-slate-800">{order.invoiceNumber || 'Pending Generation'}</span>
+                        <span className="font-mono text-slate-800">{activeOrder.invoiceNumber || 'Pending Generation'}</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[11px]">Courier / Docket:</span>
-                        <span className="font-mono text-slate-800">{order.docketNumber || 'Dispatch Pending'}</span>
+                        <span className="font-mono text-slate-800">{activeOrder.docketNumber || 'Dispatch Pending'}</span>
                       </div>
                     </div>
                   </div>

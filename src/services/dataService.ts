@@ -40,7 +40,8 @@ import {
   where,
   orderBy,
   limit,
-  onSnapshot
+  onSnapshot,
+  writeBatch
 } from 'firebase/firestore';
 
 // In-memory runtime storage with localStorage backup for resilient and instantaneous user experience
@@ -900,6 +901,295 @@ export async function updateOrder(
   return updated;
 }
 
+// ----------------------------------------------------
+// DEDICATED SCHOOL CONTACT DETAILS UPDATE
+// ----------------------------------------------------
+export async function updateOrderSchoolDetails(
+  orderId: string,
+  schoolDetails: {
+    schoolName: string;
+    phone: string;
+    address: string;
+  },
+  user: UserProfile
+): Promise<{ order: Order; school?: School }> {
+  if (user.role === 'AGENT') {
+    throw new Error('Unauthorized: Field agents cannot edit school contact details.');
+  }
+
+  const orderIdx = memoryOrders.findIndex(o => o.orderId === orderId);
+  if (orderIdx === -1) {
+    throw new Error(`Order ${orderId} not found`);
+  }
+
+  const targetOrder = memoryOrders[orderIdx];
+  const now = new Date().toISOString();
+  const trimmedName = schoolDetails.schoolName.trim();
+  const trimmedPhone = schoolDetails.phone.trim();
+  const trimmedAddress = schoolDetails.address.trim();
+
+  // Find existing school in master registry
+  let schoolIdx = memorySchools.findIndex(s => s.schoolId === targetOrder.schoolId);
+  if (schoolIdx === -1 && targetOrder.schoolName) {
+    schoolIdx = memorySchools.findIndex(
+      s => s.schoolName.toLowerCase().trim() === targetOrder.schoolName.toLowerCase().trim()
+    );
+  }
+
+  let updatedSchool: School | undefined;
+
+  if (schoolIdx !== -1) {
+    // Update existing master school record
+    const existingSchool = memorySchools[schoolIdx];
+    updatedSchool = {
+      ...existingSchool,
+      schoolName: trimmedName,
+      phone: trimmedPhone,
+      contactPhone: trimmedPhone,
+      address: trimmedAddress,
+      updatedAt: now
+    };
+    memorySchools[schoolIdx] = updatedSchool;
+    saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
+    syncDocToFirestore('schools', existingSchool.schoolId, updatedSchool);
+  } else {
+    // Register matching school in master structure without creating duplicate
+    const newSchoolId = targetOrder.schoolId || `SCH-${String(memorySchools.length + 1).padStart(4, '0')}`;
+    updatedSchool = {
+      schoolId: newSchoolId,
+      schoolName: trimmedName,
+      schoolType: targetOrder.schoolType || 'Government School',
+      phone: trimmedPhone,
+      contactPhone: trimmedPhone,
+      address: trimmedAddress,
+      state: targetOrder.state || 'India',
+      district: targetOrder.district || '',
+      createdAt: now,
+      updatedAt: now
+    };
+    memorySchools.push(updatedSchool);
+    saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
+    syncDocToFirestore('schools', newSchoolId, updatedSchool);
+  }
+
+  // Update target order with new school details
+  const updatedOrder: Order = {
+    ...targetOrder,
+    schoolName: trimmedName,
+    schoolContactPhone: trimmedPhone,
+    schoolAddress: trimmedAddress,
+    schoolId: updatedSchool ? updatedSchool.schoolId : targetOrder.schoolId,
+    updatedAt: now,
+    updatedBy: user.name
+  };
+
+  memoryOrders[orderIdx] = updatedOrder;
+
+  // Also sync any other orders linked to the exact same school
+  if (updatedSchool) {
+    memoryOrders = memoryOrders.map(o => {
+      if (
+        o.orderId !== orderId &&
+        (o.schoolId === updatedSchool!.schoolId ||
+          (targetOrder.schoolName && o.schoolName.toLowerCase().trim() === targetOrder.schoolName.toLowerCase().trim()))
+      ) {
+        return {
+          ...o,
+          schoolName: trimmedName,
+          schoolContactPhone: trimmedPhone,
+          schoolAddress: trimmedAddress,
+          updatedAt: now
+        };
+      }
+      return o;
+    });
+  }
+
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  await syncDocToFirestore('orders', orderId, {
+    schoolName: trimmedName,
+    schoolContactPhone: trimmedPhone,
+    schoolAddress: trimmedAddress,
+    schoolId: updatedOrder.schoolId,
+    updatedAt: now,
+    updatedBy: user.name
+  });
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'SCHOOL_UPDATED',
+    entityType: 'ORDER',
+    entityId: orderId,
+    newValue: `Updated school contact details for "${trimmedName}" (Phone: ${trimmedPhone || 'N/A'}, Address: ${trimmedAddress || 'N/A'})`
+  });
+
+  return { order: updatedOrder, school: updatedSchool };
+}
+
+// ----------------------------------------------------
+// DEDICATED INDIVIDUAL AGENT ASSIGNMENT UPDATE
+// ----------------------------------------------------
+export async function updateOrderAgent(
+  orderId: string,
+  newAgentId: string,
+  user: UserProfile
+): Promise<Order> {
+  if (user.role === 'AGENT') {
+    throw new Error('Unauthorized: Field agents cannot reassign order agents.');
+  }
+
+  const orderIdx = memoryOrders.findIndex(o => o.orderId === orderId);
+  if (orderIdx === -1) {
+    throw new Error(`Order ${orderId} not found`);
+  }
+
+  const targetOrder = memoryOrders[orderIdx];
+  const now = new Date().toISOString();
+
+  // Find agent info
+  let agentName = 'In-House / Direct';
+  let agentCode = 'AGT-DIRECT';
+  let commissionRate = targetOrder.agentCommissionPercentage;
+
+  if (newAgentId && newAgentId !== 'AGT-DIRECT') {
+    const foundAgent = memoryAgents.find(a => a.agentId === newAgentId || a.agentCode === newAgentId);
+    if (foundAgent) {
+      agentName = foundAgent.name;
+      agentCode = foundAgent.agentCode || foundAgent.agentId;
+      if (foundAgent.commissionPercentage !== undefined || foundAgent.commissionRate !== undefined) {
+        commissionRate = foundAgent.commissionPercentage ?? foundAgent.commissionRate;
+      }
+    } else {
+      agentName = newAgentId;
+      agentCode = newAgentId;
+    }
+  }
+
+  // Update ONLY the assigned Agent, without modifying any other order parameters
+  const updatedOrder: Order = {
+    ...targetOrder,
+    agentId: newAgentId,
+    agentName,
+    agentCode,
+    ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+    updatedAt: now,
+    updatedBy: user.name
+  };
+
+  memoryOrders[orderIdx] = updatedOrder;
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  await syncDocToFirestore('orders', orderId, {
+    agentId: newAgentId,
+    agentName,
+    agentCode,
+    ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+    updatedAt: now,
+    updatedBy: user.name
+  });
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'AGENT_REASSIGNED',
+    entityType: 'ORDER',
+    entityId: orderId,
+    newValue: `Reassigned agent for order ${orderId} to ${agentName} (${agentCode})`
+  });
+
+  return updatedOrder;
+}
+
+// ----------------------------------------------------
+// DEDICATED BULK AGENT REASSIGNMENT (RESPECTS SELECTION)
+// ----------------------------------------------------
+export async function bulkUpdateOrderAgent(
+  orderIds: string[],
+  newAgentId: string,
+  user: UserProfile
+): Promise<Order[]> {
+  if (user.role === 'AGENT') {
+    throw new Error('Unauthorized: Field agents cannot reassign order agents.');
+  }
+
+  if (!orderIds || orderIds.length === 0) return [];
+
+  const now = new Date().toISOString();
+
+  // Find agent info
+  let agentName = 'In-House / Direct';
+  let agentCode = 'AGT-DIRECT';
+  let commissionRate: number | undefined;
+
+  if (newAgentId && newAgentId !== 'AGT-DIRECT') {
+    const foundAgent = memoryAgents.find(a => a.agentId === newAgentId || a.agentCode === newAgentId);
+    if (foundAgent) {
+      agentName = foundAgent.name;
+      agentCode = foundAgent.agentCode || foundAgent.agentId;
+      if (foundAgent.commissionPercentage !== undefined || foundAgent.commissionRate !== undefined) {
+        commissionRate = foundAgent.commissionPercentage ?? foundAgent.commissionRate;
+      }
+    } else {
+      agentName = newAgentId;
+      agentCode = newAgentId;
+    }
+  }
+
+  const updatedOrders: Order[] = [];
+
+  // Update memory orders ONLY for specifically selected order IDs
+  memoryOrders = memoryOrders.map(o => {
+    if (orderIds.includes(o.orderId)) {
+      const updated: Order = {
+        ...o,
+        agentId: newAgentId,
+        agentName,
+        agentCode,
+        ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+        updatedAt: now,
+        updatedBy: user.name
+      };
+      updatedOrders.push(updated);
+      return updated;
+    }
+    return o;
+  });
+
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  // Use efficient Firebase batch updates
+  try {
+    const batch = writeBatch(db);
+    for (const ord of updatedOrders) {
+      const orderRef = doc(db, 'orders', ord.orderId);
+      batch.update(orderRef, {
+        agentId: newAgentId,
+        agentName,
+        agentCode,
+        ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+        updatedAt: now,
+        updatedBy: user.name
+      });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn('Firebase batch update fallback (local storage updated):', err);
+  }
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'BULK_AGENT_REASSIGNED',
+    entityType: 'ORDER',
+    entityId: orderIds.join(','),
+    newValue: `Bulk reassigned ${orderIds.length} order(s) to agent ${agentName} (${agentCode})`
+  });
+
+  return updatedOrders;
+}
+
 export async function updateOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
@@ -1387,6 +1677,25 @@ export async function writeActivityLog(
 // MASTER DATA (Schools, Agents, Products, Users)
 // ----------------------------------------------------
 export async function getSchools(): Promise<School[]> {
+  try {
+    const snap = await getDocs(collection(db, 'schools'));
+    if (!snap.empty) {
+      const remoteSchools: School[] = [];
+      snap.forEach(d => {
+        const s = d.data() as School;
+        if (s && s.schoolId) remoteSchools.push(s);
+      });
+      if (remoteSchools.length > 0) {
+        const merged = new Map<string, School>();
+        memorySchools.forEach(s => merged.set(s.schoolId, s));
+        remoteSchools.forEach(s => merged.set(s.schoolId, { ...merged.get(s.schoolId), ...s }));
+        memorySchools = Array.from(merged.values());
+        saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
+      }
+    }
+  } catch (e) {
+    // Local fallback
+  }
   return [...memorySchools];
 }
 
@@ -1426,6 +1735,25 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
 }
 
 export async function getAgents(): Promise<Agent[]> {
+  try {
+    const snap = await getDocs(collection(db, 'agents'));
+    if (!snap.empty) {
+      const remoteAgents: Agent[] = [];
+      snap.forEach(d => {
+        const a = d.data() as Agent;
+        if (a && a.agentId) remoteAgents.push(a);
+      });
+      if (remoteAgents.length > 0) {
+        const merged = new Map<string, Agent>();
+        memoryAgents.forEach(a => merged.set(a.agentId, a));
+        remoteAgents.forEach(a => merged.set(a.agentId, { ...merged.get(a.agentId), ...a }));
+        memoryAgents = Array.from(merged.values());
+        saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
+      }
+    }
+  } catch (e) {
+    // Local fallback
+  }
   return [...memoryAgents];
 }
 
