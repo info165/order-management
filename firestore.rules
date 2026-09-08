@@ -1,81 +1,9 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Orders Collection
-    match /orders/{orderId} {
-      allow read, write: if true;
-    }
-
-    // Schools Collection
-    match /schools/{schoolId} {
-      allow read, write: if true;
-    }
-
-    // Products Master Catalog
-    match /products/{productId} {
-      allow read, write: if true;
-    }
-
-    // Agents Collection
-    match /agents/{agentId} {
-      allow read, write: if true;
-    }
-
-    // Users Collection
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-
-    // Payments Records
-    match /payments/{paymentId} {
-      allow read, write: if true;
-    }
-
-    // Dispatches Records
-    match /dispatches/{dispatchId} {
-      allow read, write: if true;
-    }
-
-    // Deliveries Records
-    match /deliveries/{deliveryId} {
-      allow read, write: if true;
-    }
-
-    // Order Documents / Attachments
-    match /documents/{documentId} {
-      allow read, write: if true;
-    }
-
-    // App Notifications
-    match /notifications/{notificationId} {
-      allow read, write: if true;
-    }
-
-    // Activity & Audit Logs
-    match /activityLogs/{logId} {
-      allow read, write: if true;
-    }
-
-    // Order Status History Timeline
-    match /orderStatusHistory/{historyId} {
-      allow read, write: if true;
-    }
-
-    // System Settings & Configuration
-    match /settings/{settingId} {
-      allow read, write: if true;
-    }
-
-    // System Connection & Diagnostics
-    match /system/{docId} {
-      allow read, write: if true;
-    }
-
-    // Catch-all for subcollections and any additional applet collections
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
-

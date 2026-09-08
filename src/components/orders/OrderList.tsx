@@ -553,7 +553,7 @@ export const OrderList: React.FC<OrderListProps> = ({
   };
 
   const handleResetTo121Sheet = async () => {
-    const ok = window.confirm('Reset the dashboard to the 121 orders parsed from the sheet?');
+    const ok = window.confirm('Reset the dashboard to the 122 orders parsed from the master sheet?');
     if (!ok) return;
     setIsResetting(true);
     try {
@@ -656,10 +656,10 @@ export const OrderList: React.FC<OrderListProps> = ({
                       onClick={handleResetTo121Sheet}
                       disabled={isResetting}
                       className="bg-white hover:bg-slate-50 text-slate-700 font-medium px-2.5 py-1.5 flex items-center gap-1 transition-colors"
-                      title="Reload initial master sheet (121 orders)"
+                      title="Reload initial master sheet (122 orders)"
                     >
                       <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Sheet (121)</span>
+                      <span>Sheet (122)</span>
                     </button>
                   </div>
                 )}

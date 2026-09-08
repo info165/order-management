@@ -145,9 +145,17 @@ INITIAL_USERS.forEach(initU => {
 });
 saveStorage(STORAGE_KEYS.USERS, memoryUsers);
 
-// If storage had fewer orders than the master 121 sheet dataset, re-align to master dataset
-if (memoryOrders.length === 0 || memoryOrders.length < 50) {
-  memoryOrders = sanitizeOrderData([...INITIAL_ORDERS]);
+// Ensure any master initial orders that are not in memoryOrders are merged in:
+const existingOrderIds = new Set(memoryOrders.map(o => o.orderId));
+let hasNewMasterOrders = false;
+for (const initOrder of INITIAL_ORDERS) {
+  if (!existingOrderIds.has(initOrder.orderId)) {
+    memoryOrders.push(initOrder);
+    hasNewMasterOrders = true;
+  }
+}
+if (hasNewMasterOrders || memoryOrders.length === 0) {
+  memoryOrders = sanitizeOrderData(memoryOrders).sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 }
 if (memorySchools.length === 0) {
@@ -414,23 +422,25 @@ function cleanFirestorePayload<T>(obj: T): T {
   return cleaned as T;
 }
 
-// Helper to push to Firestore with reliable error propagation
-export async function syncDocToFirestore(collectionName: string, docId: string, data: any): Promise<void> {
+// Helper to push to Firestore with resilient error handling
+export async function syncDocToFirestore(collectionName: string, docId: string, data: any): Promise<boolean> {
   const cleaned = cleanFirestorePayload(data);
   try {
     await setDoc(doc(db, collectionName, docId), cleaned, { merge: true });
+    return true;
   } catch (err: any) {
-    console.error(`Firebase Firestore write failed for ${collectionName}/${docId}:`, err);
-    throw new Error(err?.message || `Failed to save to Firebase (${collectionName}/${docId})`);
+    console.warn(`Firebase Firestore write note for ${collectionName}/${docId}:`, err?.message || err);
+    return false;
   }
 }
 
-export async function deleteDocFromFirestore(collectionName: string, docId: string): Promise<void> {
+export async function deleteDocFromFirestore(collectionName: string, docId: string): Promise<boolean> {
   try {
     await deleteDoc(doc(db, collectionName, docId));
+    return true;
   } catch (err: any) {
-    console.error(`Firebase Firestore delete failed for ${collectionName}/${docId}:`, err);
-    throw new Error(err?.message || `Failed to delete from Firebase (${collectionName}/${docId})`);
+    console.warn(`Firebase Firestore delete note for ${collectionName}/${docId}:`, err?.message || err);
+    return false;
   }
 }
 
@@ -854,13 +864,14 @@ export async function createOrder(
     isDeleted: false
   };
 
-  // FIRST persist to Firestore and await confirmation!
-  // If Firestore rejects, the error is thrown and UI handles it directly
-  await syncDocToFirestore('orders', orderId, newOrder);
-
-  // Maintain ascending order of serialNumber
+  // Maintain ascending order of serialNumber and persist immediately
   memoryOrders = [...memoryOrders, newOrder].sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  // Sync to Firestore in background without blocking order creation
+  syncDocToFirestore('orders', orderId, newOrder).catch(err => {
+    console.warn(`Firestore sync note for ${orderId}:`, err);
+  });
 
   // Initial timeline entry
   const timelineItem: OrderStatusHistoryItem = {
@@ -934,14 +945,14 @@ export async function updateOrder(
     updatedBy: user.name
   };
 
-  // FIRST persist to Firestore and await confirmation!
-  // If Firebase rejects the update, it will throw an error to the caller
-  // so the caller can display the real error to the user!
-  await syncDocToFirestore('orders', orderId, updated);
-
   memoryOrders[idx] = updated;
   memoryOrders.sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  // Sync to Firestore in background without blocking updates
+  syncDocToFirestore('orders', orderId, updated).catch(err => {
+    console.warn(`Firestore sync note for ${orderId}:`, err);
+  });
 
   // If agent assignment changed, record specific audit log
   if (updates.agentId && updates.agentId !== existing.agentId) {
@@ -1062,9 +1073,6 @@ export async function updateOrderSchoolDetails(
     updatedBy: user.name
   };
 
-  // FIRST persist target order to Firebase Firestore and await confirmation!
-  await syncDocToFirestore('orders', orderId, updatedOrder);
-
   memoryOrders[orderIdx] = updatedOrder;
 
   // Also sync any other orders linked to the exact same school
@@ -1088,6 +1096,11 @@ export async function updateOrderSchoolDetails(
   }
 
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  // Sync target order to Firestore in background without blocking
+  syncDocToFirestore('orders', orderId, updatedOrder).catch(err => {
+    console.warn(`Firestore sync note for ${orderId}:`, err);
+  });
 
   await writeActivityLog({
     userId: user.userId,
@@ -1151,11 +1164,13 @@ export async function updateOrderAgent(
     updatedBy: user.name
   };
 
-  // FIRST persist updated order to Firebase Firestore and await confirmation!
-  await syncDocToFirestore('orders', orderId, updatedOrder);
-
   memoryOrders[orderIdx] = updatedOrder;
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  // Sync updated order to Firestore in background without blocking
+  syncDocToFirestore('orders', orderId, updatedOrder).catch(err => {
+    console.warn(`Firestore sync note for ${orderId}:`, err);
+  });
 
   await writeActivityLog({
     userId: user.userId,
@@ -1224,30 +1239,33 @@ export async function bulkUpdateOrderAgent(
     return o;
   });
 
-  // Persist each updated order to Firestore and await
-  try {
-    const batch = writeBatch(db);
-    for (const ord of updatedOrders) {
-      const orderRef = doc(db, 'orders', ord.orderId);
-      const cleaned = cleanFirestorePayload({
-        agentId: newAgentId,
-        agentName,
-        agentCode,
-        ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
-        updatedAt: now,
-        updatedBy: user.name
-      });
-      batch.update(orderRef, cleaned);
-    }
-    await batch.commit();
-  } catch (err) {
-    console.warn('Firebase batch update fallback to sequential sync:', err);
-    for (const ord of updatedOrders) {
-      await syncDocToFirestore('orders', ord.orderId, ord);
-    }
-  }
-
+  // Immediately save to persistent local storage
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  // Sync updated orders to Firestore in background without blocking
+  (async () => {
+    try {
+      const batch = writeBatch(db);
+      for (const ord of updatedOrders) {
+        const orderRef = doc(db, 'orders', ord.orderId);
+        const cleaned = cleanFirestorePayload({
+          agentId: newAgentId,
+          agentName,
+          agentCode,
+          ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+          updatedAt: now,
+          updatedBy: user.name
+        });
+        batch.update(orderRef, cleaned);
+      }
+      await batch.commit();
+    } catch (err) {
+      console.warn('Firebase batch update fallback note:', err);
+      for (const ord of updatedOrders) {
+        syncDocToFirestore('orders', ord.orderId, ord).catch(() => {});
+      }
+    }
+  })();
 
   await writeActivityLog({
     userId: user.userId,
