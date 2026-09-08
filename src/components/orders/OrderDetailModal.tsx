@@ -1255,12 +1255,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                               className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
                               disabled={isSavingAgent}
                             >
-                              {availableAgents.map(agt => (
+                              <option value="AGT-DIRECT">Direct</option>
+                              {availableAgents.filter(agt => agt.agentId !== 'AGT-DIRECT').map(agt => (
                                 <option key={agt.agentId} value={agt.agentId}>
                                   {agt.name} ({agt.agentCode})
                                 </option>
                               ))}
-                              <option value="AGT-DIRECT">In-House / Direct</option>
                             </select>
 
                             <button

@@ -835,12 +835,12 @@ export const OrderList: React.FC<OrderListProps> = ({
                     title="Select Agent for Bulk Reassignment"
                   >
                     <option value="">Change Agent...</option>
-                    {agentsList.map(agt => (
+                    <option value="AGT-DIRECT">Direct</option>
+                    {agentsList.filter(agt => agt.agentId !== 'AGT-DIRECT').map(agt => (
                       <option key={agt.agentId} value={agt.agentId}>
                         {agt.name} ({agt.agentCode})
                       </option>
                     ))}
-                    <option value="AGT-DIRECT">In-House / Direct</option>
                   </select>
 
                   <button

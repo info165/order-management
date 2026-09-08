@@ -788,7 +788,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                 >
                   <option value="" disabled>Select agent...</option>
                   <option value="AGT-DIRECT">Direct</option>
-                  {agents.map(a => (
+                  {agents.filter(a => a.agentId !== 'AGT-DIRECT').map(a => (
                     <option key={a.agentId} value={a.agentId}>
                       {a.name} ({a.agentCode} - {a.state})
                     </option>
