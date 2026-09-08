@@ -1348,7 +1348,12 @@ export const OrderList: React.FC<OrderListProps> = ({
               ) : (
                 sortedOrders.map((order, idx) => {
                   const isSelected = selectedOrderIds.includes(order.orderId);
-                  const serialNum = order.serialNumber ?? (idx + 1);
+                  // Always number by position in the current (already-sorted, non-deleted)
+                  // list rather than the order's stored serialNumber field - that field is
+                  // only used to preserve creation order for sorting; using it for display
+                  // would leave a gap (e.g. ...120, 121, 123...) whenever an order in between
+                  // gets deleted. Position-based numbering stays gap-free automatically.
+                  const serialNum = idx + 1;
                   const contractId = order.contractNumber || order.purchaseOrderNumber || order.orderNumber;
                   const isDeliveryOverdue =
                     order.expectedDeliveryDate &&
