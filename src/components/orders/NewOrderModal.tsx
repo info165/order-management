@@ -168,7 +168,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       setAgentCommissionPercentage(found.commissionPercentage || 10);
     } else {
       setAgentId('AGT-DIRECT');
-      setAgentName('In-House / Direct Tender');
+      setAgentName('Direct');
       setAgentCode('AGT-DIR');
       setAgentCommissionPercentage(0);
     }
@@ -280,7 +280,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       return;
     }
     if (!agentId) {
-      alert('Please select an assigned regional agent (or In-House / Direct Tender).');
+      alert('Please select an assigned regional agent (or Direct).');
       return;
     }
     if (totalInclusiveOrderValue <= 0) {
@@ -787,7 +787,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900"
                 >
                   <option value="" disabled>Select agent...</option>
-                  <option value="AGT-DIRECT">In-House / Direct Tender (No Agent)</option>
+                  <option value="AGT-DIRECT">Direct</option>
                   {agents.map(a => (
                     <option key={a.agentId} value={a.agentId}>
                       {a.name} ({a.agentCode} - {a.state})
