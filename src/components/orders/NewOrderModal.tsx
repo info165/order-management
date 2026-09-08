@@ -267,6 +267,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       alert('Please select an institution type.');
       return;
     }
+    if (!schoolAddress.trim()) {
+      alert('Please provide the school address.');
+      return;
+    }
     if (!orderDate) {
       alert('Please select an order date.');
       return;
@@ -448,7 +452,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
             {/* Official School Name with Live Autocomplete Dropdown */}
             <div className="relative" ref={schoolDropdownRef}>
               <label className="block text-slate-700 font-semibold mb-1">
-                Official School Name <span className="text-rose-500">*</span>
+                School Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -508,6 +512,21 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   )}
                 </div>
               )}
+            </div>
+
+            {/* School Address */}
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">
+                School Address <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={schoolAddress}
+                onChange={(e) => setSchoolAddress(e.target.value)}
+                placeholder="e.g. Near DC Office Complex, Sector 5, Bhubaneswar"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+              />
             </div>
 
             {/* School Details Grid */}
@@ -817,7 +836,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   type="number"
                   required
                   min={1}
-                  value={totalInclusiveOrderValue}
+                  value={totalInclusiveOrderValue || ''}
                   onChange={(e) => setTotalInclusiveOrderValue(Number(e.target.value))}
                   placeholder="Enter total gross invoice amount including 18% GST"
                   className="w-full px-3 py-2 rounded-lg border border-amber-400 bg-white font-bold font-mono text-sm text-slate-900 focus:ring-2 focus:ring-amber-500"
