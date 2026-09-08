@@ -88,6 +88,12 @@ export const OrderList: React.FC<OrderListProps> = ({
   const [isResetting, setIsResetting] = useState(false);
 
   const canManageOrders = !isAgent && (isAdmin || currentUser.role === 'DATA_ENTRY_OPERATOR' || currentUser.role === 'ACCOUNTS' || currentUser.role === 'DISPATCH');
+  // Matches the database's actual create permission (firestore.rules' isAdminOrOps()):
+  // only Admin/Super Admin/Data Entry can create orders. Accounts and Dispatch can view
+  // and update specific fields on existing orders, but not create new ones - showing
+  // them a "New Order"/"Upload Excel" button that always fails silently in the
+  // background would be misleading.
+  const canCreateOrders = isAdmin || currentUser.role === 'DATA_ENTRY_OPERATOR';
 
   // Bulk Agent Reassignment state
   const [agentsList, setAgentsList] = useState<Agent[]>([]);
@@ -637,7 +643,7 @@ export const OrderList: React.FC<OrderListProps> = ({
               <span>Reset Widths</span>
             </button>
 
-            {!isAgent && (
+            {canCreateOrders && (
               <>
                 {isAdmin && (
                   <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs shrink-0">
