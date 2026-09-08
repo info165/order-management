@@ -22,6 +22,10 @@ export interface UserProfile {
   updatedAt: string;
   lastLoginAt?: string;
   mustChangePassword?: boolean;
+  // The Firebase Authentication UID for this account, once a real session has
+  // been established for it. Firestore's security rules key role lookups off
+  // request.auth.uid, so this is also mirrored as the doc ID at users/{uid}.
+  firebaseUid?: string;
 }
 
 export interface IssuedCredential {

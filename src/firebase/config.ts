@@ -61,12 +61,17 @@ export async function verifyFirestoreConnection(): Promise<{ connected: boolean;
 // admin's own active session out (createUserWithEmailAndPassword on the
 // primary auth instance would otherwise switch the current session to the
 // newly created user). Runs on a throwaway secondary app instance instead.
-export async function createAuthAccountForUser(email: string, password: string): Promise<void> {
+// Returns the newly created account's Firebase Auth UID - callers need this to
+// write the matching users/{uid} Firestore document that the security rules'
+// hasUserDoc()/currentUserDoc() helpers look up by request.auth.uid.
+export async function createAuthAccountForUser(email: string, password: string): Promise<string> {
   const secondaryApp = initializeApp(resolvedConfig, `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   try {
     const secondaryAuth = getAuth(secondaryApp);
-    await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const uid = cred.user.uid;
     await fbSignOutSecondary(secondaryAuth);
+    return uid;
   } finally {
     await deleteApp(secondaryApp);
   }

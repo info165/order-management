@@ -25,7 +25,8 @@ import {
   initializeFirestoreSeed,
   softDeleteOrder,
   updateOrderStatus,
-  subscribeToRealtimeOrders
+  subscribeToRealtimeOrders,
+  migrateAllUsersToFirebaseAuth
 } from './services/dataService';
 import { exportOrdersToExcel } from './services/importExportService';
 import { ArrowLeft, LayoutGrid, Building2 } from 'lucide-react';
@@ -95,6 +96,27 @@ function MainApp() {
       unsubscribe();
     };
   }, [currentUser]);
+
+  // One-time backfill: give every pre-existing staff account (created before
+  // real Firebase Auth sessions existed) a real account + a users/{uid} role
+  // doc, so Firestore's security rules can actually resolve their permissions.
+  // Only the Super Admin can run this, and it's safe to run more than once.
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    const FLAG_KEY = 'govschool_users_migrated_v1';
+    try {
+      if (localStorage.getItem(FLAG_KEY) === 'done') return;
+    } catch (_) {}
+
+    migrateAllUsersToFirebaseAuth(currentUser!)
+      .then((res) => {
+        console.log('User Firebase Auth migration:', res);
+        try {
+          localStorage.setItem(FLAG_KEY, 'done');
+        } catch (_) {}
+      })
+      .catch((err) => console.warn('User migration notice:', err));
+  }, [isSuperAdmin, currentUser]);
 
   // Order selection handler
   const handleSelectOrder = (order: Order) => {

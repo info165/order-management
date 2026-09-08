@@ -2047,8 +2047,28 @@ export async function issueUserCredentials(
   // immediately (Firestore security rules require request.auth to be set).
   // Best-effort: if this fails (e.g. transient network issue), the account
   // still gets created automatically on the user's first login attempt.
+  //
+  // The security rules key role lookups off request.auth.uid (see
+  // hasUserDoc()/currentUserDoc() in firestore.rules), which is the REAL
+  // Firebase UID - not this record's internal `userId`. So we also mirror
+  // the role data at users/{firebaseUid}, which only an admin (this caller)
+  // is permitted to write for someone else's UID.
   try {
-    await createAuthAccountForUser(cleanEmail, rawPassword);
+    const firebaseUid = await createAuthAccountForUser(cleanEmail, rawPassword);
+    newUser.firebaseUid = firebaseUid;
+    memoryUsers[0] = newUser; // keep the in-memory copy (just unshifted above) in sync
+    saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+    syncDocToFirestore('users', userId, { firebaseUid });
+    await setDoc(doc(db, 'users', firebaseUid), {
+      userId: newUser.userId,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      agentId: newUser.agentId || null,
+      agentCode: newUser.agentCode || null,
+      isActive: newUser.isActive,
+      updatedAt: now
+    }, { merge: true });
   } catch (authErr: any) {
     if (authErr?.code !== 'auth/email-already-in-use') {
       console.warn('Could not pre-create Firebase Auth account (will retry on first login):', authErr?.message || authErr);
@@ -2125,6 +2145,68 @@ export async function resetUserPassword(
   });
 
   return { emailResetSent };
+}
+
+// One-time backfill for accounts that existed before real Firebase Auth
+// sessions were wired up (the original seed/demo staff accounts). Creates a
+// real Firebase Auth account for each (using their already-issued password)
+// and mirrors their role at users/{firebaseUid}, which is what the Firestore
+// security rules actually check. Safe to call more than once - accounts that
+// already have a Firebase identity are skipped, not duplicated or broken.
+export async function migrateAllUsersToFirebaseAuth(
+  adminUser: UserProfile
+): Promise<{ migrated: number; alreadyPresent: number; failed: string[] }> {
+  if (adminUser.role !== 'SUPER_ADMIN') {
+    throw new Error('SECURITY POLICY: Only the Super Admin can run the account migration.');
+  }
+
+  let migrated = 0;
+  let alreadyPresent = 0;
+  const failed: string[] = [];
+
+  for (const u of [...memoryUsers]) {
+    if (u.firebaseUid) {
+      alreadyPresent++;
+      continue;
+    }
+    if (!u.password) {
+      failed.push(`${u.email}: no password on file to migrate with`);
+      continue;
+    }
+    try {
+      const firebaseUid = await createAuthAccountForUser(u.email, u.password);
+      const idx = memoryUsers.findIndex(mu => mu.userId === u.userId);
+      if (idx !== -1) {
+        memoryUsers[idx].firebaseUid = firebaseUid;
+        memoryUsers[idx].updatedAt = new Date().toISOString();
+      }
+      syncDocToFirestore('users', u.userId, { firebaseUid });
+      await setDoc(doc(db, 'users', firebaseUid), {
+        userId: u.userId,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        agentId: u.agentId || null,
+        agentCode: u.agentCode || null,
+        isActive: u.isActive,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      migrated++;
+    } catch (e: any) {
+      if (e?.code === 'auth/email-already-in-use') {
+        // A Firebase account already exists for this email (e.g. created via the
+        // login-time lazy-migration path) but we don't know its UID without the
+        // Admin SDK, so we can't safely write users/{uid} from here. Not a failure -
+        // that account already works for sign-in, just without a synced role doc yet.
+        alreadyPresent++;
+      } else {
+        failed.push(`${u.email}: ${e?.message || e}`);
+      }
+    }
+  }
+
+  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+  return { migrated, alreadyPresent, failed };
 }
 
 export async function deleteUser(userId: string, adminUser: UserProfile): Promise<void> {
