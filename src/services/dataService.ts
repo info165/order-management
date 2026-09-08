@@ -598,17 +598,22 @@ export function subscribeToRealtimeOrders(
   }
 
   try {
-    const ordersCol = collection(db, 'orders');
+    // Firestore rejects an unfiltered "list everything" query outright for an
+    // Agent session - the security rule depends on each document's agentId
+    // field, and Firestore can only permit a *query* (as opposed to a single-
+    // document read) when it can statically prove every possible result
+    // satisfies the rule. A collection-wide listen with no where() clause
+    // can't be proven safe that way, so it was failing with PERMISSION_DENIED
+    // for every agent, every time - meaning agents never received live data
+    // at all and were silently stuck on whatever was in their local cache
+    // from before this listener was ever added, refresh or not.
+    const ordersQuery = user.role === 'AGENT'
+      ? query(collection(db, 'orders'), where('agentId', '==', user.agentId))
+      : collection(db, 'orders');
+
     const unsubscribe = onSnapshot(
-      ordersCol,
+      ordersQuery,
       (snapshot) => {
-        // This listener has no `where` filter, so Firestore delivers the FULL
-        // current server-side collection on every change - not just a delta.
-        // That means it's safe (and necessary) to treat it as authoritative and
-        // REPLACE the local cache rather than merge into it. Merging only ever
-        // added/updated entries and never dropped ones removed remotely, so a
-        // deleted order kept reappearing in every other browser's local cache
-        // even after it was actually gone from the database.
         const remoteList: Order[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Order;
@@ -617,6 +622,22 @@ export function subscribeToRealtimeOrders(
           }
         });
 
+        if (user.role === 'AGENT') {
+          // This snapshot is already scoped to just this agent's orders, so
+          // it's not the full collection - only update their own visible
+          // slice, don't touch the shared memoryOrders cache used elsewhere.
+          const active = sanitizeOrderData(remoteList)
+            .filter(o => !o.isDeleted)
+            .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+          onUpdate(active);
+          return;
+        }
+
+        // Unfiltered query - this IS the full current server-side collection
+        // on every change, so replace (not merge into) the local cache;
+        // merging only ever added/updated entries and never dropped ones
+        // removed remotely, so a deleted order kept reappearing in every
+        // other browser's local cache even after it was actually gone.
         memoryOrders = sanitizeOrderData(remoteList)
           .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
         saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
@@ -624,12 +645,7 @@ export function subscribeToRealtimeOrders(
         const active = memoryOrders
           .filter(o => !o.isDeleted)
           .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-
-        if (user.role === 'AGENT') {
-          onUpdate(active.filter(o => o.agentId === user.agentId));
-        } else {
-          onUpdate(active);
-        }
+        onUpdate(active);
       },
       (err) => {
         console.warn('Real-time Firestore listener notice:', err);
@@ -647,34 +663,58 @@ export function subscribeToRealtimeOrders(
 // ORDERS SERVICE
 // ----------------------------------------------------
 export async function getOrders(user: UserProfile, filters?: OrderFilterOptions): Promise<Order[]> {
-  // Sync latest order records from Firestore so Super Admin and Admin always view fresh data.
-  // This is an unfiltered read of the whole collection, so the result is the complete,
-  // authoritative current state - replace the local cache with it rather than merging,
-  // otherwise orders deleted remotely would keep reappearing from stale local data.
-  try {
-    const snap = await getDocs(collection(db, 'orders'));
-    const remoteOrders: Order[] = [];
-    snap.forEach(d => {
-      const data = d.data() as Order;
-      if (data && data.orderId) {
-        remoteOrders.push(data);
-      }
-    });
-    memoryOrders = sanitizeOrderData(remoteOrders)
-      .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-    saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-  } catch (err) {
-    console.warn('Firestore read in getOrders fallback to cached orders:', err);
-  }
+  let list: Order[];
 
-  let list = [...memoryOrders]
-    .filter(o => !o.isDeleted)
-    .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-
-  // STRICT AGENT ISOLATION MANDATE:
-  // If user is AGENT, they CANNOT see another agent's orders or unassigned orders.
   if (user.role === 'AGENT') {
-    list = list.filter(o => o.agentId === user.agentId);
+    // An unfiltered read of the whole collection is rejected outright by
+    // Firestore for an Agent session - the security rule depends on each
+    // document's agentId field, and a query with no matching where() clause
+    // can't be proven safe against it (unlike a single-document read). This
+    // scopes the query itself to just this agent's orders, which Firestore
+    // can validate and allow.
+    try {
+      const agentQuery = query(collection(db, 'orders'), where('agentId', '==', user.agentId));
+      const snap = await getDocs(agentQuery);
+      const remoteOrders: Order[] = [];
+      snap.forEach(d => {
+        const data = d.data() as Order;
+        if (data && data.orderId) {
+          remoteOrders.push(data);
+        }
+      });
+      list = sanitizeOrderData(remoteOrders)
+        .filter(o => !o.isDeleted)
+        .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+    } catch (err) {
+      console.warn('Firestore read in getOrders (agent) fallback to cached orders:', err);
+      list = memoryOrders
+        .filter(o => !o.isDeleted && o.agentId === user.agentId)
+        .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+    }
+  } else {
+    // Sync latest order records from Firestore so Super Admin and Admin always view fresh data.
+    // This is an unfiltered read of the whole collection, so the result is the complete,
+    // authoritative current state - replace the local cache with it rather than merging,
+    // otherwise orders deleted remotely would keep reappearing from stale local data.
+    try {
+      const snap = await getDocs(collection(db, 'orders'));
+      const remoteOrders: Order[] = [];
+      snap.forEach(d => {
+        const data = d.data() as Order;
+        if (data && data.orderId) {
+          remoteOrders.push(data);
+        }
+      });
+      memoryOrders = sanitizeOrderData(remoteOrders)
+        .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+      saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+    } catch (err) {
+      console.warn('Firestore read in getOrders fallback to cached orders:', err);
+    }
+
+    list = [...memoryOrders]
+      .filter(o => !o.isDeleted)
+      .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   }
 
   if (!filters) return list;
