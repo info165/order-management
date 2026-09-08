@@ -494,7 +494,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
             </div>
 
             {/* School Details Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Institution Type</label>
                 <select
@@ -520,31 +520,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
                 />
               </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">District</label>
-                <input
-                  type="text"
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  placeholder="e.g. Khordha"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
-                />
-              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">UDISE / School Code</label>
-                <input
-                  type="text"
-                  value={schoolCode}
-                  onChange={(e) => setSchoolCode(e.target.value)}
-                  placeholder="e.g. KV-OD-1102"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono"
-                />
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Principal / Contact Person</label>
                 <input
@@ -772,14 +750,18 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               <label className="block text-slate-700 font-semibold mb-1">
                 Company <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 required
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
-                placeholder="e.g. Funscholar Innovations Pvt. Ltd."
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-              />
+              >
+                <option value="" disabled>Select company...</option>
+                <option value="FIPL">FIPL</option>
+                <option value="ARKAY">ARKAY</option>
+                <option value="VIGNAN">VIGNAN</option>
+                <option value="TTPL">TTPL</option>
+              </select>
             </div>
           </div>
 
