@@ -996,6 +996,10 @@ export async function updateOrderSchoolDetails(
     schoolName: string;
     phone: string;
     address: string;
+    schoolType?: string;
+    state?: string;
+    district?: string;
+    schoolCode?: string;
   },
   user: UserProfile
 ): Promise<{ order: Order; school?: School }> {
@@ -1013,6 +1017,10 @@ export async function updateOrderSchoolDetails(
   const trimmedName = schoolDetails.schoolName.trim();
   const trimmedPhone = schoolDetails.phone.trim();
   const trimmedAddress = schoolDetails.address.trim();
+  const trimmedSchoolType = schoolDetails.schoolType?.trim() || targetOrder.schoolType;
+  const trimmedState = schoolDetails.state?.trim() ?? targetOrder.state;
+  const trimmedDistrict = schoolDetails.district?.trim() ?? targetOrder.district;
+  const trimmedSchoolCode = schoolDetails.schoolCode?.trim() ?? targetOrder.schoolCode;
 
   // Find existing school in master registry
   let schoolIdx = memorySchools.findIndex(s => s.schoolId === targetOrder.schoolId);
@@ -1033,6 +1041,10 @@ export async function updateOrderSchoolDetails(
       phone: trimmedPhone,
       contactPhone: trimmedPhone,
       address: trimmedAddress,
+      schoolType: (trimmedSchoolType as any) || existingSchool.schoolType,
+      state: trimmedState || existingSchool.state,
+      district: trimmedDistrict ?? existingSchool.district,
+      schoolCode: trimmedSchoolCode ?? existingSchool.schoolCode,
       updatedAt: now
     };
     memorySchools[schoolIdx] = updatedSchool;
@@ -1044,12 +1056,13 @@ export async function updateOrderSchoolDetails(
     updatedSchool = {
       schoolId: newSchoolId,
       schoolName: trimmedName,
-      schoolType: targetOrder.schoolType || 'Government School',
+      schoolType: (trimmedSchoolType as any) || 'Government School',
       phone: trimmedPhone,
       contactPhone: trimmedPhone,
       address: trimmedAddress,
-      state: targetOrder.state || 'India',
-      district: targetOrder.district || '',
+      state: trimmedState || 'India',
+      district: trimmedDistrict || '',
+      schoolCode: trimmedSchoolCode,
       createdAt: now,
       updatedAt: now
     };
@@ -1064,6 +1077,10 @@ export async function updateOrderSchoolDetails(
     schoolName: trimmedName,
     schoolContactPhone: trimmedPhone,
     schoolAddress: trimmedAddress,
+    schoolType: (trimmedSchoolType as any) || targetOrder.schoolType,
+    state: trimmedState,
+    district: trimmedDistrict,
+    schoolCode: trimmedSchoolCode,
     schoolId: updatedSchool ? updatedSchool.schoolId : targetOrder.schoolId,
     updatedAt: now,
     updatedBy: user.name

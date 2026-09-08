@@ -91,8 +91,25 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [schoolFormName, setSchoolFormName] = useState(order.schoolName || '');
   const [schoolFormPhone, setSchoolFormPhone] = useState(order.schoolContactPhone || '');
   const [schoolFormAddress, setSchoolFormAddress] = useState(order.schoolAddress || '');
+  const [schoolFormType, setSchoolFormType] = useState(order.schoolType || '');
+  const [schoolFormState, setSchoolFormState] = useState(order.state || '');
+  const [schoolFormDistrict, setSchoolFormDistrict] = useState(order.district || '');
+  const [schoolFormCode, setSchoolFormCode] = useState(order.schoolCode || '');
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [schoolSaveError, setSchoolSaveError] = useState<string | null>(null);
+
+  // Contract & commercial details edit state (order number, PO number, date,
+  // category, company, order value) - the fields captured at creation time
+  // that previously had no way to be corrected afterward.
+  const [isEditingContract, setIsEditingContract] = useState(false);
+  const [contractFormOrderNumber, setContractFormOrderNumber] = useState(order.orderNumber || '');
+  const [contractFormPoNumber, setContractFormPoNumber] = useState(order.purchaseOrderNumber || '');
+  const [contractFormOrderDate, setContractFormOrderDate] = useState(order.orderDate || '');
+  const [contractFormCategory, setContractFormCategory] = useState(order.category || '');
+  const [contractFormCompany, setContractFormCompany] = useState(order.company || '');
+  const [contractFormOrderValue, setContractFormOrderValue] = useState<number>(order.orderValue || 0);
+  const [isSavingContract, setIsSavingContract] = useState(false);
+  const [contractSaveError, setContractSaveError] = useState<string | null>(null);
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -109,7 +126,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setSchoolFormName(activeOrder.schoolName || '');
     setSchoolFormPhone(activeOrder.schoolContactPhone || '');
     setSchoolFormAddress(activeOrder.schoolAddress || '');
+    setSchoolFormType(activeOrder.schoolType || '');
+    setSchoolFormState(activeOrder.state || '');
+    setSchoolFormDistrict(activeOrder.district || '');
+    setSchoolFormCode(activeOrder.schoolCode || '');
     setSelectedAgentId(activeOrder.agentId || 'AGT-DIRECT');
+    setContractFormOrderNumber(activeOrder.orderNumber || '');
+    setContractFormPoNumber(activeOrder.purchaseOrderNumber || '');
+    setContractFormOrderDate(activeOrder.orderDate || '');
+    setContractFormCategory(activeOrder.category || '');
+    setContractFormCompany(activeOrder.company || '');
+    setContractFormOrderValue(activeOrder.orderValue || 0);
   }, [activeOrder]);
 
   const handleSaveSchoolDetails = async () => {
@@ -125,7 +152,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         {
           schoolName: schoolFormName.trim(),
           phone: schoolFormPhone.trim(),
-          address: schoolFormAddress.trim()
+          address: schoolFormAddress.trim(),
+          schoolType: schoolFormType.trim(),
+          state: schoolFormState.trim(),
+          district: schoolFormDistrict.trim(),
+          schoolCode: schoolFormCode.trim()
         },
         currentUser
       );
@@ -136,6 +167,44 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setSchoolSaveError(err.message || 'Failed to save school details');
     } finally {
       setIsSavingSchool(false);
+    }
+  };
+
+  const handleSaveContractDetails = async () => {
+    if (!contractFormOrderNumber.trim()) {
+      setContractSaveError('Contract / Order No is required.');
+      return;
+    }
+    if (!contractFormCategory.trim()) {
+      setContractSaveError('Category / Package is required.');
+      return;
+    }
+    if (contractFormOrderValue <= 0) {
+      setContractSaveError('Order value must be greater than zero.');
+      return;
+    }
+    setIsSavingContract(true);
+    setContractSaveError(null);
+    try {
+      const updated = await updateOrder(
+        activeOrder.orderId,
+        {
+          orderNumber: contractFormOrderNumber.trim(),
+          purchaseOrderNumber: contractFormPoNumber.trim(),
+          orderDate: contractFormOrderDate,
+          category: contractFormCategory.trim(),
+          company: contractFormCompany.trim(),
+          orderValue: contractFormOrderValue
+        },
+        currentUser
+      );
+      setActiveOrder(updated);
+      setIsEditingContract(false);
+      onOrderUpdated(updated);
+    } catch (err: any) {
+      setContractSaveError(err.message || 'Failed to save contract details');
+    } finally {
+      setIsSavingContract(false);
     }
   };
 
@@ -840,6 +909,61 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         />
                       </div>
 
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">Institution Type</label>
+                          <select
+                            value={schoolFormType}
+                            onChange={(e) => setSchoolFormType(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingSchool}
+                          >
+                            <option value="Kendriya Vidyalaya">Kendriya Vidyalaya (KV)</option>
+                            <option value="Jawahar Navodaya Vidyalaya">Jawahar Navodaya Vidyalaya (JNV)</option>
+                            <option value="PM SHRI School">PM SHRI School</option>
+                            <option value="State Government School">State Government School</option>
+                            <option value="Government School">Government School</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">School Code / UDISE</label>
+                          <input
+                            type="text"
+                            value={schoolFormCode}
+                            onChange={(e) => setSchoolFormCode(e.target.value)}
+                            placeholder="e.g. KV-OD-1102"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingSchool}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">State / UT</label>
+                          <input
+                            type="text"
+                            value={schoolFormState}
+                            onChange={(e) => setSchoolFormState(e.target.value)}
+                            placeholder="e.g. Odisha"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingSchool}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">District</label>
+                          <input
+                            type="text"
+                            value={schoolFormDistrict}
+                            onChange={(e) => setSchoolFormDistrict(e.target.value)}
+                            placeholder="e.g. Khordha"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingSchool}
+                          />
+                        </div>
+                      </div>
+
                       <div className="flex items-center gap-2 pt-1">
                         <button
                           type="button"
@@ -922,11 +1046,153 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
                 {/* Contract & GeM Specifications */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                    <FileText className="w-4 h-4 text-slate-500" />
-                    <span>Contract & Agent Allocation</span>
-                  </h3>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-slate-500" />
+                      <span>Contract & Agent Allocation</span>
+                    </h3>
+                    {!isAgent && canManageOrders && !isEditingContract && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingContract(true)}
+                        className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-700 font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Edit Contract Number, PO Number, Date, Category, Company, and Order Value"
+                      >
+                        <Edit2 className="w-3 h-3 text-amber-600" />
+                        <span>Edit</span>
+                      </button>
+                    )}
+                  </div>
 
+                  {isEditingContract ? (
+                    <div className="space-y-3 text-xs bg-amber-50/40 p-3.5 rounded-lg border border-amber-200 animate-in fade-in duration-150">
+                      <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5 text-amber-900">
+                        <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Edit Contract & Commercial Details</span>
+                      </div>
+
+                      {contractSaveError && (
+                        <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                          {contractSaveError}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">
+                            Contract / Order No <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={contractFormOrderNumber}
+                            onChange={(e) => setContractFormOrderNumber(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">GeM PO Number</label>
+                          <input
+                            type="text"
+                            value={contractFormPoNumber}
+                            onChange={(e) => setContractFormPoNumber(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">Order Date</label>
+                          <input
+                            type="date"
+                            value={contractFormOrderDate}
+                            onChange={(e) => setContractFormOrderDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">
+                            Category / Package <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={contractFormCategory}
+                            onChange={(e) => setContractFormCategory(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">
+                            Company <span className="text-rose-500">*</span>
+                          </label>
+                          <select
+                            value={contractFormCompany}
+                            onChange={(e) => setContractFormCompany(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          >
+                            <option value="" disabled>Select company...</option>
+                            <option value="FIPL">FIPL</option>
+                            <option value="ARKAY">ARKAY</option>
+                            <option value="VIGNAN">VIGNAN</option>
+                            <option value="TTPL">TTPL</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">
+                            Order Value (₹) <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={contractFormOrderValue || ''}
+                            onChange={(e) => setContractFormOrderValue(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleSaveContractDetails}
+                          disabled={isSavingContract}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors flex items-center gap-1 shadow-xs disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSavingContract ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Save</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsEditingContract(false);
+                            setContractSaveError(null);
+                          }}
+                          disabled={isSavingContract}
+                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium text-xs transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="space-y-2 text-xs">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -947,6 +1213,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <div>
                         <span className="text-slate-400 block text-[11px]">Category / Package:</span>
                         <span className="font-medium text-slate-800">{activeOrder.category}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Company:</span>
+                        <span className="font-semibold text-slate-800">{activeOrder.company || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Order Value:</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          <CurrencyFormatter amount={activeOrder.orderValue || 0} />
+                        </span>
                       </div>
                     </div>
 
@@ -1046,6 +1325,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               </div>
 
