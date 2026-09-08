@@ -602,34 +602,33 @@ export function subscribeToRealtimeOrders(
     const unsubscribe = onSnapshot(
       ordersCol,
       (snapshot) => {
-        if (!snapshot.empty) {
-          const remoteList: Order[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as Order;
-            if (data && data.orderId) {
-              remoteList.push(data);
-            }
-          });
-
-          if (remoteList.length > 0) {
-            const mergedMap = new Map<string, Order>();
-            memoryOrders.forEach(o => mergedMap.set(o.orderId, o));
-            remoteList.forEach(o => mergedMap.set(o.orderId, o));
-
-            memoryOrders = sanitizeOrderData(Array.from(mergedMap.values()))
-              .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-            saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-
-            const active = memoryOrders
-              .filter(o => !o.isDeleted)
-              .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-
-            if (user.role === 'AGENT') {
-              onUpdate(active.filter(o => o.agentId === user.agentId));
-            } else {
-              onUpdate(active);
-            }
+        // This listener has no `where` filter, so Firestore delivers the FULL
+        // current server-side collection on every change - not just a delta.
+        // That means it's safe (and necessary) to treat it as authoritative and
+        // REPLACE the local cache rather than merge into it. Merging only ever
+        // added/updated entries and never dropped ones removed remotely, so a
+        // deleted order kept reappearing in every other browser's local cache
+        // even after it was actually gone from the database.
+        const remoteList: Order[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Order;
+          if (data && data.orderId) {
+            remoteList.push(data);
           }
+        });
+
+        memoryOrders = sanitizeOrderData(remoteList)
+          .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+        saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+        const active = memoryOrders
+          .filter(o => !o.isDeleted)
+          .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+
+        if (user.role === 'AGENT') {
+          onUpdate(active.filter(o => o.agentId === user.agentId));
+        } else {
+          onUpdate(active);
         }
       },
       (err) => {
@@ -648,26 +647,22 @@ export function subscribeToRealtimeOrders(
 // ORDERS SERVICE
 // ----------------------------------------------------
 export async function getOrders(user: UserProfile, filters?: OrderFilterOptions): Promise<Order[]> {
-  // Sync latest order records from Firestore so Super Admin and Admin always view fresh data
+  // Sync latest order records from Firestore so Super Admin and Admin always view fresh data.
+  // This is an unfiltered read of the whole collection, so the result is the complete,
+  // authoritative current state - replace the local cache with it rather than merging,
+  // otherwise orders deleted remotely would keep reappearing from stale local data.
   try {
     const snap = await getDocs(collection(db, 'orders'));
-    if (!snap.empty) {
-      const remoteOrders: Order[] = [];
-      snap.forEach(d => {
-        const data = d.data() as Order;
-        if (data && data.orderId) {
-          remoteOrders.push(data);
-        }
-      });
-      if (remoteOrders.length > 0) {
-        const map = new Map<string, Order>();
-        memoryOrders.forEach(o => map.set(o.orderId, o));
-        remoteOrders.forEach(o => map.set(o.orderId, o));
-        memoryOrders = sanitizeOrderData(Array.from(map.values()))
-          .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-        saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+    const remoteOrders: Order[] = [];
+    snap.forEach(d => {
+      const data = d.data() as Order;
+      if (data && data.orderId) {
+        remoteOrders.push(data);
       }
-    }
+    });
+    memoryOrders = sanitizeOrderData(remoteOrders)
+      .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+    saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
   } catch (err) {
     console.warn('Firestore read in getOrders fallback to cached orders:', err);
   }
