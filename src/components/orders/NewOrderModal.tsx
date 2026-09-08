@@ -54,6 +54,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [agentName, setAgentName] = useState('In-House / Direct Tender');
   const [agentCode, setAgentCode] = useState('AGT-DIR');
   const [agentCommissionPercentage, setAgentCommissionPercentage] = useState<number>(10);
+  const [company, setCompany] = useState('');
 
   const [internalNotes, setInternalNotes] = useState('');
 
@@ -269,6 +270,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       alert('Total order value must be greater than zero.');
       return;
     }
+    if (!company.trim()) {
+      alert('Please provide the company name.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -342,6 +347,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           agentName,
           agentCode,
           agentCommissionPercentage,
+          company: company.trim(),
           category,
           orderValue: totalInclusiveOrderValue,
           taxAmount: gstAmount,
@@ -760,6 +766,20 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">
+                Company <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="e.g. Funscholar Innovations Pvt. Ltd."
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
             </div>
           </div>
 
