@@ -1929,6 +1929,14 @@ export async function updateUserRole(userId: string, newRole: UserRole, user: Us
     saveStorage(STORAGE_KEYS.USERS, memoryUsers);
     syncDocToFirestore('users', userId, { role: newRole });
 
+    // Keep the UID-keyed permission mirror doc in sync too - Firestore's
+    // security rules resolve this account's role from users/{firebaseUid},
+    // not from this internal-ID doc, so the role change wouldn't actually
+    // take effect at the database level without this.
+    if (memoryUsers[idx].firebaseUid) {
+      syncDocToFirestore('users', memoryUsers[idx].firebaseUid!, { role: newRole, updatedAt: memoryUsers[idx].updatedAt });
+    }
+
     await writeActivityLog({
       userId: user.userId,
       userName: user.name,
@@ -1951,6 +1959,13 @@ export async function updateUserStatus(userId: string, isActive: boolean, user: 
     memoryUsers[idx].updatedAt = new Date().toISOString();
     saveStorage(STORAGE_KEYS.USERS, memoryUsers);
     syncDocToFirestore('users', userId, { isActive });
+
+    // Same UID-keyed mirror doc as updateUserRole() - without this, a
+    // deactivated account's direct database permissions would keep working
+    // even though the app's own login screen now blocks them.
+    if (memoryUsers[idx].firebaseUid) {
+      syncDocToFirestore('users', memoryUsers[idx].firebaseUid!, { isActive, updatedAt: memoryUsers[idx].updatedAt });
+    }
   }
 }
 
@@ -2241,6 +2256,15 @@ export async function deleteUser(userId: string, adminUser: UserProfile): Promis
 
   // Delete from Firestore
   deleteDocFromFirestore('users', userId);
+
+  // Also remove the UID-keyed role mirror doc (see issueUserCredentials /
+  // migrateAllUsersToFirebaseAuth). Without this, the account's Firestore
+  // security-rule permissions would keep working even after "deletion" here,
+  // since hasUserDoc()/currentUserDoc() look it up by their real Firebase UID,
+  // not this record's internal userId.
+  if (target.firebaseUid) {
+    deleteDocFromFirestore('users', target.firebaseUid);
+  }
 
   await writeActivityLog({
     userId: adminUser.userId,
