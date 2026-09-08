@@ -259,6 +259,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (identifier: string, pass: string): Promise<boolean> => {
     const cleanId = identifier.trim().toLowerCase();
     const cleanPass = pass.trim();
+    const looksLikeEmail = cleanId.includes('@');
+
+    // Finalize a successful sign-in: fetch the profile (now permitted, since
+    // we're authenticated) and set it as the current user.
+    const finalizeLogin = async (email: string): Promise<boolean> => {
+      const list = await getUsers();
+      setAllUsers(list);
+      const found = list.find(u => u.email.toLowerCase() === email);
+      if (!found) {
+        await fbSignOut(auth);
+        throw new Error('Signed in, but no matching profile record was found. Please contact the Super Admin.');
+      }
+      if (!found.isActive) {
+        await fbSignOut(auth);
+        throw new Error('This account is currently deactivated. Please contact Super Admin (info@funscholar.com) to reactivate your credentials.');
+      }
+      const updatedUser = { ...found, lastLoginAt: new Date().toISOString() };
+      setCurrentUser(updatedUser);
+      try {
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(updatedUser));
+      } catch (_) {}
+      return true;
+    };
+
+    // Try REAL Firebase sign-in FIRST when the identifier is an email. This is a
+    // direct Firebase Auth call - it needs no prior Firestore read, so it works
+    // from a completely fresh session (a different device, incognito, cleared
+    // storage) even though that session can't yet read the users collection
+    // (Firestore's rules correctly require being signed in first to read it -
+    // which is exactly the chicken-and-egg this avoids).
+    if (looksLikeEmail) {
+      try {
+        await signInWithEmailAndPassword(auth, cleanId, cleanPass);
+        return await finalizeLogin(cleanId);
+      } catch (err: any) {
+        const code = err?.code;
+        const looksUnmigrated =
+          code === 'auth/invalid-credential' ||
+          code === 'auth/user-not-found' ||
+          code === 'auth/wrong-password';
+        if (!looksUnmigrated) {
+          // A real error (e.g. our own "deactivated"/"no profile" throw above,
+          // or a genuine network issue) - surface it directly.
+          throw err instanceof Error ? err : new Error(err?.message || 'Sign-in failed. Please try again.');
+        }
+        // Otherwise fall through to the legacy path below: either this account
+        // predates real Firebase accounts and needs lazy migration, or the
+        // password is wrong - both require reading the stored record, which
+        // only succeeds here if the caller already has an authenticated
+        // session with access (e.g. testing from the Super Admin's browser).
+      }
+    }
 
     const list = await getUsers();
     setAllUsers(list);
@@ -282,38 +334,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Incorrect password. Please verify the credentials issued by the Super Admin.');
     }
 
-    // Establish a REAL Firebase Authentication session (not just local UI state) so
-    // Firestore's security rules — which require request.auth — actually recognize
-    // this login. Without this, the account could "log in" to the UI but every
-    // Firestore read/write would still be rejected as unauthenticated.
+    // This account was issued before real Firebase accounts existed for
+    // username/password logins (or never completed that migration). Since we
+    // already verified the password against the Super-Admin-issued record
+    // above, it's safe to create the real Firebase account now and sign in.
     try {
+      await createAuthAccountForUser(target.email, cleanPass);
       await signInWithEmailAndPassword(auth, target.email, cleanPass);
-    } catch (err: any) {
-      const code = err?.code;
-      const looksUnmigrated =
-        code === 'auth/invalid-credential' ||
-        code === 'auth/user-not-found' ||
-        code === 'auth/wrong-password';
-
-      if (looksUnmigrated) {
-        // This account was issued before real Firebase accounts existed for
-        // username/password logins (or never completed that migration). Since we
-        // already verified the password against the Super-Admin-issued record
-        // above, it's safe to create the real Firebase account now and sign in.
-        try {
-          await createAuthAccountForUser(target.email, cleanPass);
-          await signInWithEmailAndPassword(auth, target.email, cleanPass);
-        } catch (migrateErr: any) {
-          if (migrateErr?.code === 'auth/email-already-in-use') {
-            throw new Error(
-              'This password no longer matches our secure login system. Please ask the Super Admin to reset your password, then check your email for a reset link.'
-            );
-          }
-          throw new Error(migrateErr?.message || 'Could not establish a secure session. Please try again.');
-        }
-      } else {
-        throw new Error(err?.message || 'Sign-in failed. Please try again.');
+    } catch (migrateErr: any) {
+      if (migrateErr?.code === 'auth/email-already-in-use') {
+        throw new Error(
+          'This password no longer matches our secure login system. Please ask the Super Admin to reset your password, then check your email for a reset link.'
+        );
       }
+      throw new Error(migrateErr?.message || 'Could not establish a secure session. Please try again.');
     }
 
     const updatedUser = {
