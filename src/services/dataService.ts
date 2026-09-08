@@ -27,7 +27,8 @@ import {
   INITIAL_SETTINGS,
   INITIAL_USERS
 } from '../data/seedData';
-import { db } from '../firebase/config';
+import { db, auth, createAuthAccountForUser } from '../firebase/config';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import {
   collection,
   doc,
@@ -2042,6 +2043,18 @@ export async function issueUserCredentials(
   saveStorage(STORAGE_KEYS.USERS, memoryUsers);
   syncDocToFirestore('users', userId, newUser);
 
+  // Create the real Firebase Authentication account now so this login works
+  // immediately (Firestore security rules require request.auth to be set).
+  // Best-effort: if this fails (e.g. transient network issue), the account
+  // still gets created automatically on the user's first login attempt.
+  try {
+    await createAuthAccountForUser(cleanEmail, rawPassword);
+  } catch (authErr: any) {
+    if (authErr?.code !== 'auth/email-already-in-use') {
+      console.warn('Could not pre-create Firebase Auth account (will retry on first login):', authErr?.message || authErr);
+    }
+  }
+
   await writeActivityLog({
     userId: adminUser.userId,
     userName: adminUser.name,
@@ -2073,17 +2086,34 @@ export async function resetUserPassword(
   userId: string,
   newPass: string,
   adminUser: UserProfile
-): Promise<void> {
+): Promise<{ emailResetSent: boolean }> {
   if (adminUser.role !== 'SUPER_ADMIN') {
     throw new Error('SECURITY POLICY: Password reset can ONLY be performed by the Super Admin.');
   }
   const idx = memoryUsers.findIndex(u => u.userId === userId);
   if (idx === -1) throw new Error('User account not found');
 
-  memoryUsers[idx].password = newPass.trim();
+  const cleanNewPass = newPass.trim();
+  memoryUsers[idx].password = cleanNewPass;
   memoryUsers[idx].updatedAt = new Date().toISOString();
   saveStorage(STORAGE_KEYS.USERS, memoryUsers);
-  syncDocToFirestore('users', userId, { password: newPass.trim(), updatedAt: memoryUsers[idx].updatedAt });
+  syncDocToFirestore('users', userId, { password: cleanNewPass, updatedAt: memoryUsers[idx].updatedAt });
+
+  // NOTE: A Firebase Authentication password cannot be overwritten to an admin-chosen
+  // value from the client SDK without the user's old password (that requires the Admin
+  // SDK, which this static site doesn't run). If this account already has a real
+  // Firebase Auth identity, the value above only takes effect once the user follows the
+  // emailed reset link below; if it does NOT have one yet, this new value is what gets
+  // used the next time they log in (see the lazy-migration path in AuthContext.login).
+  let emailResetSent = false;
+  try {
+    await sendPasswordResetEmail(auth, memoryUsers[idx].email);
+    emailResetSent = true;
+  } catch (e: any) {
+    // Non-fatal: most likely this account has no Firebase Auth identity yet, in which
+    // case the plaintext value saved above is all that's needed for their next login.
+    console.warn('Password reset email notice:', e?.message || e);
+  }
 
   await writeActivityLog({
     userId: adminUser.userId,
@@ -2093,6 +2123,8 @@ export async function resetUserPassword(
     entityId: userId,
     newValue: `Super Admin reset credentials for ${memoryUsers[idx].email}`
   });
+
+  return { emailResetSent };
 }
 
 export async function deleteUser(userId: string, adminUser: UserProfile): Promise<void> {

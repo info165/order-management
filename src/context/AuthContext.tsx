@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { INITIAL_USERS } from '../data/seedData';
 import { getUsers } from '../services/dataService';
-import { auth, googleProvider } from '../firebase/config';
-import { onAuthStateChanged, signOut as fbSignOut, signInWithPopup, User as FbUser } from 'firebase/auth';
+import { auth, googleProvider, createAuthAccountForUser } from '../firebase/config';
+import { onAuthStateChanged, signOut as fbSignOut, signInWithPopup, signInWithEmailAndPassword, User as FbUser } from 'firebase/auth';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
@@ -277,9 +277,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('This account is currently deactivated. Please contact Super Admin (info@funscholar.com) to reactivate your credentials.');
     }
 
-    // Check password if set on user, otherwise check demo defaults
-    if (target.password && target.password !== cleanPass) {
+    const storedPasswordMatches = !!target.password && target.password === cleanPass;
+    if (!storedPasswordMatches) {
       throw new Error('Incorrect password. Please verify the credentials issued by the Super Admin.');
+    }
+
+    // Establish a REAL Firebase Authentication session (not just local UI state) so
+    // Firestore's security rules — which require request.auth — actually recognize
+    // this login. Without this, the account could "log in" to the UI but every
+    // Firestore read/write would still be rejected as unauthenticated.
+    try {
+      await signInWithEmailAndPassword(auth, target.email, cleanPass);
+    } catch (err: any) {
+      const code = err?.code;
+      const looksUnmigrated =
+        code === 'auth/invalid-credential' ||
+        code === 'auth/user-not-found' ||
+        code === 'auth/wrong-password';
+
+      if (looksUnmigrated) {
+        // This account was issued before real Firebase accounts existed for
+        // username/password logins (or never completed that migration). Since we
+        // already verified the password against the Super-Admin-issued record
+        // above, it's safe to create the real Firebase account now and sign in.
+        try {
+          await createAuthAccountForUser(target.email, cleanPass);
+          await signInWithEmailAndPassword(auth, target.email, cleanPass);
+        } catch (migrateErr: any) {
+          if (migrateErr?.code === 'auth/email-already-in-use') {
+            throw new Error(
+              'This password no longer matches our secure login system. Please ask the Super Admin to reset your password, then check your email for a reset link.'
+            );
+          }
+          throw new Error(migrateErr?.message || 'Could not establish a secure session. Please try again.');
+        }
+      } else {
+        throw new Error(err?.message || 'Sign-in failed. Please try again.');
+      }
     }
 
     const updatedUser = {

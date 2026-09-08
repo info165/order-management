@@ -1,8 +1,8 @@
 /**
  * Firebase Client Configuration & Service Initializer
  */
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import { initializeApp, getApps, getApp, deleteApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth, GoogleAuthProvider, browserLocalPersistence, setPersistence, createUserWithEmailAndPassword, signOut as fbSignOutSecondary } from 'firebase/auth';
 import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firestore';
 import defaultConfig from '../../firebase-applet-config.json';
 
@@ -53,6 +53,22 @@ export async function verifyFirestoreConnection(): Promise<{ connected: boolean;
     const msg = error?.message || String(error);
     console.warn('Firestore status:', msg);
     return { connected: false, error: msg };
+  }
+}
+
+// Creates a real Firebase Authentication account for a staff member issued
+// username/password credentials by the Super Admin, WITHOUT signing the
+// admin's own active session out (createUserWithEmailAndPassword on the
+// primary auth instance would otherwise switch the current session to the
+// newly created user). Runs on a throwaway secondary app instance instead.
+export async function createAuthAccountForUser(email: string, password: string): Promise<void> {
+  const secondaryApp = initializeApp(resolvedConfig, `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  try {
+    const secondaryAuth = getAuth(secondaryApp);
+    await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    await fbSignOutSecondary(secondaryAuth);
+  } finally {
+    await deleteApp(secondaryApp);
   }
 }
 
