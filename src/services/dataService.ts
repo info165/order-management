@@ -2110,7 +2110,15 @@ export async function issueUserCredentials(
 
   memoryUsers = [newUser, ...memoryUsers];
   saveStorage(STORAGE_KEYS.USERS, memoryUsers);
-  syncDocToFirestore('users', userId, newUser);
+  // Wait for this write - if someone tries logging in with these
+  // credentials right after the Super Admin issues them, login() depends on
+  // getUsers() finding this record; an un-awaited write here could still be
+  // in flight when that happens.
+  try {
+    await syncDocToFirestore('users', userId, newUser);
+  } catch (err) {
+    console.warn(`Firestore sync note for new user ${userId}:`, err);
+  }
 
   // Create the real Firebase Authentication account now so this login works
   // immediately (Firestore security rules require request.auth to be set).
@@ -2127,7 +2135,7 @@ export async function issueUserCredentials(
     newUser.firebaseUid = firebaseUid;
     memoryUsers[0] = newUser; // keep the in-memory copy (just unshifted above) in sync
     saveStorage(STORAGE_KEYS.USERS, memoryUsers);
-    syncDocToFirestore('users', userId, { firebaseUid });
+    await syncDocToFirestore('users', userId, { firebaseUid });
     await setDoc(doc(db, 'users', firebaseUid), {
       userId: newUser.userId,
       name: newUser.name,
@@ -2408,7 +2416,15 @@ export async function updateUserProfile(
 
   memoryUsers[idx] = updatedUser;
   saveStorage(STORAGE_KEYS.USERS, memoryUsers);
-  syncDocToFirestore('users', userId, updatedUser);
+  // Wait for this write before returning - same race as updateOrder() etc: if
+  // someone tries to log in with the newly edited email/password right after
+  // the Super Admin saves, and this hadn't landed yet, getUsers() (which
+  // login() depends on to even find the account) would come back empty.
+  try {
+    await syncDocToFirestore('users', userId, updatedUser);
+  } catch (err) {
+    console.warn(`Firestore sync note for user ${userId}:`, err);
+  }
 
   // Keep the UID-keyed permission mirror doc in sync too - same reasoning as
   // deleteUser()/updateUserRole()/updateUserStatus(): Firestore's security
@@ -2416,15 +2432,19 @@ export async function updateUserProfile(
   // not this internal-ID doc, so an edit here (role, active status, etc.)
   // wouldn't otherwise take effect at the database level.
   if (updatedUser.firebaseUid) {
-    syncDocToFirestore('users', updatedUser.firebaseUid, {
-      name: updatedUser.name,
-      email: updatedUser.email,
-      role: updatedUser.role,
-      agentId: updatedUser.agentId || null,
-      agentCode: updatedUser.agentCode || null,
-      isActive: updatedUser.isActive,
-      updatedAt: updatedUser.updatedAt
-    });
+    try {
+      await syncDocToFirestore('users', updatedUser.firebaseUid, {
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        agentId: updatedUser.agentId || null,
+        agentCode: updatedUser.agentCode || null,
+        isActive: updatedUser.isActive,
+        updatedAt: updatedUser.updatedAt
+      });
+    } catch (err) {
+      console.warn(`Firestore sync note for user mirror ${updatedUser.firebaseUid}:`, err);
+    }
   }
 
   // If role is AGENT or agentCode updated, update or create agent record
