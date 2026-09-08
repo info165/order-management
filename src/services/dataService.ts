@@ -1914,6 +1914,34 @@ export async function updateProduct(productId: string, updates: Partial<Product>
 }
 
 export async function getUsers(): Promise<UserProfile[]> {
+  // Sync from Firestore so a user created/edited/deleted by the Super Admin in one
+  // browser is visible to everyone else immediately (previously this only ever
+  // returned the local cache, so a brand new account - even with a fully working
+  // Firebase Auth login - would fail with "No user account found" anywhere except
+  // the admin's own browser, since nothing had ever fetched the real user list).
+  //
+  // The users collection also holds UID-keyed permission-mirror docs (see
+  // issueUserCredentials/migrateAllUsersToFirebaseAuth) alongside the canonical
+  // internal-ID profile docs - only the latter are real "accounts" for this list,
+  // identifiable because their Firestore document ID matches their own userId
+  // field (a mirror doc's ID is the Firebase UID, which differs from its userId).
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const remoteUsers: UserProfile[] = [];
+    snap.forEach(d => {
+      const data = d.data() as UserProfile;
+      if (data && data.userId && d.id === data.userId) {
+        remoteUsers.push(data);
+      }
+    });
+    if (remoteUsers.length > 0) {
+      memoryUsers = remoteUsers;
+      saveStorage(STORAGE_KEYS.USERS, memoryUsers);
+    }
+  } catch (err) {
+    console.warn('Firestore read in getUsers fallback to cached users:', err);
+  }
+
   return [...memoryUsers];
 }
 
