@@ -19,7 +19,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   // School fields
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [schoolName, setSchoolName] = useState('');
-  const [schoolType, setSchoolType] = useState<any>('Kendriya Vidyalaya');
+  const [schoolType, setSchoolType] = useState<any>('');
   const [schoolCode, setSchoolCode] = useState('');
   const [state, setState] = useState('');
   const [district, setDistrict] = useState('');
@@ -31,14 +31,14 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const schoolDropdownRef = useRef<HTMLDivElement>(null);
 
   // Contract & Order fields
-  const [orderNumber, setOrderNumber] = useState(`GEMC-${Math.floor(1000000000000 + Math.random() * 9000000000000)}`);
+  const [orderNumber, setOrderNumber] = useState('');
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState('');
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [orderDate, setOrderDate] = useState('');
   const [financialYear, setFinancialYear] = useState('2026-27');
-  const [orderType, setOrderType] = useState<'GeM Direct' | 'GeM L1 Bid' | 'State Tender' | 'Direct Supply'>('GeM Direct');
+  const [orderType, setOrderType] = useState<'' | 'GeM Direct' | 'GeM L1 Bid' | 'State Tender' | 'Direct Supply'>('');
 
   // Category & Custom Category Creation
-  const [category, setCategory] = useState('ATL Lab Equipment & Components');
+  const [category, setCategory] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
@@ -46,14 +46,14 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [newCategoryPrice, setNewCategoryPrice] = useState<number>(75000);
 
   // Commercial & Financials (Inclusive 18% GST calculation)
-  const [totalInclusiveOrderValue, setTotalInclusiveOrderValue] = useState<number>(118000);
-  const [expectedDeliveryDays, setExpectedDeliveryDays] = useState<number>(14);
+  const [totalInclusiveOrderValue, setTotalInclusiveOrderValue] = useState<number>(0);
+  const [expectedDeliveryDays, setExpectedDeliveryDays] = useState<number>(0);
 
   // Agent allocation
-  const [agentId, setAgentId] = useState('AGT-DIRECT');
-  const [agentName, setAgentName] = useState('In-House / Direct Tender');
-  const [agentCode, setAgentCode] = useState('AGT-DIR');
-  const [agentCommissionPercentage, setAgentCommissionPercentage] = useState<number>(10);
+  const [agentId, setAgentId] = useState('');
+  const [agentName, setAgentName] = useState('');
+  const [agentCode, setAgentCode] = useState('');
+  const [agentCommissionPercentage, setAgentCommissionPercentage] = useState<number>(0);
   const [company, setCompany] = useState('');
 
   const [internalNotes, setInternalNotes] = useState('');
@@ -69,9 +69,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
         setSchools(sList);
         setAgents(aList);
         setProducts(pList);
-        if (sList.length > 0) {
-          handleSelectSchool(sList[0]);
-        }
       } catch (e) {
         console.error('Error loading master data', e);
       } finally {
@@ -266,8 +263,28 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       alert('Please provide a school name.');
       return;
     }
+    if (!schoolType) {
+      alert('Please select an institution type.');
+      return;
+    }
+    if (!orderDate) {
+      alert('Please select an order date.');
+      return;
+    }
+    if (!orderType) {
+      alert('Please select a procurement mode.');
+      return;
+    }
+    if (!agentId) {
+      alert('Please select an assigned regional agent (or In-House / Direct Tender).');
+      return;
+    }
     if (totalInclusiveOrderValue <= 0) {
       alert('Total order value must be greater than zero.');
+      return;
+    }
+    if (!expectedDeliveryDays) {
+      alert('Please select a delivery lead time.');
       return;
     }
     if (!company.trim()) {
@@ -496,12 +513,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
             {/* School Details Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Institution Type</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Institution Type <span className="text-rose-500">*</span>
+                </label>
                 <select
+                  required
                   value={schoolType}
                   onChange={(e) => setSchoolType(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-medium focus:ring-1 focus:ring-amber-500"
                 >
+                  <option value="" disabled>Select institution type...</option>
                   <option value="Kendriya Vidyalaya">Kendriya Vidyalaya (KV)</option>
                   <option value="Jawahar Navodaya Vidyalaya">Jawahar Navodaya Vidyalaya (JNV)</option>
                   <option value="PM SHRI School">PM SHRI School</option>
@@ -585,9 +606,12 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Order Date</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Order Date <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="date"
+                  required
                   value={orderDate}
                   onChange={(e) => setOrderDate(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono"
@@ -595,12 +619,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Procurement Mode</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Procurement Mode <span className="text-rose-500">*</span>
+                </label>
                 <select
+                  required
                   value={orderType}
                   onChange={(e) => setOrderType(e.target.value as any)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-medium"
                 >
+                  <option value="" disabled>Select procurement mode...</option>
                   <option value="GeM Direct">GeM Direct Purchase</option>
                   <option value="GeM L1 Bid">GeM L1 Bid</option>
                   <option value="State Tender">State Tender</option>
@@ -730,12 +758,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Assigned Regional Agent</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Assigned Regional Agent <span className="text-rose-500">*</span>
+                </label>
                 <select
+                  required
                   value={agentId}
                   onChange={(e) => handleAgentChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900"
                 >
+                  <option value="" disabled>Select agent...</option>
                   <option value="AGT-DIRECT">In-House / Direct Tender (No Agent)</option>
                   {agents.map(a => (
                     <option key={a.agentId} value={a.agentId}>
@@ -796,12 +828,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               </div>
 
               <div>
-                <label className="block text-amber-950 font-semibold mb-1">Delivery Lead Time</label>
+                <label className="block text-amber-950 font-semibold mb-1">
+                  Delivery Lead Time <span className="text-rose-500">*</span>
+                </label>
                 <select
-                  value={expectedDeliveryDays}
+                  required
+                  value={expectedDeliveryDays || ''}
                   onChange={(e) => setExpectedDeliveryDays(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white font-medium"
                 >
+                  <option value="" disabled>Select delivery timeline...</option>
                   <option value={7}>7 Days (Express)</option>
                   <option value={14}>14 Days (Standard KV/JNV)</option>
                   <option value={21}>21 Days</option>
