@@ -945,10 +945,18 @@ export async function updateOrder(
   memoryOrders.sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
-  // Sync to Firestore in background without blocking updates
-  syncDocToFirestore('orders', orderId, updated).catch(err => {
+  // Wait for the Firestore write to actually land before returning. Callers
+  // (e.g. OrderDetailModal's edit-and-save handlers) commonly call
+  // onOrderUpdated() right after this resolves, which triggers a fresh
+  // Firestore read (refreshData -> getOrders). If this write were still
+  // in flight when that read fires, the read could return the pre-edit
+  // value and stomp the UI right back to it - which is exactly why an edit
+  // could appear to "not save" despite genuinely succeeding moments later.
+  try {
+    await syncDocToFirestore('orders', orderId, updated);
+  } catch (err) {
     console.warn(`Firestore sync note for ${orderId}:`, err);
-  });
+  }
 
   // If agent assignment changed, record specific audit log
   if (updates.agentId && updates.agentId !== existing.agentId) {
@@ -1110,10 +1118,14 @@ export async function updateOrderSchoolDetails(
 
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
-  // Sync target order to Firestore in background without blocking
-  syncDocToFirestore('orders', orderId, updatedOrder).catch(err => {
+  // Wait for the write to land before returning - see the matching comment
+  // in updateOrder() for why this avoids the immediately-following refresh
+  // reading a stale pre-edit value back.
+  try {
+    await syncDocToFirestore('orders', orderId, updatedOrder);
+  } catch (err) {
     console.warn(`Firestore sync note for ${orderId}:`, err);
-  });
+  }
 
   await writeActivityLog({
     userId: user.userId,
@@ -1180,10 +1192,12 @@ export async function updateOrderAgent(
   memoryOrders[orderIdx] = updatedOrder;
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
-  // Sync updated order to Firestore in background without blocking
-  syncDocToFirestore('orders', orderId, updatedOrder).catch(err => {
+  // Wait for the write to land - see the matching comment in updateOrder().
+  try {
+    await syncDocToFirestore('orders', orderId, updatedOrder);
+  } catch (err) {
     console.warn(`Firestore sync note for ${orderId}:`, err);
-  });
+  }
 
   await writeActivityLog({
     userId: user.userId,
@@ -2395,6 +2409,23 @@ export async function updateUserProfile(
   memoryUsers[idx] = updatedUser;
   saveStorage(STORAGE_KEYS.USERS, memoryUsers);
   syncDocToFirestore('users', userId, updatedUser);
+
+  // Keep the UID-keyed permission mirror doc in sync too - same reasoning as
+  // deleteUser()/updateUserRole()/updateUserStatus(): Firestore's security
+  // rules resolve this account's actual permissions from users/{firebaseUid},
+  // not this internal-ID doc, so an edit here (role, active status, etc.)
+  // wouldn't otherwise take effect at the database level.
+  if (updatedUser.firebaseUid) {
+    syncDocToFirestore('users', updatedUser.firebaseUid, {
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      agentId: updatedUser.agentId || null,
+      agentCode: updatedUser.agentCode || null,
+      isActive: updatedUser.isActive,
+      updatedAt: updatedUser.updatedAt
+    });
+  }
 
   // If role is AGENT or agentCode updated, update or create agent record
   if (updatedUser.role === 'AGENT' && updatedUser.agentCode) {
