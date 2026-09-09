@@ -778,7 +778,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  Assigned Regional Agent <span className="text-rose-500">*</span>
+                  Assigned Regional Partner <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
@@ -786,7 +786,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   onChange={(e) => handleAgentChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900"
                 >
-                  <option value="" disabled>Select agent...</option>
+                  <option value="" disabled>Select partner...</option>
                   <option value="AGT-DIRECT">Direct</option>
                   {agents.filter(a => a.agentId !== 'AGT-DIRECT').map(a => (
                     <option key={a.agentId} value={a.agentId}>
