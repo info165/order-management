@@ -1893,20 +1893,19 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
 export async function getAgents(): Promise<Agent[]> {
   try {
     const snap = await getDocs(collection(db, 'agents'));
-    if (!snap.empty) {
-      const remoteAgents: Agent[] = [];
-      snap.forEach(d => {
-        const a = d.data() as Agent;
-        if (a && a.agentId) remoteAgents.push(a);
-      });
-      if (remoteAgents.length > 0) {
-        const merged = new Map<string, Agent>();
-        memoryAgents.forEach(a => merged.set(a.agentId, a));
-        remoteAgents.forEach(a => merged.set(a.agentId, { ...merged.get(a.agentId), ...a }));
-        memoryAgents = Array.from(merged.values());
-        saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
-      }
-    }
+    // Replace (not merge into) the local cache with this authoritative
+    // server-side snapshot - merging only ever added/updated entries and
+    // never dropped ones removed remotely, so a deleted partner (e.g. a
+    // fake test account) kept reappearing in every dropdown that lists
+    // partners, in every browser, forever - the same class of bug already
+    // fixed for orders in subscribeToRealtimeOrders().
+    const remoteAgents: Agent[] = [];
+    snap.forEach(d => {
+      const a = d.data() as Agent;
+      if (a && a.agentId) remoteAgents.push(a);
+    });
+    memoryAgents = remoteAgents;
+    saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
   } catch (e) {
     // Local fallback
   }
