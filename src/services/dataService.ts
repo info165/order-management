@@ -859,7 +859,7 @@ export async function createOrder(
   user: UserProfile
 ): Promise<Order> {
   if (user.role === 'AGENT') {
-    throw new Error('Agents cannot create orders directly. Please contact operations.');
+    throw new Error('Partners cannot create orders directly. Please contact operations.');
   }
 
   // Calculate highest existing serial number reliably
@@ -961,7 +961,7 @@ export async function updateOrder(
 
   const existing = memoryOrders[idx];
   if (user.role === 'AGENT') {
-    throw new Error('Agents cannot modify order fields.');
+    throw new Error('Partners cannot modify order fields.');
   }
 
   const now = new Date().toISOString();
@@ -1006,8 +1006,8 @@ export async function updateOrder(
       action: 'AGENT_REASSIGNED',
       entityType: 'ORDER',
       entityId: orderId,
-      previousValue: `Agent: ${existing.agentName} (${existing.agentId})`,
-      newValue: `Agent: ${updated.agentName} (${updated.agentId})`
+      previousValue: `Partner: ${existing.agentName} (${existing.agentId})`,
+      newValue: `Partner: ${updated.agentName} (${updated.agentId})`
     });
 
     // Notify newly assigned agent
@@ -1357,7 +1357,7 @@ export async function updateOrderStatus(
   if (!order) throw new Error('Order not found');
 
   if (user.role === 'AGENT') {
-    throw new Error('Agents cannot update order status.');
+    throw new Error('Partners cannot update order status.');
   }
 
   const oldStatus = order.status;
@@ -1448,7 +1448,7 @@ export async function updateDispatch(
   user: UserProfile
 ): Promise<void> {
   if (user.role === 'AGENT') {
-    throw new Error('Agents cannot update dispatch records.');
+    throw new Error('Partners cannot update dispatch records.');
   }
 
   const order = memoryOrders.find(o => o.orderId === orderId);
@@ -1539,7 +1539,7 @@ export async function markDelivered(
   user: UserProfile
 ): Promise<void> {
   if (user.role === 'AGENT') {
-    throw new Error('Agents cannot record delivery completions.');
+    throw new Error('Partners cannot record delivery completions.');
   }
 
   const order = memoryOrders.find(o => o.orderId === orderId);
@@ -1744,7 +1744,7 @@ export async function uploadDocument(
 
 export async function deleteDocument(documentId: string, user: UserProfile): Promise<void> {
   if (user.role === 'AGENT') {
-    throw new Error('Agents cannot delete documents.');
+    throw new Error('Partners cannot delete documents.');
   }
   memoryDocuments = memoryDocuments.filter(d => d.documentId !== documentId);
   saveStorage(STORAGE_KEYS.DOCUMENTS, memoryDocuments);
@@ -1856,7 +1856,7 @@ export async function getSchools(): Promise<School[]> {
 }
 
 export async function createSchool(schoolInput: Omit<School, 'schoolId' | 'createdAt' | 'updatedAt'>, user: UserProfile): Promise<School> {
-  if (user.role === 'AGENT') throw new Error('Agents cannot create schools.');
+  if (user.role === 'AGENT') throw new Error('Partners cannot create schools.');
   const schoolId = `SCH-${String(memorySchools.length + 1).padStart(3, '0')}`;
   const now = new Date().toISOString();
   const newSchool: School = {
@@ -1948,7 +1948,7 @@ export async function updateAgent(agentId: string, updates: Partial<Agent>, user
     throw new Error('Unauthorized to modify agent credentials.');
   }
   const idx = memoryAgents.findIndex(a => a.agentId === agentId);
-  if (idx === -1) throw new Error('Agent not found');
+  if (idx === -1) throw new Error('Partner not found');
   const updated = { ...memoryAgents[idx], ...updates, updatedAt: new Date().toISOString() };
   memoryAgents[idx] = updated;
   saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);

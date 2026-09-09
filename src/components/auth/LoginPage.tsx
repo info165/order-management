@@ -178,7 +178,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                 GovSchool Order ERP
               </span>
               <span className="text-[11px] text-amber-400 font-medium">
-                Institutional Supply & Agent Portal
+                Institutional Supply & Partner Portal
               </span>
             </div>
           </div>
@@ -316,7 +316,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
               <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs">
                 <div className="space-y-1.5">
                   <label className="block text-slate-300 font-semibold">
-                    Email / Agent Code / Username
+                    Email / Partner Code / Username
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -432,7 +432,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
                       className="text-left px-3 py-2 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/40 flex items-center justify-between group transition-colors"
                     >
                       <div>
-                        <div className="font-semibold text-slate-200 text-xs">Regional Field Agent (Agent View)</div>
+                        <div className="font-semibold text-slate-200 text-xs">Regional Field Partner (Partner View)</div>
                         <div className="text-[10px] text-slate-500 font-mono">satish.pandey@agents.govschool.in</div>
                       </div>
                       <span className="text-[10px] text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform">

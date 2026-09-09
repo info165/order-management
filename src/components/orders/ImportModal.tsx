@@ -294,7 +294,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ currentUser, onClose, 
                       <th className="px-3 py-2">School Name</th>
                       <th className="px-3 py-2">Category</th>
                       <th className="px-3 py-2 text-right">L1 Price (₹)</th>
-                      <th className="px-3 py-2">Dealer / Agent</th>
+                      <th className="px-3 py-2">Dealer / Partner</th>
                       <th className="px-3 py-2">Courier / Docket</th>
                       <th className="px-3 py-2">Payment</th>
                     </tr>

@@ -597,7 +597,7 @@ export const OrderList: React.FC<OrderListProps> = ({
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Instant search: School, Contract #, S.No, Agent, Company, Docket..."
+              placeholder="Instant search: School, Contract #, S.No, Partner, Company, Docket..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-medium"
@@ -799,7 +799,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                 isContractFiltered ? 'Contract' : null,
                 isSchoolFiltered ? 'School' : null,
                 isCategoryFiltered ? 'Category' : null,
-                isAgentFiltered ? 'Agent' : null,
+                isAgentFiltered ? 'Partner' : null,
                 isValueFiltered ? 'Value' : null,
                 isCompanyFiltered ? 'Company' : null,
                 isStatusFiltered ? 'Status' : null,
@@ -822,7 +822,7 @@ export const OrderList: React.FC<OrderListProps> = ({
               {selectedOrderIds.length} {selectedOrderIds.length === 1 ? 'Order' : 'Orders'} Selected
             </span>
 
-            {/* Bulk Change Agent Control */}
+            {/* Bulk Change Partner Control */}
             {canManageOrders && (
               <>
                 <span className="text-slate-600 hidden sm:inline">|</span>
@@ -832,9 +832,9 @@ export const OrderList: React.FC<OrderListProps> = ({
                     onChange={(e) => setBulkSelectedAgentId(e.target.value)}
                     className="bg-slate-900 text-white text-xs px-2 py-1 rounded-md border border-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
                     disabled={isApplyingBulkAgent}
-                    title="Select Agent for Bulk Reassignment"
+                    title="Select Partner for Bulk Reassignment"
                   >
-                    <option value="">Change Agent...</option>
+                    <option value="">Change Partner...</option>
                     <option value="AGT-DIRECT">Direct</option>
                     {agentsList.filter(agt => agt.agentId !== 'AGT-DIRECT').map(agt => (
                       <option key={agt.agentId} value={agt.agentId}>
@@ -1079,14 +1079,14 @@ export const OrderList: React.FC<OrderListProps> = ({
                       <div
                         onClick={() => handleSort('agent')}
                         className="flex items-center gap-1 cursor-pointer hover:text-slate-950 truncate"
-                        title="Sort by Regional Agent"
+                        title="Sort by Regional Partner"
                       >
-                        <span>Agent</span>
+                        <span>Partner</span>
                         {renderSortIndicator('agent')}
                       </div>
                       <ColumnFilterPopover
                         columnId="agent"
-                        title="Regional Agent"
+                        title="Regional Partner"
                         filterType="multi-select"
                         isActive={isAgentFiltered}
                         isOpen={openPopoverId === 'agent'}

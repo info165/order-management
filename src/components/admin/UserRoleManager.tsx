@@ -10,7 +10,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   SALES_COORDINATOR: 'Registers GeM purchase orders and coordinates institutional deliveries.',
   ACCOUNTS: 'Manages invoices, bank transaction references, and payment status updates.',
   WAREHOUSE: 'Handles packing, dispatch manifests, courier selection, and tracking dockets.',
-  AGENT: 'Restricted regional field agent. Isolated view to only assigned school orders.'
+  AGENT: 'Restricted regional field partner. Isolated view to only assigned school orders.'
 };
 
 interface UserRoleManagerProps {
@@ -137,7 +137,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({ currentUser })
                 <th className="px-4 py-3">User Name</th>
                 <th className="px-4 py-3">Email Address</th>
                 <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Assigned Agent ID</th>
+                <th className="px-4 py-3">Assigned Partner ID</th>
                 <th className="px-4 py-3">Territory</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>

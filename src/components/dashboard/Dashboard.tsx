@@ -124,7 +124,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            {isAgent ? `Agent Dashboard: ${currentUser.name}` : 'Executive Operations & Order Dashboard'}
+            {isAgent ? `Partner Dashboard: ${currentUser.name}` : 'Executive Operations & Order Dashboard'}
             {isAgent && (
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
                 {currentUser.agentCode}
@@ -308,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div>
                       <div className="font-semibold text-slate-800">{o.schoolName}</div>
                       <div className="text-[11px] text-slate-500">
-                        Agent: {o.agentName} | Due: {o.expectedPaymentDate || 'N/A'}
+                        Partner: {o.agentName} | Due: {o.expectedPaymentDate || 'N/A'}
                       </div>
                     </div>
                     <div className="text-right">
@@ -408,7 +408,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
                 <Users className="w-4 h-4 text-slate-500" />
-                <span>Agent Performance</span>
+                <span>Partner Performance</span>
               </h3>
               <span className="text-xs text-slate-400 font-mono">By Value</span>
             </div>
@@ -445,7 +445,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div>
               <div className="flex items-center gap-2 text-amber-900 font-bold text-sm mb-2">
                 <Users className="w-4 h-4 text-amber-700" />
-                <span>Agent Information & Verification</span>
+                <span>Partner Information & Verification</span>
               </div>
               <p className="text-xs text-amber-800 mb-4">
                 You are securely authenticated as an authorized regional partner. All shown orders have been verified against GeM contracts and dispatched directly to your designated Kendriya Vidyalayas and Navodaya Vidyalayas.
@@ -495,7 +495,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <th className="px-4 py-3">Order ID / Contract</th>
                 <th className="px-4 py-3">School Name</th>
                 <th className="px-4 py-3">Category</th>
-                {!isAgent && <th className="px-4 py-3">Agent</th>}
+                {!isAgent && <th className="px-4 py-3">Partner</th>}
                 <th className="px-4 py-3 text-right">Value (₹)</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Courier / Tracking</th>

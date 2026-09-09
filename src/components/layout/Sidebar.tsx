@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentSection, onSelectSectio
     { id: 'dashboard' as NavSection, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'orders' as NavSection, label: 'Orders', icon: ShoppingCart },
     { id: 'schools' as NavSection, label: 'Schools', icon: GraduationCap },
-    { id: 'agents' as NavSection, label: 'Agents', icon: Users },
+    { id: 'agents' as NavSection, label: 'Partners', icon: Users },
     { id: 'products' as NavSection, label: 'Products & Labs', icon: Package },
     { id: 'payments' as NavSection, label: 'Payments', icon: CreditCard },
     { id: 'dispatch' as NavSection, label: 'Dispatch & Courier', icon: Truck },
@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentSection, onSelectSectio
         <div className="mb-4 px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-700/60">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Portal View</div>
           <div className="text-xs font-semibold text-slate-100 flex items-center justify-between mt-0.5">
-            <span>{isAgent ? 'Agent Portal' : 'Operations Console'}</span>
+            <span>{isAgent ? 'Partner Portal' : 'Operations Console'}</span>
             <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-medium ${
               isAgent ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-blue-950 text-blue-300 border border-blue-800'
             }`}>

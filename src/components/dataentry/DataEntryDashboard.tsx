@@ -174,7 +174,7 @@ export const DataEntryDashboard: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by Order ID, School, or Agent..."
+              placeholder="Search by Order ID, School, or Partner..."
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500 font-medium bg-white"
             />
           </div>
@@ -222,7 +222,7 @@ export const DataEntryDashboard: React.FC = () => {
               <tr>
                 <th className="px-4 py-3">Order ID & Date</th>
                 <th className="px-4 py-3">School / KV Institution</th>
-                <th className="px-4 py-3">Agent / Territory</th>
+                <th className="px-4 py-3">Partner / Territory</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3 text-right">Order Value (GST Inc.)</th>
                 <th className="px-4 py-3">Order Status</th>

@@ -129,7 +129,7 @@ export function validateSpreadsheetRows(
     }
 
     // Agent / Dealer
-    const dealerName = getField(row, 'DEALER', 'Dealer', 'Agent', 'agentName');
+    const dealerName = getField(row, 'DEALER', 'Dealer', 'Agent', 'Partner', 'agentName');
     let agentId = 'AGT-DIRECT';
     let agentName = 'In-House / Direct Tender';
     let agentCode = 'AGT-DIR';

@@ -264,7 +264,7 @@ export const CredentialManager: React.FC<CredentialManagerProps> = ({ currentUse
             </h2>
           </div>
           <p className="text-xs text-slate-500">
-            Official gateway for issuing personnel credentials. All Data Entry Operators, Field Agents, and Staff logins are provisioned exclusively here.
+            Official gateway for issuing personnel credentials. All Data Entry Operators, Field Partners, and Staff logins are provisioned exclusively here.
           </p>
         </div>
 
@@ -373,11 +373,11 @@ export const CredentialManager: React.FC<CredentialManagerProps> = ({ currentUse
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-1">
-          <span className="text-[10px] font-bold uppercase text-amber-600">Regional Field Agents</span>
+          <span className="text-[10px] font-bold uppercase text-amber-600">Regional Field Partners</span>
           <div className="text-xl font-extrabold text-amber-700">
             {users.filter(u => u.role === 'AGENT').length}
           </div>
-          <span className="text-[10px] text-slate-500">Dedicated Agent View</span>
+          <span className="text-[10px] text-slate-500">Dedicated Partner View</span>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-1">
@@ -417,7 +417,7 @@ export const CredentialManager: React.FC<CredentialManagerProps> = ({ currentUse
           {[
             { id: 'ALL', label: 'All Accounts' },
             { id: 'DATA_ENTRY_OPERATOR', label: 'Data Entry' },
-            { id: 'AGENT', label: 'Agents' },
+            { id: 'AGENT', label: 'Partners' },
             { id: 'ADMIN', label: 'Operations' },
             { id: 'ACCOUNTS', label: 'Accounts' },
             { id: 'DISPATCH', label: 'Logistics' }
@@ -454,7 +454,7 @@ export const CredentialManager: React.FC<CredentialManagerProps> = ({ currentUse
                 <th className="px-4 py-3">Personnel Name</th>
                 <th className="px-4 py-3">Login ID / Email</th>
                 <th className="px-4 py-3">Assigned Role</th>
-                <th className="px-4 py-3">Territory / Agent Code</th>
+                <th className="px-4 py-3">Territory / Partner Code</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Issued By</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -636,7 +636,7 @@ export const CredentialManager: React.FC<CredentialManagerProps> = ({ currentUse
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 font-semibold text-slate-900 bg-white"
                 >
                   <option value="DATA_ENTRY_OPERATOR">DATA ENTRY OPERATOR — Dedicated PO Punching & School Registry View</option>
-                  <option value="AGENT">REGIONAL FIELD AGENT — Dedicated Agent Portal & Commission View</option>
+                  <option value="AGENT">REGIONAL FIELD PARTNER — Dedicated Partner Portal & Commission View</option>
                   <option value="ADMIN">OPERATIONS MANAGER — Full order, dispatch, and reports workspace</option>
                   <option value="ACCOUNTS">ACCOUNTS & BILLING — Invoicing, PFMS, and payment transactions</option>
                   <option value="DISPATCH">LOGISTICS & DISPATCH — Courier dockets, manifest, and deliveries</option>
@@ -648,11 +648,11 @@ export const CredentialManager: React.FC<CredentialManagerProps> = ({ currentUse
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-3">
                   <div className="font-bold text-amber-900 flex items-center gap-1.5 text-xs">
                     <Users className="w-4 h-4 text-amber-600" />
-                    <span>Agent Configuration</span>
+                    <span>Partner Configuration</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-amber-900 font-semibold text-[11px] mb-0.5">Agent Code</label>
+                      <label className="block text-amber-900 font-semibold text-[11px] mb-0.5">Partner Code</label>
                       <input
                         type="text"
                         value={formData.agentCode}

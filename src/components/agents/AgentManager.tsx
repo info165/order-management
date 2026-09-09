@@ -115,7 +115,7 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ orders, currentUser,
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-amber-600" />
-            <span>Regional Agents & Institutional Associates</span>
+            <span>Regional Partners & Institutional Associates</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Partner network managing Kendriya Vidyalaya and Navodaya school relations and treasury follow-up
@@ -129,7 +129,7 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ orders, currentUser,
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-semibold shadow-sm transition-colors self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Agent</span>
+            <span>Add Partner</span>
           </button>
         )}
       </div>
@@ -333,7 +333,7 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ orders, currentUser,
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-sm text-slate-900">Add Regional Agent / Partner</h3>
+              <h3 className="font-bold text-sm text-slate-900">Add Regional Partner</h3>
               <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-800">
                 <X className="w-4 h-4" />
               </button>
@@ -414,7 +414,7 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ orders, currentUser,
                   type="submit"
                   className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shadow-sm"
                 >
-                  Register Agent
+                  Register Partner
                 </button>
               </div>
             </form>

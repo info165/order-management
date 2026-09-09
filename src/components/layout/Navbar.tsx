@@ -259,7 +259,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     }`}
                   >
                     <Users className="w-4 h-4 text-amber-400" />
-                    <span>Agent Portal View</span>
+                    <span>Partner Portal View</span>
                   </button>
 
                   {(activeRole === 'SUPER_ADMIN' || activeRole === 'ADMIN') && (

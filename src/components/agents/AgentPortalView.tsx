@@ -103,7 +103,7 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30">
               <Users className="w-3.5 h-3.5" />
-              <span>Field Agent Workspace • Dedicated Regional View</span>
+              <span>Field Partner Workspace • Dedicated Regional View</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
               <span>{currentUser.name}</span>

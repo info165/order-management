@@ -272,7 +272,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                       <tr>
                         <th className="px-4 py-2.5">Order ID</th>
                         <th className="px-4 py-2.5">Category</th>
-                        <th className="px-4 py-2.5">Agent</th>
+                        <th className="px-4 py-2.5">Partner</th>
                         <th className="px-4 py-2.5 text-right">Value (₹)</th>
                         <th className="px-4 py-2.5">Status</th>
                         <th className="px-4 py-2.5">Payment</th>

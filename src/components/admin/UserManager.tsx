@@ -212,8 +212,8 @@ export const ROLE_PERMISSIONS_CONFIG: Record<UserRole, RolePermissionDetail> = {
   },
   AGENT: {
     role: 'AGENT',
-    title: 'Regional Field Agent',
-    description: 'Field agent with strict territory isolation. Can only view orders assigned to their agent code.',
+    title: 'Regional Field Partner',
+    description: 'Field partner with strict territory isolation. Can only view orders assigned to their agent code.',
     scope: 'Assigned Territory Orders Only',
     permissions: {
       canManageUsers: false,
@@ -228,9 +228,9 @@ export const ROLE_PERMISSIONS_CONFIG: Record<UserRole, RolePermissionDetail> = {
       canManageSettings: false,
     },
     keyDuties: [
-      'Access dedicated Agent Portal with assigned school orders',
+      'Access dedicated Partner Portal with assigned school orders',
       'Track order fulfillment and delivery statuses for their clients',
-      'Data isolation: Cannot see orders from other agents or states',
+      'Data isolation: Cannot see orders from other partners or states',
       'Cannot view wholesale profit margins or administrative settings'
     ]
   }
@@ -725,7 +725,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
                 <th className="py-3.5 px-3 text-center text-sky-400 min-w-[110px]">Data Entry</th>
                 <th className="py-3.5 px-3 text-center text-emerald-400 min-w-[100px]">Accounts</th>
                 <th className="py-3.5 px-3 text-center text-orange-400 min-w-[100px]">Dispatch</th>
-                <th className="py-3.5 px-3 text-center text-amber-400 min-w-[100px]">Field Agent</th>
+                <th className="py-3.5 px-3 text-center text-amber-400 min-w-[100px]">Field Partner</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-300 text-xs">
@@ -745,7 +745,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
               {/* Order Registry View All */}
               <tr className="hover:bg-slate-800/40">
                 <td className="py-3 px-4 font-semibold text-slate-200">
-                  View All Orders (Across All States & Agents)
+                  View All Orders (Across All States & Partners)
                 </td>
                 <td className="py-3 px-3 text-center"><span className="text-emerald-400 font-bold">✓</span></td>
                 <td className="py-3 px-3 text-center"><span className="text-emerald-400 font-bold">✓</span></td>
@@ -942,7 +942,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-500 font-medium"
                   >
                     <option value="DATA_ENTRY_OPERATOR">Data Entry Operator</option>
-                    <option value="AGENT">Regional Field Agent</option>
+                    <option value="AGENT">Regional Field Partner</option>
                     <option value="ADMIN">Admin (Operations)</option>
                     <option value="ACCOUNTS">Accounts & Payments</option>
                     <option value="DISPATCH">Dispatch & Logistics</option>
@@ -986,7 +986,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
 
                 {createForm.role === 'AGENT' ? (
                   <div className="space-y-1">
-                    <label className="block text-slate-300 font-semibold">Agent Code</label>
+                    <label className="block text-slate-300 font-semibold">Partner Code</label>
                     <input
                       type="text"
                       value={createForm.agentCode}
@@ -1089,7 +1089,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-500 font-medium disabled:opacity-60"
                   >
                     <option value="DATA_ENTRY_OPERATOR">Data Entry Operator</option>
-                    <option value="AGENT">Regional Field Agent</option>
+                    <option value="AGENT">Regional Field Partner</option>
                     <option value="ADMIN">Admin (Operations)</option>
                     <option value="ACCOUNTS">Accounts & Payments</option>
                     <option value="DISPATCH">Dispatch & Logistics</option>
@@ -1133,7 +1133,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
 
                 {editForm.role === 'AGENT' ? (
                   <div className="space-y-1">
-                    <label className="block text-slate-300 font-semibold">Agent Code</label>
+                    <label className="block text-slate-300 font-semibold">Partner Code</label>
                     <input
                       type="text"
                       value={editForm.agentCode}
