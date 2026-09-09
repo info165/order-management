@@ -1211,7 +1211,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
             <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-xs">
               <div className="font-bold text-slate-200">{deletingUser.name}</div>
               <div className="text-slate-400 font-mono">{deletingUser.email}</div>
-              <div className="text-amber-400 font-semibold">{deletingUser.role}</div>
+              <div className="text-amber-400 font-semibold">{deletingUser.role === 'AGENT' ? 'PARTNER' : deletingUser.role}</div>
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed">
