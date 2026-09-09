@@ -53,7 +53,7 @@ const ROLE_CONFIG: Record<
     desc: 'Registers orders, schools, and updates basic records'
   },
   AGENT: {
-    label: 'Regional Agent',
+    label: 'Regional Partner',
     badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
     desc: 'Field agent restricted to assigned school orders'
   },
@@ -532,7 +532,7 @@ export const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
             <option value="SUPER_ADMIN">Super Admin</option>
             <option value="ADMIN">Admin</option>
             <option value="DATA_ENTRY_OPERATOR">Data Entry Operator</option>
-            <option value="AGENT">Regional Agent</option>
+            <option value="AGENT">Regional Partner</option>
             <option value="ACCOUNTS">Accounts</option>
             <option value="DISPATCH">Dispatch & Logistics</option>
           </select>
