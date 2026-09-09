@@ -80,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentSection, onSelectSectio
             <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-medium ${
               isAgent ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-blue-950 text-blue-300 border border-blue-800'
             }`}>
-              {activeRole}
+              {isAgent ? 'PARTNER' : activeRole}
             </span>
           </div>
         </div>

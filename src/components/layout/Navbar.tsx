@@ -20,6 +20,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
+const ROLE_DISPLAY_LABELS: Record<string, string> = {
+  AGENT: 'PARTNER'
+};
+const displayRole = (role: string) => ROLE_DISPLAY_LABELS[role] || role;
+
 interface NavbarProps {
   activeSection: string;
   onNavigate: (section: string) => void;
@@ -143,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {currentUser?.name?.split(' ')[0]}
                 </div>
                 <div className="text-[10px] text-slate-400 leading-none">
-                  {activeRole}
+                  {displayRole(activeRole)}
                 </div>
               </div>
               <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -156,7 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="font-bold text-slate-100">{currentUser?.name}</div>
                   <div className="text-slate-400 text-[11px] font-mono truncate">{currentUser?.email}</div>
                   <div className="mt-1 inline-block px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-amber-400 font-mono text-[10px]">
-                    Role: {activeRole}
+                    Role: {displayRole(activeRole)}
                   </div>
                 </div>
 

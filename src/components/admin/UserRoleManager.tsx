@@ -160,7 +160,7 @@ export const UserRoleManager: React.FC<UserRoleManagerProps> = ({ currentUser })
                         u.role === 'WAREHOUSE' ? 'bg-orange-50 text-orange-800 border-orange-200' :
                         'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {u.role}
+                        {u.role === 'AGENT' ? 'PARTNER' : u.role}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-500">
