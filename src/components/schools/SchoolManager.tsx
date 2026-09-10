@@ -12,7 +12,7 @@ import {
   X
 } from 'lucide-react';
 import { School, Order, UserProfile } from '../../types';
-import { getSchools, createSchool } from '../../services/dataService';
+import { createSchool, subscribeToRealtimeSchools } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 
@@ -29,7 +29,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [selectedType, setSelectedType] = useState('ALL');
   const [selectedState, setSelectedState] = useState('ALL');
   const [phoneFilter, setPhoneFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
-  const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
 
   // New school modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -41,22 +41,25 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [newPrincipal, setNewPrincipal] = useState('');
   const [newPhone, setNewPhone] = useState('');
 
-  const loadSchools = async () => {
-    setLoading(true);
-    try {
-      const data = await getSchools();
-      setSchools(data);
-      if (data.length > 0 && !selectedSchool) {
-        setSelectedSchool(data[0]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Live subscription instead of a one-time fetch, so an edit made elsewhere
+  // (e.g. a phone number synced back from an order's School Details panel)
+  // shows up here immediately - no leaving the page and coming back, no
+  // hard refresh, and this also picks up changes from any other user's
+  // session in real time.
   useEffect(() => {
-    loadSchools();
+    setLoading(true);
+    const unsubscribe = subscribeToRealtimeSchools((data) => {
+      setSchools(data);
+      setSelectedSchoolId((current) => current ?? (data.length > 0 ? data[0].schoolId : null));
+      setLoading(false);
+    });
+    return unsubscribe;
   }, []);
+
+  const selectedSchool = useMemo(
+    () => schools.find(s => s.schoolId === selectedSchoolId) || null,
+    [schools, selectedSchoolId]
+  );
 
   const states = useMemo(() => Array.from(new Set(schools.map(s => s.state))).filter(Boolean), [schools]);
 
@@ -123,8 +126,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
         currentUser
       );
       setShowAddModal(false);
-      await loadSchools();
-      setSelectedSchool(created);
+      setSelectedSchoolId(created.schoolId);
     } catch (err: any) {
       alert(err.message);
     }
@@ -214,7 +216,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
               return (
                 <div
                   key={s.schoolId}
-                  onClick={() => setSelectedSchool(s)}
+                  onClick={() => setSelectedSchoolId(s.schoolId)}
                   className={`p-3.5 cursor-pointer text-xs transition-colors flex items-center justify-between ${
                     isSelected ? 'bg-amber-50/70 border-l-4 border-amber-500' : 'hover:bg-slate-50'
                   }`}

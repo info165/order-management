@@ -1914,6 +1914,41 @@ export async function writeActivityLog(
 // ----------------------------------------------------
 // MASTER DATA (Schools, Agents, Products, Users)
 // ----------------------------------------------------
+// Live-updating school list. The School Registry previously only ever
+// fetched schools once when that page first mounted, so an edit made
+// elsewhere - e.g. the phone number synced back from an order's School
+// Details panel - never showed up there until the page was left and
+// reopened (or hard-refreshed). Mirrors subscribeToRealtimeOrders(): an
+// unfiltered onSnapshot listener is fine here since the schools collection's
+// security rule (allow read: if isSignedIn()) has no per-document scoping to
+// worry about, unlike orders.
+export function subscribeToRealtimeSchools(onUpdate: (schools: School[]) => void): () => void {
+  onUpdate([...memorySchools]);
+
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'schools'),
+      (snapshot) => {
+        const remoteSchools: School[] = [];
+        snapshot.forEach((docSnap) => {
+          const s = docSnap.data() as School;
+          if (s && s.schoolId) remoteSchools.push(s);
+        });
+        memorySchools = remoteSchools;
+        saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
+        onUpdate([...memorySchools]);
+      },
+      (err) => {
+        console.warn('Real-time schools listener notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Could not establish real-time schools listener:', err);
+    return () => {};
+  }
+}
+
 export async function getSchools(): Promise<School[]> {
   try {
     const snap = await getDocs(collection(db, 'schools'));
