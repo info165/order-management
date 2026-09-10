@@ -2070,17 +2070,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         <input
                           type="number"
                           required
-                          min={0.01}
-                          step={0.01}
+                          min={0.00001}
+                          step={0.00001}
                           value={paymentAmount}
                           onChange={(e) => {
-                            // Repeatedly clicking the spinner arrows (each
-                            // step +/-0.01) accumulates binary floating-point
-                            // drift, e.g. 15000 -> 15000.8644434 instead of
-                            // 15000.01 - round back to 2 decimal places (a
-                            // real currency amount) on every change.
+                            // Repeatedly clicking the spinner arrows accumulates
+                            // binary floating-point drift (e.g. 15000 ->
+                            // 15000.864443172...) - round back to 5 decimal
+                            // places on every change to keep that in check.
                             const raw = Number(e.target.value);
-                            setPaymentAmount(Number.isFinite(raw) ? Math.round(raw * 100) / 100 : 0);
+                            setPaymentAmount(Number.isFinite(raw) ? Math.round(raw * 100000) / 100000 : 0);
                           }}
                           className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
                         />
