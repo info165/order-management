@@ -1835,20 +1835,18 @@ export async function writeActivityLog(
 export async function getSchools(): Promise<School[]> {
   try {
     const snap = await getDocs(collection(db, 'schools'));
-    if (!snap.empty) {
-      const remoteSchools: School[] = [];
-      snap.forEach(d => {
-        const s = d.data() as School;
-        if (s && s.schoolId) remoteSchools.push(s);
-      });
-      if (remoteSchools.length > 0) {
-        const merged = new Map<string, School>();
-        memorySchools.forEach(s => merged.set(s.schoolId, s));
-        remoteSchools.forEach(s => merged.set(s.schoolId, { ...merged.get(s.schoolId), ...s }));
-        memorySchools = Array.from(merged.values());
-        saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-      }
-    }
+    // Replace (not merge into) the local cache with this authoritative
+    // server-side snapshot - merging only ever added/updated entries and
+    // never dropped ones removed remotely, so a deleted school (e.g. a
+    // fake test record) kept reappearing in the School Registry forever,
+    // the same class of bug already fixed for partners in getAgents().
+    const remoteSchools: School[] = [];
+    snap.forEach(d => {
+      const s = d.data() as School;
+      if (s && s.schoolId) remoteSchools.push(s);
+    });
+    memorySchools = remoteSchools;
+    saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
   } catch (e) {
     // Local fallback
   }
