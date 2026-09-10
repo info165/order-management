@@ -17,6 +17,7 @@ import { Order, UserProfile } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
+import { getDisplaySerialNo } from '../../utils/orderDisplay';
 
 interface DashboardProps {
   orders: Order[];
@@ -510,7 +511,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-3 font-mono font-medium text-slate-900">
-                    <div>{order.orderId}</div>
+                    <div>
+                      {!isAgent && getDisplaySerialNo(order, orders)
+                        ? `Order No - ${getDisplaySerialNo(order, orders)}`
+                        : order.orderId}
+                    </div>
                     <div className="text-[11px] text-slate-400">{order.orderNumber}</div>
                   </td>
                   <td className="px-4 py-3">

@@ -3,6 +3,7 @@ import { Users, Search, Plus, Phone, Mail, MapPin, Award, CheckCircle, X } from 
 import { Agent, Order, UserProfile } from '../../types';
 import { getAgents, createAgent } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
+import { getDisplaySerialNo } from '../../utils/orderDisplay';
 
 interface AgentManagerProps {
   orders: Order[];
@@ -294,7 +295,11 @@ export const AgentManager: React.FC<AgentManagerProps> = ({ orders, currentUser,
                             onClick={() => onSelectOrder(o)}
                             className="hover:bg-slate-50 cursor-pointer"
                           >
-                            <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{o.orderId}</td>
+                            <td className="px-4 py-2.5 font-mono font-bold text-slate-900">
+                              {currentUser.role !== 'AGENT' && getDisplaySerialNo(o, orders)
+                                ? `Order No - ${getDisplaySerialNo(o, orders)}`
+                                : o.orderId}
+                            </td>
                             <td className="px-4 py-2.5 font-medium text-slate-800 max-w-[200px] truncate">
                               {o.schoolName}
                             </td>

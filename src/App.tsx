@@ -29,6 +29,7 @@ import {
   migrateAllUsersToFirebaseAuth
 } from './services/dataService';
 import { exportOrdersToExcel } from './services/importExportService';
+import { getDisplaySerialNo } from './utils/orderDisplay';
 import { ArrowLeft, LayoutGrid, Building2 } from 'lucide-react';
 
 function MainApp() {
@@ -416,14 +417,7 @@ function MainApp() {
       {selectedOrder && (
         <OrderDetailModal
           order={selectedOrder}
-          displaySerialNo={
-            !isAgent
-              ? [...orders]
-                  .filter(o => !o.isDeleted)
-                  .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0))
-                  .findIndex(o => o.orderId === selectedOrder.orderId) + 1 || undefined
-              : undefined
-          }
+          displaySerialNo={!isAgent ? getDisplaySerialNo(selectedOrder, orders) : undefined}
           currentUser={currentUser}
           onClose={() => setSelectedOrder(null)}
           onOrderUpdated={handleOrderUpdated}

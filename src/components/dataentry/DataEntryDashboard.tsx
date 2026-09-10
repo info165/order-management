@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { NewOrderModal } from '../orders/NewOrderModal';
 import { ImportModal } from '../orders/ImportModal';
 import { OrderDetailModal } from '../orders/OrderDetailModal';
+import { getDisplaySerialNo } from '../../utils/orderDisplay';
 
 export const DataEntryDashboard: React.FC = () => {
   const { currentUser } = useAuth();
@@ -240,7 +241,11 @@ export const DataEntryDashboard: React.FC = () => {
                 filteredOrders.slice(0, 50).map(order => (
                   <tr key={order.orderId} className="hover:bg-sky-50/40 transition-colors">
                     <td className="px-4 py-3 font-mono">
-                      <div className="font-bold text-sky-900">{order.orderId}</div>
+                      <div className="font-bold text-sky-900">
+                        {currentUser?.role !== 'AGENT' && getDisplaySerialNo(order, orders)
+                          ? `Order No - ${getDisplaySerialNo(order, orders)}`
+                          : order.orderId}
+                      </div>
                       <div className="text-[10px] text-slate-400">{order.orderDate}</div>
                     </td>
 
@@ -327,6 +332,9 @@ export const DataEntryDashboard: React.FC = () => {
       {selectedOrder && currentUser && (
         <OrderDetailModal
           order={selectedOrder}
+          displaySerialNo={
+            currentUser?.role !== 'AGENT' ? getDisplaySerialNo(selectedOrder, orders) : undefined
+          }
           currentUser={currentUser}
           onClose={() => setSelectedOrder(null)}
           onOrderUpdated={() => {

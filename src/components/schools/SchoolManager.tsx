@@ -14,6 +14,7 @@ import {
 import { School, Order, UserProfile } from '../../types';
 import { getSchools, createSchool } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
+import { getDisplaySerialNo } from '../../utils/orderDisplay';
 
 interface SchoolManagerProps {
   orders: Order[];
@@ -330,7 +331,11 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                             onClick={() => onSelectOrder(o)}
                             className="hover:bg-slate-50 cursor-pointer"
                           >
-                            <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{o.orderId}</td>
+                            <td className="px-4 py-2.5 font-mono font-bold text-slate-900">
+                              {currentUser.role !== 'AGENT' && getDisplaySerialNo(o, orders)
+                                ? `Order No - ${getDisplaySerialNo(o, orders)}`
+                                : o.orderId}
+                            </td>
                             <td className="px-4 py-2.5 text-slate-700">{o.category}</td>
                             <td className="px-4 py-2.5 text-slate-700">{o.agentName}</td>
                             <td className="px-4 py-2.5 text-right font-mono font-bold text-slate-900">
