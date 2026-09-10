@@ -24,7 +24,7 @@ export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', do
   } else if (cName.includes('dtdc')) {
     targetUrl = `https://www.dtdc.in/tracking.asp`;
   } else if (cName.includes('blue')) {
-    targetUrl = `https://www.bluedart.com/tracking`;
+    targetUrl = `https://www.bluedart.com/web/guest/trackdartresult?trackFor=0&trackNo=${cleanDocket}`;
   }
 
   return (
