@@ -18,7 +18,7 @@ export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', do
 
   let targetUrl = '';
   if (cName.includes('delhivery')) {
-    targetUrl = `https://www.delhivery.com/track/package/${cleanDocket}`;
+    targetUrl = `https://www.delhivery.com/track-v2/lr/${cleanDocket}`;
   } else if (cName.includes('post') || cleanDocket.endsWith('IN')) {
     targetUrl = `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx`;
   } else if (cName.includes('dtdc')) {
