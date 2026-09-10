@@ -1705,6 +1705,86 @@ export async function getPaymentsForOrder(orderId: string): Promise<PaymentTrans
   return memoryPayments.filter(p => p.orderId === orderId);
 }
 
+export async function updatePayment(
+  paymentId: string,
+  updates: {
+    amount: number;
+    paymentMode: string;
+    paymentDate: string;
+    transactionReference: string;
+    bankReference?: string;
+    remarks?: string;
+  },
+  user: UserProfile
+): Promise<PaymentTransaction> {
+  if (user.role === 'AGENT' || user.role === 'DISPATCH') {
+    throw new Error('You do not have permission to edit payments.');
+  }
+
+  const idx = memoryPayments.findIndex(p => p.paymentId === paymentId);
+  if (idx === -1) throw new Error('Payment record not found');
+  const existing = memoryPayments[idx];
+
+  const order = memoryOrders.find(o => o.orderId === existing.orderId);
+  if (!order) throw new Error('Order not found');
+
+  const updatedPayment: PaymentTransaction = {
+    ...existing,
+    amount: updates.amount,
+    paymentMode: updates.paymentMode as any,
+    paymentDate: updates.paymentDate,
+    transactionReference: updates.transactionReference,
+    bankReference: updates.bankReference,
+    remarks: updates.remarks
+  };
+  memoryPayments[idx] = updatedPayment;
+  saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+  try {
+    await syncDocToFirestore('payments', paymentId, updatedPayment);
+  } catch (err) {
+    console.warn(`Firestore sync note for payment ${paymentId}:`, err);
+  }
+
+  // Editing a payment's amount changes what the order has actually received,
+  // so its totals need recomputing the same way addPayment() derives them -
+  // otherwise "Total Received"/"Amount Pending" would silently drift out of
+  // sync with the sum of the individual payment records shown in the ledger.
+  const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
+  const newReceived = memoryPayments
+    .filter(p => p.orderId === existing.orderId)
+    .reduce((sum, p) => sum + p.amount, 0);
+  const newPending = Math.max(0, totalAmount - newReceived);
+
+  let newPaymentStatus: PaymentStatus = 'PARTIALLY_PAID';
+  if (newPending <= 0) {
+    newPaymentStatus = 'PAID';
+  } else if (newReceived === 0) {
+    newPaymentStatus = 'PAYMENT_PENDING';
+  }
+
+  await updateOrder(
+    order.orderId,
+    {
+      amountReceived: newReceived,
+      amountPending: newPending,
+      paymentStatus: newPaymentStatus
+    },
+    user
+  );
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'PAYMENT_EDITED',
+    entityType: 'PAYMENT',
+    entityId: paymentId,
+    previousValue: `₹${existing.amount.toLocaleString('en-IN')} via ${existing.paymentMode}`,
+    newValue: `₹${updatedPayment.amount.toLocaleString('en-IN')} via ${updatedPayment.paymentMode} for order ${order.orderId}`
+  });
+
+  return updatedPayment;
+}
+
 // ----------------------------------------------------
 // DOCUMENTS SERVICE
 // ----------------------------------------------------

@@ -45,6 +45,7 @@ import { TrackingLink } from '../common/TrackingLink';
 import {
   getPaymentsForOrder,
   addPayment,
+  updatePayment,
   getDocumentsForOrder,
   uploadDocument,
   deleteDocument,
@@ -277,6 +278,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [bankRef, setBankRef] = useState('');
   const [paymentRemarks, setPaymentRemarks] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
 
   // Document upload states
   const [docType, setDocType] = useState<any>('Purchase Order');
@@ -600,7 +602,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
-  // Handle Payment Record
+  // Handle Payment Record (add or, when editingPaymentId is set, edit an
+  // existing one - same form, submit button/behavior just switches)
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentAmount <= 0) {
@@ -609,30 +612,70 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
     setIsSubmittingPayment(true);
     try {
-      await addPayment(
-        {
-          orderId: order.orderId,
-          amount: Number(paymentAmount),
-          paymentMode,
-          paymentDate,
-          transactionReference: transactionRef || `REF-${Date.now()}`,
-          bankReference: bankRef || undefined,
-          remarks: paymentRemarks || 'Payment recorded via portal',
-          createdBy: currentUser.userId
-        },
-        currentUser
-      );
+      if (editingPaymentId) {
+        await updatePayment(
+          editingPaymentId,
+          {
+            amount: Number(paymentAmount),
+            paymentMode,
+            paymentDate,
+            transactionReference: transactionRef || `REF-${Date.now()}`,
+            bankReference: bankRef || undefined,
+            remarks: paymentRemarks || 'Payment recorded via portal'
+          },
+          currentUser
+        );
+        alert('Payment successfully updated and balance recalculated.');
+      } else {
+        await addPayment(
+          {
+            orderId: order.orderId,
+            amount: Number(paymentAmount),
+            paymentMode,
+            paymentDate,
+            transactionReference: transactionRef || `REF-${Date.now()}`,
+            bankReference: bankRef || undefined,
+            remarks: paymentRemarks || 'Payment recorded via portal',
+            createdBy: currentUser.userId
+          },
+          currentUser
+        );
+        alert('Payment successfully credited and balance updated.');
+      }
+      setEditingPaymentId(null);
+      setPaymentAmount(0);
+      setPaymentMode('PFMS');
+      setPaymentDate(new Date().toISOString().split('T')[0]);
       setTransactionRef('');
       setBankRef('');
       setPaymentRemarks('');
       await loadData();
       onOrderUpdated();
-      alert('Payment successfully credited and balance updated.');
     } catch (err: any) {
       alert(err.message);
     } finally {
       setIsSubmittingPayment(false);
     }
+  };
+
+  const handleEditPaymentClick = (p: PaymentTransaction) => {
+    setEditingPaymentId(p.paymentId);
+    setPaymentAmount(p.amount);
+    setPaymentMode(p.paymentMode);
+    setPaymentDate(p.paymentDate);
+    setTransactionRef(p.transactionReference || '');
+    setBankRef(p.bankReference || '');
+    setPaymentRemarks(p.remarks || '');
+  };
+
+  const handleCancelEditPayment = () => {
+    setEditingPaymentId(null);
+    setPaymentAmount(0);
+    setPaymentMode('PFMS');
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setTransactionRef('');
+    setBankRef('');
+    setPaymentRemarks('');
   };
 
   // Handle Document Upload
@@ -2011,8 +2054,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               {/* Record Payment Form (Accounts & Admins only) */}
               {!isAgent && (
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
-                    Record Payment Received from School
+                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100 flex items-center justify-between">
+                    <span>{editingPaymentId ? 'Edit Recorded Payment' : 'Record Payment Received from School'}</span>
+                    {editingPaymentId && (
+                      <span className="text-[10px] font-bold uppercase text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                        Editing
+                      </span>
+                    )}
                   </h3>
 
                   <form onSubmit={handleAddPayment} className="space-y-4 text-xs">
@@ -2022,7 +2070,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         <input
                           type="number"
                           required
-                          min={1}
+                          min={0.01}
+                          step={0.01}
                           value={paymentAmount}
                           onChange={(e) => setPaymentAmount(Number(e.target.value))}
                           className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -2092,13 +2141,25 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       />
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      {editingPaymentId && (
+                        <button
+                          type="button"
+                          onClick={handleCancelEditPayment}
+                          disabled={isSubmittingPayment}
+                          className="px-4 py-2 text-slate-600 hover:text-slate-900 font-semibold disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
                       <button
                         type="submit"
                         disabled={isSubmittingPayment}
                         className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm disabled:opacity-50"
                       >
-                        {isSubmittingPayment ? 'Recording...' : 'Credit Payment to Account'}
+                        {isSubmittingPayment
+                          ? (editingPaymentId ? 'Updating...' : 'Recording...')
+                          : (editingPaymentId ? 'Update Payment' : 'Credit Payment to Account')}
                       </button>
                     </div>
                   </form>
@@ -2122,18 +2183,22 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <th className="px-4 py-2.5">Reference / UTR</th>
                       <th className="px-4 py-2.5">Remarks</th>
                       <th className="px-4 py-2.5 text-right">Amount (₹)</th>
+                      {!isAgent && <th className="px-4 py-2.5 text-center">Action</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {payments.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-400">
+                        <td colSpan={isAgent ? 5 : 6} className="py-8 text-center text-slate-400">
                           No payment credits logged for this order yet.
                         </td>
                       </tr>
                     ) : (
                       payments.map((p) => (
-                        <tr key={p.paymentId} className="hover:bg-slate-50/60">
+                        <tr
+                          key={p.paymentId}
+                          className={`hover:bg-slate-50/60 ${editingPaymentId === p.paymentId ? 'bg-amber-50/70' : ''}`}
+                        >
                           <td className="px-4 py-2.5 font-mono text-slate-800">{p.paymentDate}</td>
                           <td className="px-4 py-2.5">
                             <span className="font-semibold px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[11px]">
@@ -2150,6 +2215,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <td className="px-4 py-2.5 text-right font-mono font-bold text-emerald-700">
                             <CurrencyFormatter amount={p.amount} />
                           </td>
+                          {!isAgent && (
+                            <td className="px-4 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleEditPaymentClick(p)}
+                                title="Edit this payment"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
