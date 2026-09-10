@@ -55,7 +55,8 @@ import {
   updateOrder,
   updateOrderSchoolDetails,
   updateOrderAgent,
-  getAgents
+  getAgents,
+  getSystemSettings
 } from '../../services/dataService';
 
 interface OrderDetailModalProps {
@@ -118,6 +119,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [contractFormOrderValue, setContractFormOrderValue] = useState<number>(order.orderValue || 0);
   const [isSavingContract, setIsSavingContract] = useState(false);
   const [contractSaveError, setContractSaveError] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<string[]>([]);
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -128,6 +130,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   useEffect(() => {
     getAgents().then(setAvailableAgents).catch(console.error);
+    getSystemSettings().then(s => setCompanies(s.companies || [])).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -1150,10 +1153,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                             disabled={isSavingContract}
                           >
                             <option value="" disabled>Select company...</option>
-                            <option value="FIPL">FIPL</option>
-                            <option value="ARKAY">ARKAY</option>
-                            <option value="VIGNAN">VIGNAN</option>
-                            <option value="TTPL">TTPL</option>
+                            {companies.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
                           </select>
                         </div>
                         <div>

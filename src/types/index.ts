@@ -390,4 +390,5 @@ export interface SystemSettings {
   paymentModes: string[];
   dispatchModes: string[];
   couriers: string[];
+  companies: string[];
 }

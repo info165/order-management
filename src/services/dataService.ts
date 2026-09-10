@@ -2638,6 +2638,18 @@ export async function verifyOtpAndResetPassword(
 }
 
 export async function getSystemSettings(): Promise<SystemSettings> {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'global'));
+    if (snap.exists()) {
+      // Merge over the local defaults rather than replacing outright, so a
+      // settings doc saved before a new field (e.g. companies) existed still
+      // comes back with a sensible default for it instead of undefined.
+      memorySettings = { ...memorySettings, ...(snap.data() as Partial<SystemSettings>) };
+      saveStorage(STORAGE_KEYS.SETTINGS, memorySettings);
+    }
+  } catch (e) {
+    // Local fallback
+  }
   return { ...memorySettings };
 }
 
@@ -2647,8 +2659,28 @@ export async function updateSystemSettings(newSettings: Partial<SystemSettings>,
   }
   memorySettings = { ...memorySettings, ...newSettings };
   saveStorage(STORAGE_KEYS.SETTINGS, memorySettings);
-  syncDocToFirestore('settings', 'global', memorySettings);
+  try {
+    await syncDocToFirestore('settings', 'global', memorySettings);
+  } catch (err) {
+    console.warn('Firestore sync note for settings/global:', err);
+  }
   return memorySettings;
+}
+
+export async function addCompany(companyName: string, user: UserProfile): Promise<string[]> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can add a new company.');
+  }
+  const trimmed = companyName.trim();
+  if (!trimmed) {
+    throw new Error('Company name cannot be empty.');
+  }
+  const existing = memorySettings.companies || [];
+  if (existing.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+    throw new Error(`"${trimmed}" is already in the company list.`);
+  }
+  const updated = await updateSystemSettings({ companies: [...existing, trimmed] }, user);
+  return updated.companies;
 }
 
 // Batch import helper

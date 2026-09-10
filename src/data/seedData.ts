@@ -31,7 +31,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
   ],
   paymentModes: ['NEFT', 'RTGS', 'IMPS', 'Cheque', 'DD', 'PFMS', 'Other'],
   dispatchModes: ['Courier', 'India Post', 'Transport', 'Company Vehicle', 'Other'],
-  couriers: ['Delhivery', 'India Post', 'Trackon', 'DTDC', 'Blue Dart', 'TCI Express', 'Other']
+  couriers: ['Delhivery', 'India Post', 'Trackon', 'DTDC', 'Blue Dart', 'TCI Express', 'Other'],
+  companies: ['FIPL', 'ARKAY', 'VIGNAN', 'TTPL']
 };
 
 export const INITIAL_AGENTS: Agent[] = [

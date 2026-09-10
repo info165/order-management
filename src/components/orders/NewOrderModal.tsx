@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle, ChevronDown, Check } from 'lucide-react';
 import { Order, School, Agent, Product, UserProfile } from '../../types';
-import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct } from '../../services/dataService';
+import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 
 interface NewOrderModalProps {
@@ -55,6 +55,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [agentCode, setAgentCode] = useState('');
   const [agentCommissionPercentage, setAgentCommissionPercentage] = useState<number>(0);
   const [company, setCompany] = useState('');
+  const [companies, setCompanies] = useState<string[]>([]);
+  const [showAddCompany, setShowAddCompany] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [isAddingCompany, setIsAddingCompany] = useState(false);
+  const [addCompanyError, setAddCompanyError] = useState<string | null>(null);
 
   const [internalNotes, setInternalNotes] = useState('');
 
@@ -65,10 +70,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   useEffect(() => {
     async function loadMasterData() {
       try {
-        const [sList, aList, pList] = await Promise.all([getSchools(), getAgents(), getProducts()]);
+        const [sList, aList, pList, settings] = await Promise.all([getSchools(), getAgents(), getProducts(), getSystemSettings()]);
         setSchools(sList);
         setAgents(aList);
         setProducts(pList);
+        setCompanies(settings.companies || []);
       } catch (e) {
         console.error('Error loading master data', e);
       } finally {
@@ -138,6 +144,24 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const exactCategoryMatch = allAvailableCategories.some(
     cat => cat.toLowerCase().trim() === category.toLowerCase().trim()
   );
+
+  const handleAddCompany = async () => {
+    const trimmed = newCompanyName.trim();
+    if (!trimmed) return;
+    setIsAddingCompany(true);
+    setAddCompanyError(null);
+    try {
+      const updated = await addCompanyToSettings(trimmed, currentUser);
+      setCompanies(updated);
+      setCompany(trimmed);
+      setNewCompanyName('');
+      setShowAddCompany(false);
+    } catch (err: any) {
+      setAddCompanyError(err.message || 'Could not add company.');
+    } finally {
+      setIsAddingCompany(false);
+    }
+  };
 
   const handleSelectSchool = (s: School) => {
     setSelectedSchoolId(s.schoolId);
@@ -798,9 +822,21 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">
-                Company <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-700 font-semibold">
+                  Company <span className="text-rose-500">*</span>
+                </label>
+                {currentUser.role === 'SUPER_ADMIN' && !showAddCompany && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCompany(true)}
+                    className="text-[11px] font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-0.5"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Company</span>
+                  </button>
+                )}
+              </div>
               <select
                 required
                 value={company}
@@ -808,11 +844,56 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
               >
                 <option value="" disabled>Select company...</option>
-                <option value="FIPL">FIPL</option>
-                <option value="ARKAY">ARKAY</option>
-                <option value="VIGNAN">VIGNAN</option>
-                <option value="TTPL">TTPL</option>
+                {companies.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
+
+              {showAddCompany && (
+                <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="New company name"
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCompany();
+                        }
+                      }}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCompany}
+                      disabled={isAddingCompany || !newCompanyName.trim()}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs shrink-0"
+                    >
+                      {isAddingCompany ? '...' : 'Add'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCompany(false);
+                        setNewCompanyName('');
+                        setAddCompanyError(null);
+                      }}
+                      className="px-2 py-1.5 text-slate-500 hover:text-slate-800 text-xs shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {addCompanyError && (
+                    <p className="text-[11px] text-rose-600 font-medium">{addCompanyError}</p>
+                  )}
+                  <p className="text-[10px] text-amber-700">
+                    Saved company names appear in this dropdown for every future order.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
