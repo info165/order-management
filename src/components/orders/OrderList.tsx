@@ -1504,17 +1504,17 @@ export const OrderList: React.FC<OrderListProps> = ({
 
                       {/* PAYMENT */}
                       <td
-                        style={{ width: widths.payment }}
-                        className="px-2.5 py-2 align-middle border-r border-slate-100 whitespace-nowrap"
+                        style={{ width: widths.payment, maxWidth: widths.payment }}
+                        className="px-2.5 py-2 align-middle border-r border-slate-100 overflow-hidden"
                       >
-                        <div className="leading-tight">
+                        <div className="leading-tight max-w-full">
                           <StatusBadge
                             status={order.status === 'CANCELLED' ? 'CANCELLED' : order.paymentStatus}
                             type="payment"
                             compact
                           />
                           {order.status !== 'CANCELLED' && order.paymentStatus !== 'PAID' && (
-                            <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                            <div className="text-[10px] font-mono text-slate-500 mt-0.5 truncate max-w-full" title={`Due: ₹${(order.amountPending ?? order.orderValue).toLocaleString('en-IN')}`}>
                               Due: <CurrencyFormatter amount={order.amountPending ?? order.orderValue} />
                             </div>
                           )}
