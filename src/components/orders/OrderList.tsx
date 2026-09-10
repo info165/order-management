@@ -21,6 +21,7 @@ import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile, Agent }
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
+import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExportService';
 import { clearAllOrders, clearAllPastDataAndResyncWithSheet, getAgents, bulkUpdateOrderAgent } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
@@ -1348,12 +1349,15 @@ export const OrderList: React.FC<OrderListProps> = ({
               ) : (
                 sortedOrders.map((order, idx) => {
                   const isSelected = selectedOrderIds.includes(order.orderId);
-                  // Always number by position in the current (already-sorted, non-deleted)
-                  // list rather than the order's stored serialNumber field - that field is
-                  // only used to preserve creation order for sorting; using it for display
-                  // would leave a gap (e.g. ...120, 121, 123...) whenever an order in between
-                  // gets deleted. Position-based numbering stays gap-free automatically.
-                  const serialNum = idx + 1;
+                  // Number by this order's position among ALL active orders, not its
+                  // position within whatever search/filter is currently applied - a
+                  // search narrowing the list to one match must still show that order's
+                  // real SL. NO. (e.g. 148), not "1" just because it's the only row on
+                  // screen. Agents only ever receive their own already-scoped order list
+                  // (Firestore security rules don't allow fetching the full one), so
+                  // there's no true global position available to them - keep their
+                  // original in-list position numbering, the best available fallback.
+                  const serialNum = isAgent ? idx + 1 : (getDisplaySerialNo(order, orders) ?? idx + 1);
                   const contractId = order.contractNumber || order.purchaseOrderNumber || order.orderNumber;
                   const isDeliveryOverdue =
                     order.expectedDeliveryDate &&
