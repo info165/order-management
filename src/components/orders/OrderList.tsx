@@ -1508,8 +1508,12 @@ export const OrderList: React.FC<OrderListProps> = ({
                         className="px-2.5 py-2 align-middle border-r border-slate-100 whitespace-nowrap"
                       >
                         <div className="leading-tight">
-                          <StatusBadge status={order.paymentStatus} type="payment" compact />
-                          {order.paymentStatus !== 'PAID' && (
+                          <StatusBadge
+                            status={order.status === 'CANCELLED' ? 'CANCELLED' : order.paymentStatus}
+                            type="payment"
+                            compact
+                          />
+                          {order.status !== 'CANCELLED' && order.paymentStatus !== 'PAID' && (
                             <div className="text-[10px] font-mono text-slate-500 mt-0.5">
                               Due: <CurrencyFormatter amount={order.amountPending ?? order.orderValue} />
                             </div>

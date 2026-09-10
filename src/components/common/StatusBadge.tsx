@@ -75,6 +75,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
       case 'OVERDUE':
         colorStyles = 'bg-rose-50 text-rose-800 border-rose-300 font-semibold';
         break;
+      case 'CANCELLED':
+        colorStyles = 'bg-rose-50 text-rose-700 border-rose-200 font-semibold';
+        break;
     }
   } else if (type === 'dispatch') {
     switch (status) {

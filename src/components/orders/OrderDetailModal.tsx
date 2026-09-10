@@ -705,7 +705,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </h2>
             <div className="flex items-center gap-2 pt-1 flex-wrap">
               <StatusBadge status={order.status} type="order" />
-              <StatusBadge status={order.paymentStatus} type="payment" />
+              <StatusBadge status={order.status === 'CANCELLED' ? 'CANCELLED' : order.paymentStatus} type="payment" />
               <StatusBadge status={order.dispatchStatus} type="dispatch" />
             </div>
           </div>
@@ -1971,7 +1971,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <div>
                   <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">Treasury Settlement</div>
                   <div className="text-lg font-bold text-slate-900 mt-0.5">
-                    School Payment Status: <span className="text-amber-600">{order.paymentStatus.replace(/_/g, ' ')}</span>
+                    School Payment Status:{' '}
+                    <span className={order.status === 'CANCELLED' ? 'text-rose-600' : 'text-amber-600'}>
+                      {order.status === 'CANCELLED' ? 'CANCELLED' : order.paymentStatus.replace(/_/g, ' ')}
+                    </span>
                   </div>
                 </div>
 
@@ -1992,11 +1995,15 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
                   <div>
                     <span className="text-[11px] text-slate-400 uppercase font-semibold block">Amount Pending</span>
-                    <span className="text-base font-bold font-mono text-amber-700">
-                      <CurrencyFormatter
-                        amount={order.amountPending ?? Math.max(0, (order.grossOrderValue || order.totalAmount || order.orderValue) - (order.amountReceived || 0))}
-                      />
-                    </span>
+                    {order.status === 'CANCELLED' ? (
+                      <span className="text-base font-bold text-rose-600">CANCELLED</span>
+                    ) : (
+                      <span className="text-base font-bold font-mono text-amber-700">
+                        <CurrencyFormatter
+                          amount={order.amountPending ?? Math.max(0, (order.grossOrderValue || order.totalAmount || order.orderValue) - (order.amountReceived || 0))}
+                        />
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
