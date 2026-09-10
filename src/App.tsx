@@ -416,6 +416,14 @@ function MainApp() {
       {selectedOrder && (
         <OrderDetailModal
           order={selectedOrder}
+          displaySerialNo={
+            !isAgent
+              ? [...orders]
+                  .filter(o => !o.isDeleted)
+                  .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0))
+                  .findIndex(o => o.orderId === selectedOrder.orderId) + 1 || undefined
+              : undefined
+          }
           currentUser={currentUser}
           onClose={() => setSelectedOrder(null)}
           onOrderUpdated={handleOrderUpdated}

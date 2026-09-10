@@ -60,6 +60,13 @@ import {
 
 interface OrderDetailModalProps {
   order: Order;
+  // Gap-free position of this order among all currently active (non-deleted)
+  // orders, i.e. the same number shown as "SL. NO." in the Orders Registry -
+  // as opposed to order.orderId, whose numeric suffix only reflects a
+  // creation-time counter that drifts away from that position once earlier
+  // orders get deleted. Undefined for Agent/Partner sessions, which can't
+  // see the full order list needed to compute it.
+  displaySerialNo?: number;
   currentUser: UserProfile;
   onClose: () => void;
   onOrderUpdated: (updated?: Order) => void;
@@ -69,6 +76,7 @@ type TabType = 'overview' | 'status' | 'dispatch' | 'payments' | 'documents';
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
+  displaySerialNo,
   currentUser,
   onClose,
   onOrderUpdated
@@ -677,7 +685,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         <div className="px-6 py-4 bg-slate-900 text-white flex items-start justify-between gap-4 border-b border-slate-800 shrink-0">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-base font-bold text-amber-400">{order.orderId}</span>
+              <span className="font-mono text-base font-bold text-amber-400">
+                {displaySerialNo ? `Order No - ${displaySerialNo}` : order.orderId}
+              </span>
               <span className="text-slate-400 font-mono text-xs">({order.orderNumber})</span>
               <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
                 FY {order.financialYear}
