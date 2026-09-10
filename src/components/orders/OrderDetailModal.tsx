@@ -1517,21 +1517,21 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Courier / Transporter</span>
                     <span className="font-bold text-slate-800 text-sm mt-0.5 block">
-                      {activeOrder.courierName || 'Not Assigned'}
+                      {courierName || 'Not Assigned'}
                     </span>
                   </div>
 
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Docket / Tracking Number</span>
                     <div className="mt-1">
-                      <TrackingLink courierName={activeOrder.courierName} docketNumber={activeOrder.docketNumber} />
+                      <TrackingLink courierName={courierName} docketNumber={trackingNumber} />
                     </div>
                   </div>
 
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Carton Boxes</span>
                     <span className="font-bold text-slate-800 text-sm mt-0.5 block">
-                      {activeOrder.numberOfBoxes || '1 Box'}
+                      {numberOfBoxes || '1'}
                     </span>
                   </div>
                 </div>
@@ -1539,12 +1539,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <div className="grid grid-cols-2 gap-4 text-xs pt-2">
                   <div>
                     <span className="text-slate-400 block text-[11px]">Date of Dispatch:</span>
-                    <span className="font-mono text-slate-700">{activeOrder.dispatchDate || 'Pending'}</span>
+                    <span className="font-mono text-slate-700">{dispatchDate || 'Pending'}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Expected Delivery Date:</span>
                     <span className="font-mono font-semibold text-slate-800">
-                      {activeOrder.expectedDeliveryDate || 'Pending'}
+                      {expectedDeliveryDate || 'Pending'}
                     </span>
                   </div>
                 </div>
