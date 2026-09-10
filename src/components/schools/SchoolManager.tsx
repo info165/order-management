@@ -5,6 +5,7 @@ import {
   Plus,
   MapPin,
   Phone,
+  PhoneOff,
   Building,
   ChevronRight,
   ExternalLink,
@@ -26,6 +27,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState('ALL');
   const [selectedState, setSelectedState] = useState('ALL');
+  const [phoneFilter, setPhoneFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
   const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
 
   // New school modal
@@ -57,7 +59,12 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
 
   const states = useMemo(() => Array.from(new Set(schools.map(s => s.state))).filter(Boolean), [schools]);
 
-  const filteredSchools = useMemo(() => {
+  const hasPhone = (s: School) => !!(s.contactPhone && s.contactPhone.trim());
+
+  // Filtered by search/type/state only - used to compute live phone-status
+  // counts that reflect the other active filters, same pattern as the
+  // "(count)" shown next to filter dropdowns elsewhere in the app.
+  const schoolsBeforePhoneFilter = useMemo(() => {
     return schools.filter(s => {
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -73,6 +80,20 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
       return true;
     });
   }, [schools, search, selectedType, selectedState]);
+
+  const phoneProvidedCount = useMemo(
+    () => schoolsBeforePhoneFilter.filter(hasPhone).length,
+    [schoolsBeforePhoneFilter]
+  );
+  const phoneMissingCount = schoolsBeforePhoneFilter.length - phoneProvidedCount;
+
+  const filteredSchools = useMemo(() => {
+    return schoolsBeforePhoneFilter.filter(s => {
+      if (phoneFilter === 'PROVIDED' && !hasPhone(s)) return false;
+      if (phoneFilter === 'NOT_PROVIDED' && hasPhone(s)) return false;
+      return true;
+    });
+  }, [schoolsBeforePhoneFilter, phoneFilter]);
 
   // Orders for currently selected school
   const schoolOrders = useMemo(() => {
@@ -173,6 +194,16 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                 ))}
               </select>
             </div>
+
+            <select
+              value={phoneFilter}
+              onChange={(e) => setPhoneFilter(e.target.value as 'ALL' | 'PROVIDED' | 'NOT_PROVIDED')}
+              className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-slate-700 text-[11px]"
+            >
+              <option value="ALL">All Phone Status ({schoolsBeforePhoneFilter.length})</option>
+              <option value="PROVIDED">Phone Provided ({phoneProvidedCount})</option>
+              <option value="NOT_PROVIDED">Phone Not Provided ({phoneMissingCount})</option>
+            </select>
           </div>
 
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
@@ -188,7 +219,14 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                   }`}
                 >
                   <div className="space-y-0.5">
-                    <div className="font-bold text-slate-900 line-clamp-1">{s.schoolName}</div>
+                    <div className="font-bold text-slate-900 line-clamp-1 flex items-center gap-1.5">
+                      {hasPhone(s) ? (
+                        <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                      ) : (
+                        <PhoneOff className="w-3 h-3 text-rose-400 shrink-0" />
+                      )}
+                      <span className="line-clamp-1">{s.schoolName}</span>
+                    </div>
                     <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
                       <span className="font-medium text-slate-700">{s.schoolType}</span>
                       <span>•</span>
