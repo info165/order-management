@@ -537,7 +537,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
     setIsSubmittingDispatch(true);
     try {
-      await updateDispatch(
+      const updated = await updateDispatch(
         order.orderId,
         {
           courierName,
@@ -549,8 +549,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         },
         currentUser
       );
+      setActiveOrder(updated);
       await loadData();
-      onOrderUpdated();
+      onOrderUpdated(updated);
       alert('Dispatch & Logistics record successfully updated.');
     } catch (err: any) {
       alert(err.message);
@@ -1509,28 +1510,28 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     <Truck className="w-4 h-4 text-purple-600" />
                     <span>Active Consignment Tracking</span>
                   </h3>
-                  <StatusBadge status={order.dispatchStatus} type="dispatch" />
+                  <StatusBadge status={activeOrder.dispatchStatus} type="dispatch" />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Courier / Transporter</span>
                     <span className="font-bold text-slate-800 text-sm mt-0.5 block">
-                      {order.courierName || 'Not Assigned'}
+                      {activeOrder.courierName || 'Not Assigned'}
                     </span>
                   </div>
 
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Docket / Tracking Number</span>
                     <div className="mt-1">
-                      <TrackingLink courierName={order.courierName} docketNumber={order.docketNumber} />
+                      <TrackingLink courierName={activeOrder.courierName} docketNumber={activeOrder.docketNumber} />
                     </div>
                   </div>
 
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Carton Boxes</span>
                     <span className="font-bold text-slate-800 text-sm mt-0.5 block">
-                      {order.numberOfBoxes || '1 Box'}
+                      {activeOrder.numberOfBoxes || '1 Box'}
                     </span>
                   </div>
                 </div>
@@ -1538,12 +1539,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <div className="grid grid-cols-2 gap-4 text-xs pt-2">
                   <div>
                     <span className="text-slate-400 block text-[11px]">Date of Dispatch:</span>
-                    <span className="font-mono text-slate-700">{order.dispatchDate || 'Pending'}</span>
+                    <span className="font-mono text-slate-700">{activeOrder.dispatchDate || 'Pending'}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Expected Delivery Date:</span>
                     <span className="font-mono font-semibold text-slate-800">
-                      {order.expectedDeliveryDate || 'Pending'}
+                      {activeOrder.expectedDeliveryDate || 'Pending'}
                     </span>
                   </div>
                 </div>

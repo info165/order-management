@@ -1446,7 +1446,7 @@ export async function updateDispatch(
     dispatchMode?: 'Courier' | 'India Post' | 'Transport' | 'Company Vehicle' | 'Other';
   },
   user: UserProfile
-): Promise<void> {
+): Promise<Order> {
   if (user.role === 'AGENT') {
     throw new Error('Partners cannot update dispatch records.');
   }
@@ -1473,7 +1473,7 @@ export async function updateDispatch(
   syncDocToFirestore('dispatches', dispatchRecord.dispatchId, dispatchRecord);
 
   // Update order's quick status
-  await updateOrder(
+  const updatedOrder = await updateOrder(
     orderId,
     {
       dispatchStatus: 'DISPATCHED',
@@ -1525,6 +1525,8 @@ export async function updateDispatch(
     entityId: orderId,
     newValue: `${dispatchInput.courierName} tracking #${dispatchInput.trackingNumber}`
   });
+
+  return updatedOrder;
 }
 
 export async function markDelivered(
