@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle } from 'lucide-react';
+import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle, Trash2 } from 'lucide-react';
 import { Order, School, Agent, Product, UserProfile } from '../../types';
-import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, addCategory as addCategoryToSettings } from '../../services/dataService';
+import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 
@@ -45,6 +45,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [addCategoryError, setAddCategoryError] = useState<string | null>(null);
+  const [removingCategory, setRemovingCategory] = useState<string | null>(null);
 
   // Commercial & Financials (Inclusive 18% GST calculation)
   const [totalInclusiveOrderValue, setTotalInclusiveOrderValue] = useState<number>(0);
@@ -152,6 +153,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       setAddCategoryError(err.message || 'Could not add category.');
     } finally {
       setIsAddingCategory(false);
+    }
+  };
+
+  const handleRemoveCategory = async (catName: string) => {
+    if (!confirm(`Remove "${catName}" from the category list? Past orders already using it are not affected.`)) return;
+    setRemovingCategory(catName);
+    setAddCategoryError(null);
+    try {
+      const updated = await removeCategoryFromSettings(catName, currentUser);
+      setCategories(updated);
+      if (category === catName) {
+        setCategory('');
+      }
+    } catch (err: any) {
+      setAddCategoryError(err.message || 'Could not remove category.');
+    } finally {
+      setRemovingCategory(null);
     }
   };
 
@@ -716,6 +734,29 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                     <p className="text-[10px] text-amber-700">
                       Saved categories appear in this dropdown for every future order.
                     </p>
+
+                    {/* Existing categories with a delete button each - covers
+                        both the curated defaults and any added later, since
+                        this always renders from the live "categories" list. */}
+                    <div className="pt-1.5 border-t border-amber-200 space-y-1 max-h-40 overflow-y-auto">
+                      {categories.map((cat) => (
+                        <div
+                          key={cat}
+                          className="flex items-center justify-between gap-2 px-2 py-1 bg-white rounded border border-amber-100 text-xs"
+                        >
+                          <span className="truncate text-slate-800">{cat}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCategory(cat)}
+                            disabled={removingCategory === cat}
+                            title={`Delete "${cat}"`}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-50 shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

@@ -3030,6 +3030,18 @@ export async function addCategory(categoryName: string, user: UserProfile): Prom
   return updated.categories;
 }
 
+export async function removeCategory(categoryName: string, user: UserProfile): Promise<string[]> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can remove a category.');
+  }
+  const existing = memorySettings.categories || [];
+  const updated = await updateSystemSettings(
+    { categories: existing.filter(c => c !== categoryName) },
+    user
+  );
+  return updated.categories;
+}
+
 // Batch import helper
 export async function batchImportOrders(ordersToImport: Order[], user: UserProfile, replaceAll: boolean = false): Promise<{ imported: number; errors: string[] }> {
   if (user.role === 'AGENT') throw new Error('Unauthorized');
