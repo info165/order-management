@@ -1850,6 +1850,29 @@ export async function deletePayment(paymentId: string, user: UserProfile): Promi
 // DOCUMENTS SERVICE
 // ----------------------------------------------------
 export async function getDocumentsForOrder(orderId: string, user: UserProfile): Promise<OrderDocument[]> {
+  try {
+    // Same "list query must be provably safe" constraint worked around
+    // elsewhere in this file (timeline, payments, schools): an Agent's read
+    // rule depends on resource.data.visibleToAgent, so their query must
+    // filter on it explicitly; every other role reads under a role-only
+    // rule branch that doesn't need it.
+    const q = user.role === 'AGENT'
+      ? query(collection(db, 'documents'), where('orderId', '==', orderId), where('visibleToAgent', '==', true))
+      : query(collection(db, 'documents'), where('orderId', '==', orderId));
+    const snap = await getDocs(q);
+    const remote: OrderDocument[] = [];
+    snap.forEach(d => {
+      const doc = d.data() as OrderDocument;
+      if (doc && doc.documentId) remote.push(doc);
+    });
+    // Replace this order's slice with the authoritative server state, same
+    // reasoning as every other "replace, don't merge" fix in this file.
+    memoryDocuments = [...memoryDocuments.filter(d => d.orderId !== orderId), ...remote];
+    saveStorage(STORAGE_KEYS.DOCUMENTS, memoryDocuments);
+  } catch (err) {
+    console.warn('Firestore read in getDocumentsForOrder fallback to cached documents:', err);
+  }
+
   let list = memoryDocuments.filter(d => d.orderId === orderId);
   // Agents can ONLY view documents explicitly marked visibleToAgent: true
   if (user.role === 'AGENT') {
@@ -1871,7 +1894,7 @@ export async function uploadDocument(
 
   memoryDocuments = [newDoc, ...memoryDocuments];
   saveStorage(STORAGE_KEYS.DOCUMENTS, memoryDocuments);
-  syncDocToFirestore('documents', documentId, newDoc);
+  await syncDocToFirestore('documents', documentId, newDoc);
 
   await writeActivityLog({
     userId: user.userId,
@@ -1891,6 +1914,7 @@ export async function deleteDocument(documentId: string, user: UserProfile): Pro
   }
   memoryDocuments = memoryDocuments.filter(d => d.documentId !== documentId);
   saveStorage(STORAGE_KEYS.DOCUMENTS, memoryDocuments);
+  await deleteDocFromFirestore('documents', documentId);
 }
 
 // ----------------------------------------------------
