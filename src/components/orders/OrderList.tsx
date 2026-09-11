@@ -1463,9 +1463,13 @@ export const OrderList: React.FC<OrderListProps> = ({
                         style={{ width: widths.orderValue }}
                         className="px-3 py-2 text-right font-mono whitespace-nowrap align-middle border-r border-slate-100"
                       >
-                        <div className="font-bold text-slate-950 text-xs">
-                          <CurrencyFormatter amount={order.orderValue} />
-                        </div>
+                        {order.status === 'CANCELLED' ? (
+                          <div className="font-bold text-rose-600 text-xs">CANCELLED</div>
+                        ) : (
+                          <div className="font-bold text-slate-950 text-xs">
+                            <CurrencyFormatter amount={order.orderValue} />
+                          </div>
+                        )}
                       </td>
 
                       {/* COMPANY */}
