@@ -1145,7 +1145,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         <span className="text-slate-400 block text-[11px] font-medium uppercase">School Address:</span>
                         <span className="text-slate-700 text-xs flex items-start gap-1.5 mt-0.5">
                           <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
-                          <span>{activeOrder.schoolAddress || `${activeOrder.schoolName}, ${activeOrder.state || 'India'}`}</span>
+                          <span>{activeOrder.schoolAddress || 'Not provided'}</span>
                         </span>
                       </div>
 
