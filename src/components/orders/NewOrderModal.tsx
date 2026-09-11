@@ -115,17 +115,21 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
 
   // Standard laboratory and equipment categories
   const defaultStandardCategories = [
-    'ATL Lab Equipment & Components',
-    'Mathematics Laboratory Kit',
-    'Robotics & IoT Starter Kit',
-    'Composite Science Lab Set',
-    'Digital Smart Classroom Package',
-    'Language Lab System',
-    'AI & Machine Learning Lab Kit',
-    'Astronomy & Telescope Club Kit',
-    'Physics Laboratory Standard Apparatus',
-    'Chemistry Laboratory Glassware & Reagent Set',
-    'Biology Specimen & Microscope Package'
+    'TLM Class 1',
+    'TLM Class 2',
+    'TLM Class 3',
+    'TLM Class 4',
+    'TLM Class 5',
+    'Science Kit',
+    'Science Circle',
+    'Maths Kit',
+    'Maths Circle',
+    '21st Century Kit',
+    'Robotics Kits',
+    'ATL Consumable Kit 1',
+    'ATL Consumable Kit 2',
+    'ATL Consumable Kit 3',
+    'ATL Consumable Kit 4'
   ];
 
   const allAvailableCategories = Array.from(
