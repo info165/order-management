@@ -127,9 +127,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [companies, setCompanies] = useState<string[]>([]);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
-  const filteredContractCategories = EQUIPMENT_CATEGORIES.filter(
+  // If the current value is old free-text that doesn't match any of the 14
+  // packages (common on past orders), fall back to showing the full list
+  // instead of an empty "no match" result - the whole point of opening
+  // this dropdown on an old order is to pick one, not to hit a dead end.
+  const contractCategorySearchMatches = EQUIPMENT_CATEGORIES.filter(
     cat => !contractFormCategory.trim() || cat.toLowerCase().includes(contractFormCategory.toLowerCase().trim())
   );
+  const filteredContractCategories = contractCategorySearchMatches.length > 0
+    ? contractCategorySearchMatches
+    : EQUIPMENT_CATEGORIES;
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -1303,11 +1310,6 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                                   {cat === contractFormCategory && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
                                 </button>
                               ))}
-                              {filteredContractCategories.length === 0 && (
-                                <div className="px-2.5 py-2 text-[11px] text-slate-400">
-                                  No match — you can keep this as a custom value
-                                </div>
-                              )}
                             </div>
                           )}
                         </div>
