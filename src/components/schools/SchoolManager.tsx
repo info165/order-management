@@ -29,6 +29,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [selectedType, setSelectedType] = useState('ALL');
   const [selectedState, setSelectedState] = useState('ALL');
   const [phoneFilter, setPhoneFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
+  const [addressFilter, setAddressFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
 
   // New school modal
@@ -64,11 +65,15 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const states = useMemo(() => Array.from(new Set(schools.map(s => s.state))).filter(Boolean), [schools]);
 
   const hasPhone = (s: School) => !!(s.contactPhone && s.contactPhone.trim());
+  const hasAddress = (s: School) => !!(s.address && s.address.trim());
 
-  // Filtered by search/type/state only - used to compute live phone-status
-  // counts that reflect the other active filters, same pattern as the
-  // "(count)" shown next to filter dropdowns elsewhere in the app.
-  const schoolsBeforePhoneFilter = useMemo(() => {
+  // Filtered by search/type/state only - used to compute live availability
+  // counts (phone, address) that reflect the other active filters, same
+  // pattern as the "(count)" shown next to filter dropdowns elsewhere in
+  // the app. Both availability filters are applied independently on top of
+  // this shared base, so they can be combined (e.g. phone missing AND
+  // address missing at once).
+  const schoolsBeforeAvailabilityFilters = useMemo(() => {
     return schools.filter(s => {
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -86,18 +91,26 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   }, [schools, search, selectedType, selectedState]);
 
   const phoneProvidedCount = useMemo(
-    () => schoolsBeforePhoneFilter.filter(hasPhone).length,
-    [schoolsBeforePhoneFilter]
+    () => schoolsBeforeAvailabilityFilters.filter(hasPhone).length,
+    [schoolsBeforeAvailabilityFilters]
   );
-  const phoneMissingCount = schoolsBeforePhoneFilter.length - phoneProvidedCount;
+  const phoneMissingCount = schoolsBeforeAvailabilityFilters.length - phoneProvidedCount;
+
+  const addressProvidedCount = useMemo(
+    () => schoolsBeforeAvailabilityFilters.filter(hasAddress).length,
+    [schoolsBeforeAvailabilityFilters]
+  );
+  const addressMissingCount = schoolsBeforeAvailabilityFilters.length - addressProvidedCount;
 
   const filteredSchools = useMemo(() => {
-    return schoolsBeforePhoneFilter.filter(s => {
+    return schoolsBeforeAvailabilityFilters.filter(s => {
       if (phoneFilter === 'PROVIDED' && !hasPhone(s)) return false;
       if (phoneFilter === 'NOT_PROVIDED' && hasPhone(s)) return false;
+      if (addressFilter === 'PROVIDED' && !hasAddress(s)) return false;
+      if (addressFilter === 'NOT_PROVIDED' && hasAddress(s)) return false;
       return true;
     });
-  }, [schoolsBeforePhoneFilter, phoneFilter]);
+  }, [schoolsBeforeAvailabilityFilters, phoneFilter, addressFilter]);
 
   // Orders for currently selected school
   const schoolOrders = useMemo(() => {
@@ -203,9 +216,19 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
               onChange={(e) => setPhoneFilter(e.target.value as 'ALL' | 'PROVIDED' | 'NOT_PROVIDED')}
               className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-slate-700 text-[11px]"
             >
-              <option value="ALL">All Phone Status ({schoolsBeforePhoneFilter.length})</option>
+              <option value="ALL">All Phone Status ({schoolsBeforeAvailabilityFilters.length})</option>
               <option value="PROVIDED">Phone Provided ({phoneProvidedCount})</option>
               <option value="NOT_PROVIDED">Phone Not Provided ({phoneMissingCount})</option>
+            </select>
+
+            <select
+              value={addressFilter}
+              onChange={(e) => setAddressFilter(e.target.value as 'ALL' | 'PROVIDED' | 'NOT_PROVIDED')}
+              className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-slate-700 text-[11px]"
+            >
+              <option value="ALL">All Address Status ({schoolsBeforeAvailabilityFilters.length})</option>
+              <option value="PROVIDED">Address Provided ({addressProvidedCount})</option>
+              <option value="NOT_PROVIDED">Address Not Provided ({addressMissingCount})</option>
             </select>
           </div>
 
@@ -224,10 +247,14 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                   <div className="space-y-0.5">
                     <div className="font-bold text-slate-900 line-clamp-1 flex items-center gap-1.5">
                       {hasPhone(s) ? (
-                        <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
+                        <Phone className="w-3 h-3 text-emerald-600 shrink-0" title="Phone on file" />
                       ) : (
-                        <PhoneOff className="w-3 h-3 text-rose-400 shrink-0" />
+                        <PhoneOff className="w-3 h-3 text-rose-400 shrink-0" title="No phone on file" />
                       )}
+                      <MapPin
+                        className={`w-3 h-3 shrink-0 ${hasAddress(s) ? 'text-emerald-600' : 'text-rose-400'}`}
+                        title={hasAddress(s) ? 'Address on file' : 'No address on file'}
+                      />
                       <span className="line-clamp-1">{s.schoolName}</span>
                     </div>
                     <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
