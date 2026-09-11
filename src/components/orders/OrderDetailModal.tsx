@@ -351,7 +351,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             fileUrl: dataUrl,
             fileSize: `${Math.round(file.size / 1024)} KB`,
             uploadedBy: currentUser.name,
-            visibleToAgent: true
+            visibleToAgent: true,
+            quickVaultCategory: 'cnCopy'
           },
           currentUser
         );
@@ -384,7 +385,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             fileUrl: dataUrl,
             fileSize: `${Math.round(file.size / 1024)} KB`,
             uploadedBy: currentUser.name,
-            visibleToAgent: true
+            visibleToAgent: true,
+            quickVaultCategory: 'podCopy'
           },
           currentUser
         );
@@ -454,7 +456,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             fileUrl: dataUrl,
             fileSize: `${Math.round(file.size / 1024)} KB`,
             uploadedBy: currentUser.name,
-            visibleToAgent: true
+            visibleToAgent: true,
+            quickVaultCategory: category
           },
           currentUser
         );
@@ -468,9 +471,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Delete attached document handler
-  const handleDeleteQuickDoc = async (category: string) => {
-    if (!confirm('Are you sure you want to remove this attached document?')) return;
+  // Clears the Quick Vault field for one category (order-level URL/filename
+  // fields shown as tiles on both the Documents tab and the GeM Status tab).
+  // Shared by both delete paths below so either one stays fully in sync
+  // with the other, instead of clearing only its own side.
+  const clearQuickVaultField = async (category: string) => {
     const updates: Partial<Order> = {};
     if (category === 'gemOrderCopy') {
       updates.gemOrderCopyUrl = '';
@@ -503,9 +508,22 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setPodCopyUrl('');
       setPodCopyFileName('');
     }
-
-    try {
+    if (Object.keys(updates).length > 0) {
       await updateOrder(order.orderId, updates, currentUser);
+    }
+  };
+
+  // Delete attached document handler (Quick Vault tile, on either
+  // Documents tab or GeM Status tab). Also removes the matching entry
+  // from the Document Repository list so both stay in sync.
+  const handleDeleteQuickDoc = async (category: string) => {
+    if (!confirm('Are you sure you want to remove this attached document?')) return;
+    try {
+      await clearQuickVaultField(category);
+      const matching = documents.filter(d => d.orderId === order.orderId && d.quickVaultCategory === category);
+      for (const doc of matching) {
+        await deleteDocument(doc.documentId, currentUser);
+      }
       await loadData();
       onOrderUpdated();
     } catch (err: any) {
@@ -513,11 +531,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
-  // Delete document from repository
+  // Delete document from repository. Also clears the matching Quick Vault
+  // tile (on both the Documents tab and the GeM Status tab) so deleting
+  // from either place removes it from both.
   const handleDeleteUploadedDocument = async (documentId: string) => {
     if (!confirm('Are you sure you want to permanently delete this document?')) return;
     try {
+      const doc = documents.find(d => d.documentId === documentId);
       await deleteDocument(documentId, currentUser);
+      if (doc?.quickVaultCategory) {
+        await clearQuickVaultField(doc.quickVaultCategory);
+      }
       await loadData();
       onOrderUpdated();
     } catch (err: any) {

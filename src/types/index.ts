@@ -324,6 +324,10 @@ export interface OrderDocument {
   uploadedBy: string;
   uploadedAt: string;
   visibleToAgent: boolean;
+  // Links this document-history record back to the matching Quick Vault
+  // tile (Documents tab / GeM Status tab) so deleting from either place
+  // removes both the order's own field and this repository entry together.
+  quickVaultCategory?: string;
 }
 
 export interface NotificationItem {
