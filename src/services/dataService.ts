@@ -921,8 +921,7 @@ export async function createOrder(
     comment: `Order initiated by ${user.name}`,
     visibleToAgent: true
   };
-  memoryTimelines = [timelineItem, ...memoryTimelines];
-  saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  await addTimelineEntry(timelineItem);
 
   // Activity audit log
   await writeActivityLog({
@@ -1379,8 +1378,7 @@ export async function updateOrderStatus(
     visibleToAgent
   };
 
-  memoryTimelines = [historyItem, ...memoryTimelines];
-  saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  await addTimelineEntry(historyItem);
   syncDocToFirestore('orderStatusHistory', historyItem.historyId, historyItem);
 
   // Audit log
@@ -1500,8 +1498,7 @@ export async function updateDispatch(
     comment: `Dispatched via ${dispatchInput.courierName} (Docket: ${dispatchInput.trackingNumber}). Expected delivery by ${dispatchInput.expectedDeliveryDate || 'N/A'}.`,
     visibleToAgent: true
   };
-  memoryTimelines = [timelineItem, ...memoryTimelines];
-  saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  await addTimelineEntry(timelineItem);
 
   // Notify Agent
   if (order.agentId) {
@@ -1585,8 +1582,7 @@ export async function markDelivered(
     comment: `Material successfully delivered and received by ${deliveryInput.receivedBy} (${deliveryInput.receiverDesignation || 'School Representative'}).`,
     visibleToAgent: true
   };
-  memoryTimelines = [timelineItem, ...memoryTimelines];
-  saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  await addTimelineEntry(timelineItem);
 
   // Notify Agent
   if (order.agentId) {
@@ -1676,8 +1672,7 @@ export async function addPayment(
     comment: `Payment received: ₹${paymentInput.amount.toLocaleString('en-IN')} via ${paymentInput.paymentMode} (Ref: ${paymentInput.transactionReference}). Outstanding: ₹${newPending.toLocaleString('en-IN')}`,
     visibleToAgent: true
   };
-  memoryTimelines = [timelineItem, ...memoryTimelines];
-  saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  await addTimelineEntry(timelineItem);
 
   // Notify Agent
   if (order.agentId) {
@@ -1706,6 +1701,26 @@ export async function addPayment(
 }
 
 export async function getPaymentsForOrder(orderId: string): Promise<PaymentTransaction[]> {
+  // Same fix as getTimelineForOrder(): this only ever read the local cache,
+  // never Firestore, so the Payment Ledger showed nothing for anyone except
+  // the browser that recorded each payment. No agent-specific query variant
+  // needed here - the payments collection's security rule has no Agent
+  // branch at all, so a Partner session's read fails 403 regardless of
+  // query shape and falls back to the (empty) local cache below, same as
+  // it already does today.
+  try {
+    const q = query(collection(db, 'payments'), where('orderId', '==', orderId));
+    const snap = await getDocs(q);
+    const remote: PaymentTransaction[] = [];
+    snap.forEach(d => {
+      const p = d.data() as PaymentTransaction;
+      if (p && p.paymentId) remote.push(p);
+    });
+    memoryPayments = [...memoryPayments.filter(p => p.orderId !== orderId), ...remote];
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+  } catch (err) {
+    console.warn('Firestore read in getPaymentsForOrder fallback to cached payments:', err);
+  }
   return memoryPayments.filter(p => p.orderId === orderId);
 }
 
@@ -1776,6 +1791,22 @@ export async function updatePayment(
     user
   );
 
+  // Timeline entry - same visible-history mechanism as a new payment, so
+  // editing one leaves just as clear a trail in the order's own Timeline &
+  // Status tab, not just the Super-Admin-only audit log.
+  const editTimelineItem: OrderStatusHistoryItem = {
+    historyId: `HIST-${Date.now()}`,
+    orderId: order.orderId,
+    previousStatus: order.status,
+    newStatus: order.status,
+    changedBy: user.userId,
+    changedByName: user.name,
+    changedAt: new Date().toISOString(),
+    comment: `Payment edited: ₹${existing.amount.toLocaleString('en-IN')} via ${existing.paymentMode} (Ref: ${existing.transactionReference}) -> ₹${updatedPayment.amount.toLocaleString('en-IN')} via ${updatedPayment.paymentMode} (Ref: ${updatedPayment.transactionReference}). Outstanding: ₹${newPending.toLocaleString('en-IN')}`,
+    visibleToAgent: true
+  };
+  await addTimelineEntry(editTimelineItem);
+
   await writeActivityLog({
     userId: user.userId,
     userName: user.name,
@@ -1834,6 +1865,19 @@ export async function deletePayment(paymentId: string, user: UserProfile): Promi
     },
     user
   );
+
+  const deleteTimelineItem: OrderStatusHistoryItem = {
+    historyId: `HIST-${Date.now()}`,
+    orderId: order.orderId,
+    previousStatus: order.status,
+    newStatus: order.status,
+    changedBy: user.userId,
+    changedByName: user.name,
+    changedAt: new Date().toISOString(),
+    comment: `Payment deleted: ₹${existing.amount.toLocaleString('en-IN')} via ${existing.paymentMode} (Ref: ${existing.transactionReference}). Outstanding: ₹${newPending.toLocaleString('en-IN')}`,
+    visibleToAgent: true
+  };
+  await addTimelineEntry(deleteTimelineItem);
 
   await writeActivityLog({
     userId: user.userId,
@@ -1897,7 +1941,49 @@ export async function deleteDocument(documentId: string, user: UserProfile): Pro
 // ----------------------------------------------------
 // TIMELINE SERVICE
 // ----------------------------------------------------
+// Every timeline entry (order created, status changed, dispatched,
+// delivered, payment recorded/edited/deleted, ...) was only ever pushed
+// onto the in-memory/localStorage list and never actually written to
+// Firestore, despite security rules already existing for it
+// (orderStatusHistory) - so the entire "Timeline & Status" history was
+// silently invisible to anyone except the browser that created each entry.
+// Every call site that adds one now goes through this so it's persisted and
+// visible to everyone, not just locally.
+async function addTimelineEntry(item: OrderStatusHistoryItem): Promise<void> {
+  memoryTimelines = [item, ...memoryTimelines];
+  saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  try {
+    await syncDocToFirestore('orderStatusHistory', item.historyId, item);
+  } catch (err) {
+    console.warn(`Firestore sync note for timeline entry ${item.historyId}:`, err);
+  }
+}
+
 export async function getTimelineForOrder(orderId: string, user: UserProfile): Promise<OrderStatusHistoryItem[]> {
+  try {
+    // Agents can only read a history entry where visibleToAgent == true (see
+    // firestore.rules) - Firestore can't validate that for an unfiltered
+    // query (the same "list rejected outright" constraint already worked
+    // around for orders/agents/schools elsewhere in this file), so their
+    // query must include that filter explicitly; every other role reads
+    // under a role-only rule branch that doesn't need it.
+    const q = user.role === 'AGENT'
+      ? query(collection(db, 'orderStatusHistory'), where('orderId', '==', orderId), where('visibleToAgent', '==', true))
+      : query(collection(db, 'orderStatusHistory'), where('orderId', '==', orderId));
+    const snap = await getDocs(q);
+    const remote: OrderStatusHistoryItem[] = [];
+    snap.forEach(d => {
+      const t = d.data() as OrderStatusHistoryItem;
+      if (t && t.historyId) remote.push(t);
+    });
+    // Replace this order's slice with the authoritative server state, same
+    // reasoning as every other "replace, don't merge" fix in this file.
+    memoryTimelines = [...memoryTimelines.filter(t => t.orderId !== orderId), ...remote];
+    saveStorage(STORAGE_KEYS.TIMELINES, memoryTimelines);
+  } catch (err) {
+    console.warn('Firestore read in getTimelineForOrder fallback to cached timeline:', err);
+  }
+
   let list = memoryTimelines.filter(t => t.orderId === orderId);
   if (user.role === 'AGENT') {
     list = list.filter(t => t.visibleToAgent === true);
