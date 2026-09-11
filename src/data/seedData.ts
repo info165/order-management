@@ -1,26 +1,12 @@
 import { Agent, School, Product, Order, UserProfile, SystemSettings } from '../types';
 import { REAL_SHEET_ORDERS, REAL_SHEET_SCHOOLS } from './realSheetOrders';
+import { EQUIPMENT_CATEGORIES } from '../utils/orderCategories';
 
 export const INITIAL_SETTINGS: SystemSettings = {
   orderIdPrefix: 'ORD-2026',
   currentFinancialYear: '2026-27',
   availableFinancialYears: ['2026-27', '2025-26', '2024-25'],
-  categories: [
-    'ATL Items',
-    'Robotics Kit',
-    'Basic Electronic Kit',
-    'Science Kit',
-    'Science Circle',
-    'Maths Circle',
-    'MATHS PRIMARY SET 1 KIT',
-    'MATHS HIGHER SECONDARY KIT',
-    '21st Century Skills',
-    'Citizenship Skill Kit',
-    'Teaching-Learning Material (TLM)',
-    'Interactive Panel',
-    'Composite Lab',
-    'Other Equipment'
-  ],
+  categories: EQUIPMENT_CATEGORIES,
   schoolTypes: [
     'Kendriya Vidyalaya',
     'Jawahar Navodaya Vidyalaya',

@@ -3014,6 +3014,22 @@ export async function addCompany(companyName: string, user: UserProfile): Promis
   return updated.companies;
 }
 
+export async function addCategory(categoryName: string, user: UserProfile): Promise<string[]> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can add a new category.');
+  }
+  const trimmed = categoryName.trim();
+  if (!trimmed) {
+    throw new Error('Category name cannot be empty.');
+  }
+  const existing = memorySettings.categories || [];
+  if (existing.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+    throw new Error(`"${trimmed}" is already in the category list.`);
+  }
+  const updated = await updateSystemSettings({ categories: [...existing, trimmed] }, user);
+  return updated.categories;
+}
+
 // Batch import helper
 export async function batchImportOrders(ordersToImport: Order[], user: UserProfile, replaceAll: boolean = false): Promise<{ imported: number; errors: string[] }> {
   if (user.role === 'AGENT') throw new Error('Unauthorized');

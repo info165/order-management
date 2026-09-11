@@ -125,18 +125,20 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [isSavingContract, setIsSavingContract] = useState(false);
   const [contractSaveError, setContractSaveError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
-  // If the current value is old free-text that doesn't match any of the 14
-  // packages (common on past orders), fall back to showing the full list
-  // instead of an empty "no match" result - the whole point of opening
-  // this dropdown on an old order is to pick one, not to hit a dead end.
-  const contractCategorySearchMatches = EQUIPMENT_CATEGORIES.filter(
+  // If the current value is old free-text that doesn't match any of the
+  // saved packages (common on past orders), fall back to showing the full
+  // list instead of an empty "no match" result - the whole point of
+  // opening this dropdown on an old order is to pick one, not to hit a
+  // dead end.
+  const contractCategorySearchMatches = categories.filter(
     cat => !contractFormCategory.trim() || cat.toLowerCase().includes(contractFormCategory.toLowerCase().trim())
   );
   const filteredContractCategories = contractCategorySearchMatches.length > 0
     ? contractCategorySearchMatches
-    : EQUIPMENT_CATEGORIES;
+    : categories;
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -147,7 +149,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   useEffect(() => {
     getAgents().then(setAvailableAgents).catch(console.error);
-    getSystemSettings().then(s => setCompanies(s.companies || [])).catch(console.error);
+    getSystemSettings().then(s => {
+      setCompanies(s.companies || []);
+      setCategories(s.categories && s.categories.length > 0 ? s.categories : EQUIPMENT_CATEGORIES);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {
