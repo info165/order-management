@@ -27,28 +27,43 @@ export const TrackingLink: React.FC<TrackingLinkProps> = ({ courierName = '', do
     targetUrl = `https://www.bluedart.com/web/guest/trackdartresult?trackFor=0&trackNo=${cleanDocket}`;
   }
 
+  const badgeClassName = `inline-flex items-center ${
+    compact ? 'gap-1 font-mono text-[11px] px-1.5 py-0.5' : 'gap-1.5 font-mono text-xs px-2 py-0.5'
+  } font-medium text-blue-700 bg-blue-50/90 rounded border border-blue-200 whitespace-nowrap ${className}`;
+
+  const docketSpan = (
+    <span className={`truncate ${targetUrl ? '' : 'select-all'} ${compact ? 'max-w-[110px]' : 'max-w-[140px]'}`} title={courierName ? `${courierName}: ${docketNumber}` : docketNumber}>
+      {docketNumber}
+    </span>
+  );
+
+  if (!targetUrl) {
+    // No recognized courier - nothing to navigate to, so this stays plain
+    // (non-clickable) text rather than a link that goes nowhere.
+    return (
+      <div className={badgeClassName}>
+        <Truck className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-blue-600 shrink-0`} />
+        {docketSpan}
+      </div>
+    );
+  }
+
+  // The whole badge is the link (not just the small icon at the end) -
+  // clicking anywhere on the docket number itself opens the real tracking
+  // page, instead of falling through to the row's own click handler
+  // (which used to open the order instead).
   return (
-    <div
-      className={`inline-flex items-center ${
-        compact ? 'gap-1 font-mono text-[11px] px-1.5 py-0.5' : 'gap-1.5 font-mono text-xs px-2 py-0.5'
-      } font-medium text-blue-700 bg-blue-50/90 rounded border border-blue-200 hover:bg-blue-100 transition-colors whitespace-nowrap ${className}`}
+    <a
+      href={targetUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Track via ${courierName || 'Courier'}`}
+      onClick={(e) => e.stopPropagation()}
+      className={`${badgeClassName} hover:bg-blue-100 hover:text-blue-900 transition-colors cursor-pointer`}
     >
       <Truck className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} text-blue-600 shrink-0`} />
-      <span className={`truncate select-all ${compact ? 'max-w-[110px]' : 'max-w-[140px]'}`} title={courierName ? `${courierName}: ${docketNumber}` : docketNumber}>
-        {docketNumber}
-      </span>
-      {targetUrl ? (
-        <a
-          href={targetUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`Track via ${courierName || 'Courier'}`}
-          className="text-blue-600 hover:text-blue-900 ml-0.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ExternalLink className={`${compact ? 'w-2.5 h-2.5' : 'w-3 h-3'}`} />
-        </a>
-      ) : null}
-    </div>
+      {docketSpan}
+      <ExternalLink className={`${compact ? 'w-2.5 h-2.5' : 'w-3 h-3'} shrink-0`} />
+    </a>
   );
 };
