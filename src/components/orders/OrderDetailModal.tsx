@@ -612,8 +612,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
     setIsSubmittingPayment(true);
     try {
+      let updated: Order;
       if (editingPaymentId) {
-        await updatePayment(
+        const result = await updatePayment(
           editingPaymentId,
           {
             amount: Number(paymentAmount),
@@ -625,9 +626,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           },
           currentUser
         );
+        updated = result.order;
         alert('Payment successfully updated and balance recalculated.');
       } else {
-        await addPayment(
+        const result = await addPayment(
           {
             orderId: order.orderId,
             amount: Number(paymentAmount),
@@ -640,8 +642,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           },
           currentUser
         );
+        updated = result.order;
         alert('Payment successfully credited and balance updated.');
       }
+      setActiveOrder(updated);
       setEditingPaymentId(null);
       setPaymentAmount(0);
       setPaymentMode('PFMS');
@@ -650,7 +654,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setBankRef('');
       setPaymentRemarks('');
       await loadData();
-      onOrderUpdated();
+      onOrderUpdated(updated);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -734,22 +738,22 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <span className="font-mono text-base font-bold text-amber-400">
                 {displaySerialNo ? `Order No - ${displaySerialNo}` : order.orderId}
               </span>
-              <span className="text-slate-400 font-mono text-xs">({order.orderNumber})</span>
+              <span className="text-slate-400 font-mono text-xs">({activeOrder.orderNumber})</span>
               <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
-                FY {order.financialYear}
+                FY {activeOrder.financialYear}
               </span>
               <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono border border-slate-700">
-                {order.orderType}
+                {activeOrder.orderType}
               </span>
             </div>
             <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-              <span>{order.schoolName}</span>
-              <span className="text-xs font-normal text-slate-400 font-mono">({order.schoolType})</span>
+              <span>{activeOrder.schoolName}</span>
+              <span className="text-xs font-normal text-slate-400 font-mono">({activeOrder.schoolType})</span>
             </h2>
             <div className="flex items-center gap-2 pt-1 flex-wrap">
-              <StatusBadge status={order.status} type="order" />
-              <StatusBadge status={order.status === 'CANCELLED' ? 'CANCELLED' : order.paymentStatus} type="payment" />
-              <StatusBadge status={order.dispatchStatus} type="dispatch" />
+              <StatusBadge status={activeOrder.status} type="order" />
+              <StatusBadge status={activeOrder.status === 'CANCELLED' ? 'CANCELLED' : activeOrder.paymentStatus} type="payment" />
+              <StatusBadge status={activeOrder.dispatchStatus} type="dispatch" />
             </div>
           </div>
 
@@ -2015,8 +2019,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <div className="text-xs text-slate-500 uppercase font-bold tracking-wider">Treasury Settlement</div>
                   <div className="text-lg font-bold text-slate-900 mt-0.5">
                     School Payment Status:{' '}
-                    <span className={order.status === 'CANCELLED' ? 'text-rose-600' : 'text-amber-600'}>
-                      {order.status === 'CANCELLED' ? 'CANCELLED' : order.paymentStatus.replace(/_/g, ' ')}
+                    <span className={activeOrder.status === 'CANCELLED' ? 'text-rose-600' : 'text-amber-600'}>
+                      {activeOrder.status === 'CANCELLED' ? 'CANCELLED' : activeOrder.paymentStatus.replace(/_/g, ' ')}
                     </span>
                   </div>
                 </div>
@@ -2025,25 +2029,25 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <div>
                     <span className="text-[11px] text-slate-400 uppercase font-semibold block">Total Invoiced (Incl. GST)</span>
                     <span className="text-base font-bold font-mono text-slate-900">
-                      <CurrencyFormatter amount={order.grossOrderValue || order.totalAmount || order.orderValue} />
+                      <CurrencyFormatter amount={activeOrder.grossOrderValue || activeOrder.totalAmount || activeOrder.orderValue} />
                     </span>
                   </div>
 
                   <div>
                     <span className="text-[11px] text-slate-400 uppercase font-semibold block">Total Received</span>
                     <span className="text-base font-bold font-mono text-emerald-700">
-                      <CurrencyFormatter amount={order.amountReceived || 0} />
+                      <CurrencyFormatter amount={activeOrder.amountReceived || 0} />
                     </span>
                   </div>
 
                   <div>
                     <span className="text-[11px] text-slate-400 uppercase font-semibold block">Amount Pending</span>
-                    {order.status === 'CANCELLED' ? (
+                    {activeOrder.status === 'CANCELLED' ? (
                       <span className="text-base font-bold text-rose-600">CANCELLED</span>
                     ) : (
                       <span className="text-base font-bold font-mono text-amber-700">
                         <CurrencyFormatter
-                          amount={order.amountPending ?? Math.max(0, (order.grossOrderValue || order.totalAmount || order.orderValue) - (order.amountReceived || 0))}
+                          amount={activeOrder.amountPending ?? Math.max(0, (activeOrder.grossOrderValue || activeOrder.totalAmount || activeOrder.orderValue) - (activeOrder.amountReceived || 0))}
                         />
                       </span>
                     )}

@@ -1618,7 +1618,7 @@ export async function markDelivered(
 export async function addPayment(
   paymentInput: Omit<PaymentTransaction, 'paymentId' | 'createdAt'>,
   user: UserProfile
-): Promise<PaymentTransaction> {
+): Promise<{ payment: PaymentTransaction; order: Order }> {
   if (user.role === 'AGENT' || user.role === 'DISPATCH') {
     throw new Error('You do not have permission to record payments.');
   }
@@ -1635,7 +1635,11 @@ export async function addPayment(
 
   memoryPayments = [newPayment, ...memoryPayments];
   saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
-  syncDocToFirestore('payments', paymentId, newPayment);
+  try {
+    await syncDocToFirestore('payments', paymentId, newPayment);
+  } catch (err) {
+    console.warn(`Firestore sync note for payment ${paymentId}:`, err);
+  }
 
   // Recalculate totals
   const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
@@ -1649,7 +1653,7 @@ export async function addPayment(
     newPaymentStatus = 'PAYMENT_PENDING';
   }
 
-  await updateOrder(
+  const updatedOrder = await updateOrder(
     order.orderId,
     {
       amountReceived: newReceived,
@@ -1698,7 +1702,7 @@ export async function addPayment(
     newValue: `₹${paymentInput.amount.toLocaleString('en-IN')} for order ${order.orderId}`
   });
 
-  return newPayment;
+  return { payment: newPayment, order: updatedOrder };
 }
 
 export async function getPaymentsForOrder(orderId: string): Promise<PaymentTransaction[]> {
@@ -1716,7 +1720,7 @@ export async function updatePayment(
     remarks?: string;
   },
   user: UserProfile
-): Promise<PaymentTransaction> {
+): Promise<{ payment: PaymentTransaction; order: Order }> {
   if (user.role === 'AGENT' || user.role === 'DISPATCH') {
     throw new Error('You do not have permission to edit payments.');
   }
@@ -1762,7 +1766,7 @@ export async function updatePayment(
     newPaymentStatus = 'PAYMENT_PENDING';
   }
 
-  await updateOrder(
+  const updatedOrder = await updateOrder(
     order.orderId,
     {
       amountReceived: newReceived,
@@ -1782,7 +1786,7 @@ export async function updatePayment(
     newValue: `₹${updatedPayment.amount.toLocaleString('en-IN')} via ${updatedPayment.paymentMode} for order ${order.orderId}`
   });
 
-  return updatedPayment;
+  return { payment: updatedPayment, order: updatedOrder };
 }
 
 // ----------------------------------------------------
