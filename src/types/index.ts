@@ -172,6 +172,8 @@ export interface Order {
   schoolAddress?: string;
   principalName?: string;
   schoolContactPhone?: string;
+  schoolEmail?: string;
+  schoolPincode?: string;
   agentCommissionPercentage?: number;
 
   // Order categorisation

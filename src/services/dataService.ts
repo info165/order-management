@@ -1004,6 +1004,8 @@ export async function updateOrderSchoolDetails(
     state?: string;
     district?: string;
     schoolCode?: string;
+    email?: string;
+    pincode?: string;
   },
   user: UserProfile
 ): Promise<{ order: Order; school?: School }> {
@@ -1025,6 +1027,8 @@ export async function updateOrderSchoolDetails(
   const trimmedState = schoolDetails.state?.trim() ?? targetOrder.state;
   const trimmedDistrict = schoolDetails.district?.trim() ?? targetOrder.district;
   const trimmedSchoolCode = schoolDetails.schoolCode?.trim() ?? targetOrder.schoolCode;
+  const trimmedEmail = schoolDetails.email?.trim() ?? targetOrder.schoolEmail;
+  const trimmedPincode = schoolDetails.pincode?.trim() ?? targetOrder.schoolPincode;
 
   // Find existing school in master registry
   let schoolIdx = memorySchools.findIndex(s => s.schoolId === targetOrder.schoolId);
@@ -1049,6 +1053,8 @@ export async function updateOrderSchoolDetails(
       state: trimmedState || existingSchool.state,
       district: trimmedDistrict ?? existingSchool.district,
       schoolCode: trimmedSchoolCode ?? existingSchool.schoolCode,
+      email: trimmedEmail ?? existingSchool.email,
+      pinCode: trimmedPincode ?? existingSchool.pinCode,
       updatedAt: now
     };
     memorySchools[schoolIdx] = updatedSchool;
@@ -1067,6 +1073,8 @@ export async function updateOrderSchoolDetails(
       state: trimmedState || 'India',
       district: trimmedDistrict || '',
       schoolCode: trimmedSchoolCode,
+      email: trimmedEmail || '',
+      pinCode: trimmedPincode || '',
       createdAt: now,
       updatedAt: now
     };
@@ -1085,6 +1093,8 @@ export async function updateOrderSchoolDetails(
     state: trimmedState,
     district: trimmedDistrict,
     schoolCode: trimmedSchoolCode,
+    schoolEmail: trimmedEmail,
+    schoolPincode: trimmedPincode,
     schoolId: updatedSchool ? updatedSchool.schoolId : targetOrder.schoolId,
     updatedAt: now,
     updatedBy: user.name
@@ -1105,6 +1115,8 @@ export async function updateOrderSchoolDetails(
           schoolName: trimmedName,
           schoolContactPhone: trimmedPhone,
           schoolAddress: trimmedAddress,
+          schoolEmail: trimmedEmail,
+          schoolPincode: trimmedPincode,
           updatedAt: now
         };
       }

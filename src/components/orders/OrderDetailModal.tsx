@@ -104,8 +104,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [schoolFormAddress, setSchoolFormAddress] = useState(order.schoolAddress || '');
   const [schoolFormType, setSchoolFormType] = useState(order.schoolType || '');
   const [schoolFormState, setSchoolFormState] = useState(order.state || '');
-  const [schoolFormDistrict, setSchoolFormDistrict] = useState(order.district || '');
   const [schoolFormCode, setSchoolFormCode] = useState(order.schoolCode || '');
+  const [schoolFormEmail, setSchoolFormEmail] = useState(order.schoolEmail || '');
+  const [schoolFormPincode, setSchoolFormPincode] = useState(order.schoolPincode || '');
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [schoolSaveError, setSchoolSaveError] = useState<string | null>(null);
 
@@ -141,8 +142,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setSchoolFormAddress(activeOrder.schoolAddress || '');
     setSchoolFormType(activeOrder.schoolType || '');
     setSchoolFormState(activeOrder.state || '');
-    setSchoolFormDistrict(activeOrder.district || '');
     setSchoolFormCode(activeOrder.schoolCode || '');
+    setSchoolFormEmail(activeOrder.schoolEmail || '');
+    setSchoolFormPincode(activeOrder.schoolPincode || '');
     setSelectedAgentId(activeOrder.agentId || 'AGT-DIRECT');
     setContractFormOrderNumber(activeOrder.orderNumber || '');
     setContractFormPoNumber(activeOrder.purchaseOrderNumber || '');
@@ -168,8 +170,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           address: schoolFormAddress.trim(),
           schoolType: schoolFormType.trim(),
           state: schoolFormState.trim(),
-          district: schoolFormDistrict.trim(),
-          schoolCode: schoolFormCode.trim()
+          schoolCode: schoolFormCode.trim(),
+          email: schoolFormEmail.trim(),
+          pincode: schoolFormPincode.trim()
         },
         currentUser
       );
@@ -1066,16 +1069,29 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           />
                         </div>
                         <div>
-                          <label className="text-slate-600 font-semibold block mb-1">District</label>
+                          <label className="text-slate-600 font-semibold block mb-1">Pin Code</label>
                           <input
                             type="text"
-                            value={schoolFormDistrict}
-                            onChange={(e) => setSchoolFormDistrict(e.target.value)}
-                            placeholder="e.g. Khordha"
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            value={schoolFormPincode}
+                            onChange={(e) => setSchoolFormPincode(e.target.value)}
+                            placeholder="e.g. 751001"
+                            maxLength={6}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
                             disabled={isSavingSchool}
                           />
                         </div>
+                      </div>
+
+                      <div>
+                        <label className="text-slate-600 font-semibold block mb-1">Email ID</label>
+                        <input
+                          type="email"
+                          value={schoolFormEmail}
+                          onChange={(e) => setSchoolFormEmail(e.target.value)}
+                          placeholder="e.g. school@navodaya.gov.in"
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          disabled={isSavingSchool}
+                        />
                       </div>
 
                       <div className="flex items-center gap-2 pt-1">
@@ -1150,9 +1166,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <span className="font-medium text-slate-700">{activeOrder.state || 'N/A'}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[11px]">District:</span>
-                          <span className="font-medium text-slate-700">{activeOrder.district || 'N/A'}</span>
+                          <span className="text-slate-400 block text-[11px]">Pin Code:</span>
+                          <span className="font-mono text-slate-700">{activeOrder.schoolPincode || 'N/A'}</span>
                         </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100">
+                        <span className="text-slate-400 block text-[11px]">Email ID:</span>
+                        <span className="font-medium text-slate-700 break-all">{activeOrder.schoolEmail || 'Not provided'}</span>
                       </div>
                     </div>
                   )}
