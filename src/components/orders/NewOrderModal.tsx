@@ -3,6 +3,7 @@ import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircl
 import { Order, School, Agent, Product, UserProfile } from '../../types';
 import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
+import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 
 interface NewOrderModalProps {
   currentUser: UserProfile;
@@ -113,30 +114,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
     s => s.schoolName.toLowerCase().trim() === schoolName.toLowerCase().trim()
   );
 
-  // Standard laboratory and equipment categories
-  const defaultStandardCategories = [
-    'TLM Class 1',
-    'TLM Class 2',
-    'TLM Class 3',
-    'TLM Class 4',
-    'TLM Class 5',
-    'Science Kit',
-    'Science Circle',
-    'Maths Kit',
-    'Maths Circle',
-    '21st Century Kit',
-    'Robotics Kits',
-    'ATL Consumable Kit 1',
-    'ATL Consumable Kit 2',
-    'ATL Consumable Kit 3',
-    'ATL Consumable Kit 4'
-  ];
-
   // Only the curated package list is shown - not every historical product/
   // category name ever typed on a past order, which used to flood this
   // dropdown with near-duplicate entries (e.g. "Robotics Kit 1", "Robotics
   // Kit 2", "TLM Class 1 (Set of 10)") alongside the intended options.
-  const allAvailableCategories = defaultStandardCategories;
+  const allAvailableCategories = EQUIPMENT_CATEGORIES;
 
   const filteredCategories = allAvailableCategories.filter(cat => {
     if (!category.trim()) return true;

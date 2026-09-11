@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Building,
@@ -26,7 +26,8 @@ import {
   Trash2,
   Download,
   Edit2,
-  UserCheck
+  UserCheck,
+  ChevronDown
 } from 'lucide-react';
 import {
   Order,
@@ -42,6 +43,7 @@ import {
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
+import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 import {
   getPaymentsForOrder,
   addPayment,
@@ -123,6 +125,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [isSavingContract, setIsSavingContract] = useState(false);
   const [contractSaveError, setContractSaveError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<string[]>([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const filteredContractCategories = EQUIPMENT_CATEGORIES.filter(
+    cat => !contractFormCategory.trim() || cat.toLowerCase().includes(contractFormCategory.toLowerCase().trim())
+  );
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -134,6 +141,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   useEffect(() => {
     getAgents().then(setAvailableAgents).catch(console.error);
     getSystemSettings().then(s => setCompanies(s.companies || [])).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setShowCategoryDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -1248,17 +1265,51 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                             disabled={isSavingContract}
                           />
                         </div>
-                        <div>
+                        <div className="relative" ref={categoryDropdownRef}>
                           <label className="text-slate-600 font-semibold block mb-1">
                             Category / Package <span className="text-rose-500">*</span>
                           </label>
-                          <input
-                            type="text"
-                            value={contractFormCategory}
-                            onChange={(e) => setContractFormCategory(e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                            disabled={isSavingContract}
-                          />
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={contractFormCategory}
+                              onChange={(e) => {
+                                setContractFormCategory(e.target.value);
+                                setShowCategoryDropdown(true);
+                              }}
+                              onFocus={() => setShowCategoryDropdown(true)}
+                              placeholder="Search or select a package..."
+                              className="w-full px-2.5 py-1.5 pr-7 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                              disabled={isSavingContract}
+                            />
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+
+                          {showCategoryDropdown && !isSavingContract && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-slate-200 z-50 max-h-48 overflow-y-auto divide-y divide-slate-100">
+                              {filteredContractCategories.map(cat => (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    setContractFormCategory(cat);
+                                    setShowCategoryDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center justify-between ${
+                                    cat === contractFormCategory ? 'bg-amber-50/60 font-bold text-amber-950' : 'text-slate-800'
+                                  }`}
+                                >
+                                  <span className="truncate">{cat}</span>
+                                  {cat === contractFormCategory && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
+                                </button>
+                              ))}
+                              {filteredContractCategories.length === 0 && (
+                                <div className="px-2.5 py-2 text-[11px] text-slate-400">
+                                  No match — you can keep this as a custom value
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
