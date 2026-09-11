@@ -290,7 +290,7 @@ export interface DeliveryRecord {
   deliveryId: string;
   orderId: string;
   deliveryDate: string;
-  receivedBy: string;
+  receivedBy?: string;
   receiverDesignation?: string;
   deliveryRemarks?: string;
   proofOfDeliveryUrl?: string;

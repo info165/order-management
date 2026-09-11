@@ -1530,7 +1530,6 @@ export async function markDelivered(
   orderId: string,
   deliveryInput: {
     deliveryDate: string;
-    receivedBy: string;
     receiverDesignation?: string;
     deliveryRemarks?: string;
     proofOfDeliveryUrl?: string;
@@ -1548,7 +1547,6 @@ export async function markDelivered(
     deliveryId: `DEL-${Date.now()}`,
     orderId,
     deliveryDate: deliveryInput.deliveryDate,
-    receivedBy: deliveryInput.receivedBy,
     receiverDesignation: deliveryInput.receiverDesignation,
     deliveryRemarks: deliveryInput.deliveryRemarks,
     proofOfDeliveryUrl: deliveryInput.proofOfDeliveryUrl,
@@ -1579,7 +1577,7 @@ export async function markDelivered(
     changedBy: user.userId,
     changedByName: user.name,
     changedAt: new Date().toISOString(),
-    comment: `Material successfully delivered and received by ${deliveryInput.receivedBy} (${deliveryInput.receiverDesignation || 'School Representative'}).`,
+    comment: `Material successfully delivered and confirmed received by ${deliveryInput.receiverDesignation || 'School Representative'}.`,
     visibleToAgent: true
   };
   await addTimelineEntry(timelineItem);
@@ -1592,7 +1590,7 @@ export async function markDelivered(
         userId: agent.userId,
         type: 'DELIVERY',
         title: 'Order Delivered to School',
-        message: `Order ${orderId} has been confirmed delivered at ${order.schoolName}. Received by: ${deliveryInput.receivedBy}.`,
+        message: `Order ${orderId} has been confirmed delivered at ${order.schoolName}.`,
         orderId
       });
     }
@@ -1604,7 +1602,7 @@ export async function markDelivered(
     action: 'ORDER_DELIVERED',
     entityType: 'ORDER',
     entityId: orderId,
-    newValue: `Delivered on ${deliveryInput.deliveryDate}. Received by ${deliveryInput.receivedBy}`
+    newValue: `Delivered on ${deliveryInput.deliveryDate}${deliveryInput.receiverDesignation ? ` (${deliveryInput.receiverDesignation})` : ''}`
   });
 }
 

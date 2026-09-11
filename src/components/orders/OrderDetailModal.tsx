@@ -264,7 +264,6 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   // Delivery confirmation form
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split('T')[0]);
-  const [receivedBy, setReceivedBy] = useState('');
   const [receiverDesignation, setReceiverDesignation] = useState('Principal / Incharge');
   const [deliveryRemarks, setDeliveryRemarks] = useState('');
   const [isSubmittingDelivery, setIsSubmittingDelivery] = useState(false);
@@ -578,17 +577,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   // Handle Mark Delivered
   const handleMarkDelivered = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!receivedBy.trim()) {
-      alert('Please specify the receiving officer or principal name.');
-      return;
-    }
     setIsSubmittingDelivery(true);
     try {
       await markDelivered(
         order.orderId,
         {
           deliveryDate,
-          receivedBy,
           receiverDesignation,
           deliveryRemarks
         },
@@ -1855,7 +1849,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
 
                   <form onSubmit={handleMarkDelivered} className="space-y-4 text-xs">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-emerald-900 font-semibold mb-1">Delivered Date</label>
                         <input
@@ -1863,18 +1857,6 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           value={deliveryDate}
                           onChange={(e) => setDeliveryDate(e.target.value)}
                           className="w-full px-3 py-2 rounded-lg border border-emerald-300 font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-emerald-900 font-semibold mb-1">Received By (Name)</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. Shri R. K. Sharma"
-                          value={receivedBy}
-                          onChange={(e) => setReceivedBy(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-emerald-300 text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
                         />
                       </div>
 
