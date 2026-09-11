@@ -494,18 +494,27 @@ export const OrderList: React.FC<OrderListProps> = ({
 
   // Calculated Metrics for Spreadsheet Status Bar
   const totalDisplayValue = useMemo(() => {
-    return sortedOrders.reduce((acc, o) => acc + (o.orderValue || 0), 0);
+    // Cancelled orders show "CANCELLED" instead of a value in their own row
+    // (nothing was actually bought), so their value shouldn't silently still
+    // count toward this total - excluded the same way for every order,
+    // present or future, since this is recomputed live off current status.
+    return sortedOrders.reduce((acc, o) => acc + (o.status === 'CANCELLED' ? 0 : (o.orderValue || 0)), 0);
   }, [sortedOrders]);
 
+  const nonCancelledDisplayCount = useMemo(
+    () => sortedOrders.filter(o => o.status !== 'CANCELLED').length,
+    [sortedOrders]
+  );
+
   const avgDisplayValue = useMemo(() => {
-    if (sortedOrders.length === 0) return 0;
-    return Math.round(totalDisplayValue / sortedOrders.length);
-  }, [sortedOrders, totalDisplayValue]);
+    if (nonCancelledDisplayCount === 0) return 0;
+    return Math.round(totalDisplayValue / nonCancelledDisplayCount);
+  }, [nonCancelledDisplayCount, totalDisplayValue]);
 
   const selectedValueSum = useMemo(() => {
     return orders
       .filter(o => selectedOrderIds.includes(o.orderId))
-      .reduce((acc, o) => acc + (o.orderValue || 0), 0);
+      .reduce((acc, o) => acc + (o.status === 'CANCELLED' ? 0 : (o.orderValue || 0)), 0);
   }, [orders, selectedOrderIds]);
 
   // Selection handlers
