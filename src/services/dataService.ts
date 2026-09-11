@@ -1789,6 +1789,64 @@ export async function updatePayment(
   return { payment: updatedPayment, order: updatedOrder };
 }
 
+export async function deletePayment(paymentId: string, user: UserProfile): Promise<{ order: Order }> {
+  if (user.role === 'AGENT' || user.role === 'DISPATCH') {
+    throw new Error('You do not have permission to delete payments.');
+  }
+
+  const idx = memoryPayments.findIndex(p => p.paymentId === paymentId);
+  if (idx === -1) throw new Error('Payment record not found');
+  const existing = memoryPayments[idx];
+
+  const order = memoryOrders.find(o => o.orderId === existing.orderId);
+  if (!order) throw new Error('Order not found');
+
+  memoryPayments = memoryPayments.filter(p => p.paymentId !== paymentId);
+  saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+  try {
+    await deleteDocFromFirestore('payments', paymentId);
+  } catch (err) {
+    console.warn(`Firestore delete note for payment ${paymentId}:`, err);
+  }
+
+  // Same recalculation as updatePayment() - derive the order's totals from
+  // the actual sum of its remaining payment records, not a delta, so they
+  // can never drift out of sync with what the ledger shows.
+  const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
+  const newReceived = memoryPayments
+    .filter(p => p.orderId === existing.orderId)
+    .reduce((sum, p) => sum + p.amount, 0);
+  const newPending = Math.max(0, totalAmount - newReceived);
+
+  let newPaymentStatus: PaymentStatus = 'PARTIALLY_PAID';
+  if (newPending <= 0) {
+    newPaymentStatus = 'PAID';
+  } else if (newReceived === 0) {
+    newPaymentStatus = 'PAYMENT_PENDING';
+  }
+
+  const updatedOrder = await updateOrder(
+    order.orderId,
+    {
+      amountReceived: newReceived,
+      amountPending: newPending,
+      paymentStatus: newPaymentStatus
+    },
+    user
+  );
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'PAYMENT_DELETED',
+    entityType: 'PAYMENT',
+    entityId: paymentId,
+    previousValue: `₹${existing.amount.toLocaleString('en-IN')} via ${existing.paymentMode} for order ${order.orderId}`
+  });
+
+  return { order: updatedOrder };
+}
+
 // ----------------------------------------------------
 // DOCUMENTS SERVICE
 // ----------------------------------------------------

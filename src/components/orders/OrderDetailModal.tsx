@@ -46,6 +46,7 @@ import {
   getPaymentsForOrder,
   addPayment,
   updatePayment,
+  deletePayment,
   getDocumentsForOrder,
   uploadDocument,
   deleteDocument,
@@ -279,6 +280,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [paymentRemarks, setPaymentRemarks] = useState('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
 
   // Document upload states
   const [docType, setDocType] = useState<any>('Purchase Order');
@@ -680,6 +682,26 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setTransactionRef('');
     setBankRef('');
     setPaymentRemarks('');
+  };
+
+  const handleDeletePayment = async (p: PaymentTransaction) => {
+    if (!confirm(`Delete this payment of ₹${p.amount.toLocaleString('en-IN')} (${p.paymentMode})? This cannot be undone, and the order's totals will be recalculated.`)) {
+      return;
+    }
+    setDeletingPaymentId(p.paymentId);
+    try {
+      const result = await deletePayment(p.paymentId, currentUser);
+      setActiveOrder(result.order);
+      if (editingPaymentId === p.paymentId) {
+        handleCancelEditPayment();
+      }
+      await loadData();
+      onOrderUpdated(result.order);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDeletingPaymentId(null);
+    }
   };
 
   // Handle Document Upload
@@ -2228,15 +2250,28 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           </td>
                           {!isAgent && (
                             <td className="px-4 py-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleEditPaymentClick(p)}
-                                title="Edit this payment"
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                                <span>Edit</span>
-                              </button>
+                              <div className="flex items-center justify-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditPaymentClick(p)}
+                                  disabled={deletingPaymentId === p.paymentId}
+                                  title="Edit this payment"
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800 disabled:opacity-50"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePayment(p)}
+                                  disabled={deletingPaymentId === p.paymentId}
+                                  title="Delete this payment"
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>{deletingPaymentId === p.paymentId ? 'Deleting...' : 'Delete'}</span>
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
