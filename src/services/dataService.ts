@@ -1103,6 +1103,7 @@ export async function updateOrderSchoolDetails(
   memoryOrders[orderIdx] = updatedOrder;
 
   // Also sync any other orders linked to the exact same school
+  const siblingOrderIds: string[] = [];
   if (updatedSchool) {
     memoryOrders = memoryOrders.map(o => {
       if (
@@ -1110,6 +1111,7 @@ export async function updateOrderSchoolDetails(
         (o.schoolId === updatedSchool!.schoolId ||
           (targetOrder.schoolName && o.schoolName.toLowerCase().trim() === targetOrder.schoolName.toLowerCase().trim()))
       ) {
+        siblingOrderIds.push(o.orderId);
         return {
           ...o,
           schoolName: trimmedName,
@@ -1133,6 +1135,23 @@ export async function updateOrderSchoolDetails(
     await syncDocToFirestore('orders', orderId, updatedOrder);
   } catch (err) {
     console.warn(`Firestore sync note for ${orderId}:`, err);
+  }
+
+  // Sibling orders were only ever updated in local memory above and never
+  // actually pushed to Firestore, so anyone opening one of them from a
+  // different browser/account kept seeing the old phone/address - push
+  // each one now too.
+  if (siblingOrderIds.length > 0) {
+    await Promise.all(
+      siblingOrderIds.map(sid => {
+        const sibling = memoryOrders.find(o => o.orderId === sid);
+        return sibling
+          ? syncDocToFirestore('orders', sid, sibling).catch(err =>
+              console.warn(`Firestore sync note for sibling order ${sid}:`, err)
+            )
+          : Promise.resolve();
+      })
+    );
   }
 
   await writeActivityLog({
@@ -2142,13 +2161,53 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
   if (user.role === 'AGENT') throw new Error('Partners cannot edit school records.');
   const idx = memorySchools.findIndex(s => s.schoolId === schoolId);
   if (idx === -1) throw new Error('School not found');
-  const updated = { ...memorySchools[idx], ...updates, updatedAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const updated = { ...memorySchools[idx], ...updates, updatedAt: now };
   memorySchools[idx] = updated;
   saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
   try {
     await syncDocToFirestore('schools', schoolId, updated);
   } catch (err) {
     console.warn(`Firestore sync note for school ${schoolId}:`, err);
+  }
+
+  // Editing phone/address here (School Registry page) previously never
+  // touched any order - so opening an order for this school kept showing
+  // the old contact details, and the only way to fix that was to edit the
+  // order itself. Push the same change to every order linked to this
+  // school (matching the reverse sync already done from the order side in
+  // updateOrderSchoolDetails), so both places stay in sync either way.
+  const phoneChanged = updates.contactPhone !== undefined || updates.phone !== undefined;
+  const addressChanged = updates.address !== undefined;
+  if (phoneChanged || addressChanged) {
+    const newPhone = updates.contactPhone ?? updates.phone ?? '';
+    const newAddress = updates.address ?? '';
+    const linkedOrderIds: string[] = [];
+    memoryOrders = memoryOrders.map(o => {
+      if (o.schoolId === schoolId) {
+        linkedOrderIds.push(o.orderId);
+        return {
+          ...o,
+          schoolContactPhone: phoneChanged ? newPhone : o.schoolContactPhone,
+          schoolAddress: addressChanged ? newAddress : o.schoolAddress,
+          updatedAt: now
+        };
+      }
+      return o;
+    });
+    if (linkedOrderIds.length > 0) {
+      saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+      await Promise.all(
+        linkedOrderIds.map(oid => {
+          const o = memoryOrders.find(x => x.orderId === oid);
+          return o
+            ? syncDocToFirestore('orders', oid, o).catch(err =>
+                console.warn(`Firestore sync note for order ${oid}:`, err)
+              )
+            : Promise.resolve();
+        })
+      );
+    }
   }
 
   await writeActivityLog({
