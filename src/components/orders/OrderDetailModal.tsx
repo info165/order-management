@@ -2098,7 +2098,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           required
                           min={0.00001}
                           step={0.00001}
-                          value={paymentAmount}
+                          value={paymentAmount || ''}
                           onChange={(e) => {
                             // Repeatedly clicking the spinner arrows accumulates
                             // binary floating-point drift (e.g. 15000 ->
