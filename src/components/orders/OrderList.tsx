@@ -23,7 +23,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExportService';
-import { clearAllOrders, clearAllPastDataAndResyncWithSheet, getAgents, bulkUpdateOrderAgent } from '../../services/dataService';
+import { clearAllOrders, getAgents, bulkUpdateOrderAgent } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
 
@@ -568,23 +568,6 @@ export const OrderList: React.FC<OrderListProps> = ({
     }
   };
 
-  const handleResetTo121Sheet = async () => {
-    const ok = window.confirm('Reset the dashboard to the 122 orders parsed from the master sheet?');
-    if (!ok) return;
-    setIsResetting(true);
-    try {
-      const res = await clearAllPastDataAndResyncWithSheet(currentUser);
-      if (onOrdersUpdated) {
-        onOrdersUpdated();
-      }
-      alert(`Loaded ${res.count} orders directly from the sheet!`);
-    } catch (err: any) {
-      alert('Error syncing sheet: ' + err.message);
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   // Helper to render sort icon in column header
   const renderSortIndicator = (key: string) => {
     if (sortConfig?.key !== key) {
@@ -661,21 +644,11 @@ export const OrderList: React.FC<OrderListProps> = ({
                       type="button"
                       onClick={handleClearAllData}
                       disabled={isResetting}
-                      className="bg-white hover:bg-rose-50 text-rose-700 font-medium px-2.5 py-1.5 flex items-center gap-1 border-r border-slate-200 transition-colors"
+                      className="bg-white hover:bg-rose-50 text-rose-700 font-medium px-2.5 py-1.5 flex items-center gap-1 transition-colors"
                       title="Clear orders to upload a fresh spreadsheet"
                     >
                       <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                       <span>Clear</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetTo121Sheet}
-                      disabled={isResetting}
-                      className="bg-white hover:bg-slate-50 text-slate-700 font-medium px-2.5 py-1.5 flex items-center gap-1 transition-colors"
-                      title="Reload initial master sheet (122 orders)"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Sheet (122)</span>
                     </button>
                   </div>
                 )}

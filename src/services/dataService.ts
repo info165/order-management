@@ -499,49 +499,6 @@ export async function syncAllDataToFirestore(): Promise<{ success: boolean; coun
   }
 }
 
-// Clear all past data and re-initialize purely with the 121 real sheet records
-export async function clearAllPastDataAndResyncWithSheet(user: UserProfile): Promise<{ success: boolean; count: number; firestoreSynced: boolean; error?: string }> {
-  try {
-    if (user.role === 'AGENT') throw new Error('Unauthorized');
-
-    // Wipe cached keys
-    Object.values(STORAGE_KEYS).forEach(k => {
-      try { localStorage.removeItem(k); } catch (_) {}
-    });
-
-    memoryOrders = [...INITIAL_ORDERS];
-    memorySchools = [...INITIAL_SCHOOLS];
-    memoryAgents = [...INITIAL_AGENTS];
-    memoryProducts = [...INITIAL_PRODUCTS];
-
-    saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-    saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-    saveStorage(STORAGE_KEYS.AGENTS, memoryAgents);
-    saveStorage(STORAGE_KEYS.PRODUCTS, memoryProducts);
-
-    let firestoreSynced = false;
-    try {
-      const syncRes = await syncAllDataToFirestore();
-      firestoreSynced = syncRes.success;
-    } catch (e) {
-      console.warn('Firestore sync during reset notice:', e);
-    }
-
-    await writeActivityLog({
-      userId: user.userId,
-      userName: user.name,
-      action: 'CLEAR_AND_RESET_SHEET',
-      entityType: 'ORDER',
-      entityId: 'ALL',
-      newValue: `Cleared all past data and initialized exactly ${memoryOrders.length} spreadsheet orders`
-    });
-
-    return { success: true, count: memoryOrders.length, firestoreSynced };
-  } catch (err: any) {
-    return { success: false, count: 0, firestoreSynced: false, error: err.message };
-  }
-}
-
 // Clear all orders completely from memory and storage (ready for fresh upload)
 export async function clearAllOrders(user: UserProfile): Promise<{ success: boolean; clearedCount: number }> {
   if (user.role === 'AGENT') throw new Error('Unauthorized');
