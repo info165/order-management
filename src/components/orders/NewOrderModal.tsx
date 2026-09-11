@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle, ChevronDown, Check } from 'lucide-react';
+import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle } from 'lucide-react';
 import { Order, School, Agent, Product, UserProfile } from '../../types';
 import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, addCategory as addCategoryToSettings } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -41,8 +41,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   // Category & Custom Category Creation
   const [category, setCategory] = useState('');
   const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -94,9 +92,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       if (schoolDropdownRef.current && !schoolDropdownRef.current.contains(e.target as Node)) {
         setShowSchoolDropdown(false);
       }
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
-        setShowCategoryDropdown(false);
-      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -123,11 +118,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   // near-duplicate entries (e.g. "Robotics Kit 1", "Robotics Kit 2",
   // "TLM Class 1 (Set of 10)") alongside the intended options.
   const allAvailableCategories = categories;
-
-  const filteredCategories = allAvailableCategories.filter(cat => {
-    if (!category.trim()) return true;
-    return cat.toLowerCase().includes(category.toLowerCase().trim());
-  });
 
   const handleAddCompany = async () => {
     const trimmed = newCompanyName.trim();
@@ -158,7 +148,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       setCategory(trimmed);
       setNewCategoryName('');
       setShowAddCategory(false);
-      setShowCategoryDropdown(false);
     } catch (err: any) {
       setAddCategoryError(err.message || 'Could not add category.');
     } finally {
@@ -203,7 +192,6 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
 
   const handleCategorySelect = (cat: string) => {
     setCategory(cat);
-    setShowCategoryDropdown(false);
     const prod = products.find(p => p.name === cat || p.category === cat);
     if (prod && prod.standardPrice) {
       setTotalInclusiveOrderValue(prod.standardPrice);
@@ -652,7 +640,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
 
             {/* Category / Equipment Package Dropdown with Direct Creation */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="relative" ref={categoryDropdownRef}>
+              <div className="relative">
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-slate-700 font-semibold">
                     Category / Equipment Package <span className="text-rose-500">*</span>
@@ -669,48 +657,20 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   )}
                 </div>
 
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    value={category}
-                    onChange={(e) => {
-                      setCategory(e.target.value);
-                      setShowCategoryDropdown(true);
-                    }}
-                    onFocus={() => setShowCategoryDropdown(true)}
-                    placeholder="Search or select a package..."
-                    className="w-full px-3 py-2 pr-8 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                  <ChevronDown
-                    className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none cursor-pointer"
-                  />
-                </div>
-
-                {/* Category Search Dropdown Menu */}
-                {showCategoryDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
-                    {/* Filtered list of existing categories - if the typed text
-                        doesn't match anything (e.g. blank, or a stray
-                        character), fall back to showing the full list rather
-                        than a dead end. */}
-                    {(filteredCategories.length > 0 ? filteredCategories : allAvailableCategories).map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => handleCategorySelect(cat)}
-                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 transition-colors flex items-center justify-between ${
-                          cat === category ? 'bg-amber-50/60 font-bold text-amber-950' : 'text-slate-800'
-                        }`}
-                      >
-                        <span className="truncate">{cat}</span>
-                        {cat === category && (
-                          <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {/* Strict select - only one of the saved categories can be
+                    chosen, no free typing. New options only ever get added
+                    via "Add Category" above (persisted to the database). */}
+                <select
+                  required
+                  value={category}
+                  onChange={(e) => handleCategorySelect(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  <option value="" disabled>Select a package...</option>
+                  {allAvailableCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
 
                 {/* Inline Add Category Form */}
                 {showAddCategory && (

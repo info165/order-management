@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Building,
@@ -26,8 +26,7 @@ import {
   Trash2,
   Download,
   Edit2,
-  UserCheck,
-  ChevronDown
+  UserCheck
 } from 'lucide-react';
 import {
   Order,
@@ -126,19 +125,6 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [contractSaveError, setContractSaveError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const categoryDropdownRef = useRef<HTMLDivElement>(null);
-  // If the current value is old free-text that doesn't match any of the
-  // saved packages (common on past orders), fall back to showing the full
-  // list instead of an empty "no match" result - the whole point of
-  // opening this dropdown on an old order is to pick one, not to hit a
-  // dead end.
-  const contractCategorySearchMatches = categories.filter(
-    cat => !contractFormCategory.trim() || cat.toLowerCase().includes(contractFormCategory.toLowerCase().trim())
-  );
-  const filteredContractCategories = contractCategorySearchMatches.length > 0
-    ? contractCategorySearchMatches
-    : categories;
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -153,16 +139,6 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setCompanies(s.companies || []);
       setCategories(s.categories && s.categories.length > 0 ? s.categories : EQUIPMENT_CATEGORIES);
     }).catch(console.error);
-  }, []);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
-        setShowCategoryDropdown(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -1277,46 +1253,30 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                             disabled={isSavingContract}
                           />
                         </div>
-                        <div className="relative" ref={categoryDropdownRef}>
+                        <div>
                           <label className="text-slate-600 font-semibold block mb-1">
                             Category / Package <span className="text-rose-500">*</span>
                           </label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={contractFormCategory}
-                              onChange={(e) => {
-                                setContractFormCategory(e.target.value);
-                                setShowCategoryDropdown(true);
-                              }}
-                              onFocus={() => setShowCategoryDropdown(true)}
-                              placeholder="Search or select a package..."
-                              className="w-full px-2.5 py-1.5 pr-7 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                              disabled={isSavingContract}
-                            />
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          </div>
-
-                          {showCategoryDropdown && !isSavingContract && (
-                            <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-xl border border-slate-200 z-50 max-h-48 overflow-y-auto divide-y divide-slate-100">
-                              {filteredContractCategories.map(cat => (
-                                <button
-                                  key={cat}
-                                  type="button"
-                                  onClick={() => {
-                                    setContractFormCategory(cat);
-                                    setShowCategoryDropdown(false);
-                                  }}
-                                  className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center justify-between ${
-                                    cat === contractFormCategory ? 'bg-amber-50/60 font-bold text-amber-950' : 'text-slate-800'
-                                  }`}
-                                >
-                                  <span className="truncate">{cat}</span>
-                                  {cat === contractFormCategory && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          {/* Strict select - only one of the saved categories
+                              can be chosen, no free typing. If this order's
+                              current value is old free-text not in the list
+                              (common on past orders), it's kept as a visible
+                              extra option instead of being silently dropped -
+                              picking it back doesn't change anything. */}
+                          <select
+                            value={contractFormCategory}
+                            onChange={(e) => setContractFormCategory(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          >
+                            <option value="" disabled>Select a package...</option>
+                            {contractFormCategory && !categories.includes(contractFormCategory) && (
+                              <option value={contractFormCategory}>{contractFormCategory} (current)</option>
+                            )}
+                            {categories.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
 
