@@ -12,7 +12,13 @@ export function formatINR(amount: number, showDecimals = false): string {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    maximumFractionDigits: (showDecimals || hasFractions) ? 2 : 0,
+    // Up to 5 decimal places - Intl.NumberFormat only ever shows as many as
+    // the value actually has (down to the minimum below), so a normal whole-
+    // rupee or 2-decimal amount displays exactly as before; only a value
+    // that genuinely carries more precision (e.g. a payment entered as
+    // 1234.12345) now shows all of it instead of being silently rounded
+    // away to 2 decimals for display.
+    maximumFractionDigits: (showDecimals || hasFractions) ? 5 : 0,
     minimumFractionDigits: showDecimals ? 2 : (hasFractions ? 2 : 0)
   }).format(amount);
 }
