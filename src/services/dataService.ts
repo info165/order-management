@@ -1982,7 +1982,11 @@ export async function createSchool(schoolInput: Omit<School, 'schoolId' | 'creat
   };
   memorySchools = [newSchool, ...memorySchools];
   saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-  syncDocToFirestore('schools', schoolId, newSchool);
+  try {
+    await syncDocToFirestore('schools', schoolId, newSchool);
+  } catch (err) {
+    console.warn(`Firestore sync note for school ${schoolId}:`, err);
+  }
 
   await writeActivityLog({
     userId: user.userId,
@@ -1996,12 +2000,26 @@ export async function createSchool(schoolInput: Omit<School, 'schoolId' | 'creat
 }
 
 export async function updateSchool(schoolId: string, updates: Partial<School>, user: UserProfile): Promise<School> {
+  if (user.role === 'AGENT') throw new Error('Partners cannot edit school records.');
   const idx = memorySchools.findIndex(s => s.schoolId === schoolId);
   if (idx === -1) throw new Error('School not found');
   const updated = { ...memorySchools[idx], ...updates, updatedAt: new Date().toISOString() };
   memorySchools[idx] = updated;
   saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-  syncDocToFirestore('schools', schoolId, updated);
+  try {
+    await syncDocToFirestore('schools', schoolId, updated);
+  } catch (err) {
+    console.warn(`Firestore sync note for school ${schoolId}:`, err);
+  }
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'SCHOOL_UPDATED',
+    entityType: 'SCHOOL',
+    entityId: schoolId,
+    newValue: `Updated ${updated.schoolName}: ${Object.keys(updates).join(', ')}`
+  });
   return updated;
 }
 

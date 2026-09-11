@@ -9,10 +9,12 @@ import {
   Building,
   ChevronRight,
   ExternalLink,
-  X
+  X,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { School, Order, UserProfile } from '../../types';
-import { createSchool, subscribeToRealtimeSchools } from '../../services/dataService';
+import { createSchool, updateSchool, subscribeToRealtimeSchools } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 
@@ -31,6 +33,13 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [phoneFilter, setPhoneFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
   const [addressFilter, setAddressFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
+
+  // Inline Phone/Address edit for the selected school
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [isSavingContact, setIsSavingContact] = useState(false);
+  const [contactSaveError, setContactSaveError] = useState<string | null>(null);
 
   // New school modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -121,6 +130,50 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   }, [orders, selectedSchool]);
 
   const totalValue = schoolOrders.reduce((acc, o) => acc + o.orderValue, 0);
+
+  // Exit the inline edit form whenever a different school gets selected, so
+  // stale edits from one school can't accidentally get saved onto another.
+  useEffect(() => {
+    setIsEditingContact(false);
+    setContactSaveError(null);
+  }, [selectedSchoolId]);
+
+  const handleStartEditContact = () => {
+    if (!selectedSchool) return;
+    setEditPhone(selectedSchool.contactPhone || '');
+    setEditAddress(selectedSchool.address || '');
+    setContactSaveError(null);
+    setIsEditingContact(true);
+  };
+
+  const handleCancelEditContact = () => {
+    setIsEditingContact(false);
+    setContactSaveError(null);
+  };
+
+  const handleSaveContact = async () => {
+    if (!selectedSchool) return;
+    setIsSavingContact(true);
+    setContactSaveError(null);
+    try {
+      await updateSchool(
+        selectedSchool.schoolId,
+        {
+          contactPhone: editPhone.trim(),
+          phone: editPhone.trim(),
+          address: editAddress.trim()
+        },
+        currentUser
+      );
+      // No local setSchools() needed - subscribeToRealtimeSchools() picks
+      // this up live the moment it lands in Firestore.
+      setIsEditingContact(false);
+    } catch (err: any) {
+      setContactSaveError(err.message || 'Could not save changes.');
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
 
   const handleCreateSchool = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -301,18 +354,11 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <span className="text-slate-400 block text-[11px]">Principal / Contact</span>
                     <span className="font-semibold text-slate-800 block mt-0.5">
                       {selectedSchool.principalName || 'Principal'}
-                    </span>
-                  </div>
-
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <span className="text-slate-400 block text-[11px]">Contact Mobile / Phone</span>
-                    <span className="font-mono text-slate-700 block mt-0.5">
-                      {selectedSchool.contactPhone || 'Available on PO'}
                     </span>
                   </div>
 
@@ -322,6 +368,86 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                       {selectedSchool.pincode || 'Verified'}
                     </span>
                   </div>
+                </div>
+
+                {/* Editable Phone & Address */}
+                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase text-slate-500">Contact Phone & Address</span>
+                    {currentUser.role !== 'AGENT' && !isEditingContact && (
+                      <button
+                        type="button"
+                        onClick={handleStartEditContact}
+                        className="text-[11px] font-semibold text-amber-600 hover:text-amber-700 flex items-center gap-1"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {isEditingContact ? (
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-slate-500 font-semibold mb-1 text-[11px]">Phone</label>
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="e.g. +91 94120 00000"
+                          value={editPhone}
+                          onChange={(e) => setEditPhone(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-semibold mb-1 text-[11px]">Address</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Civil Lines, Near District Court"
+                          value={editAddress}
+                          onChange={(e) => setEditAddress(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      {contactSaveError && (
+                        <p className="text-[11px] text-rose-600 font-medium">{contactSaveError}</p>
+                      )}
+                      <div className="flex justify-end gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={handleCancelEditContact}
+                          disabled={isSavingContact}
+                          className="px-3 py-1.5 text-slate-600 hover:text-slate-900 font-semibold text-[11px] disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveContact}
+                          disabled={isSavingContact}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>{isSavingContact ? 'Saving...' : 'Save'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Contact Mobile / Phone</span>
+                        <span className="font-mono text-slate-700 block mt-0.5">
+                          {selectedSchool.contactPhone || 'Not Provided'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Address</span>
+                        <span className="text-slate-700 block mt-0.5">
+                          {selectedSchool.address || 'Not Provided'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
