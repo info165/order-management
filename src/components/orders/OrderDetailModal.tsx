@@ -75,7 +75,7 @@ interface OrderDetailModalProps {
   onOrderUpdated: (updated?: Order) => void;
 }
 
-type TabType = 'overview' | 'status' | 'dispatch' | 'payments' | 'documents';
+type TabType = 'overview' | 'status' | 'gemStatus' | 'dispatch' | 'payments' | 'documents';
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
@@ -808,6 +808,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Timeline & Status ({timeline.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('gemStatus')}
+            className={`py-3 px-3.5 font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'gemStatus'
+                ? 'border-amber-500 text-amber-900 font-bold bg-white'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>GeM Status</span>
           </button>
 
           <button
@@ -1571,6 +1584,269 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB: GEM STATUS */}
+          {activeTab === 'gemStatus' && (
+            <div className="space-y-6">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>GeM Status</span>
+                  </h3>
+                  <span className="text-[11px] text-slate-500">Fast Upload & File Verification</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                  {/* Company Tax Invoice Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${companyInvoiceUrl ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Tax Invoice</span>
+                      </span>
+                      {companyInvoiceUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={companyInvoiceFileName || 'Company Official Tax Invoice Copy'}>
+                      {companyInvoiceFileName || 'Company Official Tax Invoice Copy'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {companyInvoiceUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: companyInvoiceUrl,
+                                title: 'Company Tax Invoice',
+                                fileName: companyInvoiceFileName || 'Tax_Invoice.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-emerald-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={companyInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={companyInvoiceFileName || 'Tax_Invoice.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{companyInvoiceUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('companyInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('companyInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {companyInvoiceUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('companyInvoice')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete Tax Invoice"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* GeM Portal Invoice Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${gemInvoiceUrl ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-blue-700" />
+                        <span>GeM Portal Invoice</span>
+                      </span>
+                      {gemInvoiceUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={gemInvoiceFileName || 'Government e-Marketplace Invoice'}>
+                      {gemInvoiceFileName || 'Government e-Marketplace Invoice'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {gemInvoiceUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: gemInvoiceUrl,
+                                title: 'GeM Portal Invoice',
+                                fileName: gemInvoiceFileName || 'GeM_Invoice.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-blue-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={gemInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={gemInvoiceFileName || 'GeM_Invoice.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{gemInvoiceUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('gemInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-blue-700 hover:bg-blue-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleQuickDocUpload('gemInvoice', file);
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {gemInvoiceUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('gemInvoice')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete GeM Invoice"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Proof of Delivery (POD Copy) Tile */}
+                  <div className={`p-3.5 rounded-xl border transition-colors ${podCopyUrl ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50/70 border-slate-200'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-slate-900 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Proof of Delivery (POD)</span>
+                      </span>
+                      {podCopyUrl ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Pending</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-2.5 truncate" title={podCopyFileName || 'Signed School Delivery Challan'}>
+                      {podCopyFileName || 'Signed School Delivery Challan'}
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {podCopyUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewDoc({
+                                url: podCopyUrl,
+                                title: 'Proof of Delivery (POD Signed)',
+                                fileName: podCopyFileName || 'POD_Signed.pdf'
+                              })
+                            }
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Eye className="w-3 h-3 text-emerald-700" />
+                            <span>Preview</span>
+                          </button>
+                          <a
+                            href={podCopyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={podCopyFileName || 'POD_Signed.pdf'}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3 text-slate-600" />
+                            <span>Download</span>
+                          </a>
+                        </>
+                      )}
+                      <label className="cursor-pointer px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors">
+                        <UploadCloud className="w-3 h-3" />
+                        <span>{podCopyUrl ? 'Replace' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,image/*"
+                          onChange={handlePodFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      <label className="cursor-pointer p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-100 rounded transition-colors" title="Scan with Camera">
+                        <Camera className="w-3.5 h-3.5" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handlePodFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      {podCopyUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuickDoc('podCopy')}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Delete POD"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
