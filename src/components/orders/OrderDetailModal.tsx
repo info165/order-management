@@ -577,8 +577,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   // Handle Dispatch Update
   const handleUpdateDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!courierName.trim() || !trackingNumber.trim()) {
-      alert('Please provide courier name and tracking/docket number.');
+    if (!courierName.trim()) {
+      alert('Please provide the courier/transporter name.');
       return;
     }
     setIsSubmittingDispatch(true);
@@ -1994,8 +1994,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         <label className="block text-slate-600 font-semibold mb-1">Docket / LR Number</label>
                         <input
                           type="text"
-                          required
-                          placeholder="e.g. 314257981 or ED123456789IN"
+                          placeholder="e.g. 314257981 or ED123456789IN (optional)"
                           value={trackingNumber}
                           onChange={(e) => setTrackingNumber(e.target.value)}
                           className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
