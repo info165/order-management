@@ -132,13 +132,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
     'ATL Consumable Kit 4'
   ];
 
-  const allAvailableCategories = Array.from(
-    new Set([
-      ...defaultStandardCategories,
-      ...products.map(p => p.name),
-      ...products.map(p => p.category).filter(Boolean)
-    ])
-  );
+  // Only the curated package list is shown - not every historical product/
+  // category name ever typed on a past order, which used to flood this
+  // dropdown with near-duplicate entries (e.g. "Robotics Kit 1", "Robotics
+  // Kit 2", "TLM Class 1 (Set of 10)") alongside the intended options.
+  const allAvailableCategories = defaultStandardCategories;
 
   const filteredCategories = allAvailableCategories.filter(cat => {
     if (!category.trim()) return true;
