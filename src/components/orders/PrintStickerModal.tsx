@@ -233,7 +233,10 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
   const totalPages = Math.ceil(totalBoxes / 2);
 
   const shared: Omit<StickerContentProps, 'boxNumber'> = {
-    contractNumber: order.contractNumber || '',
+    // Some orders (a later batch of the original import) only ever had
+    // their GeM contract number stored in purchaseOrderNumber, not
+    // contractNumber - same fallback the main Orders list already uses.
+    contractNumber: order.contractNumber || order.purchaseOrderNumber || '',
     categoryText,
     receiverName,
     receiverAddress,
@@ -299,7 +302,7 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
                 Contract / GeM No.
               </label>
               <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 font-mono text-slate-800">
-                {order.contractNumber || 'N/A'}
+                {order.contractNumber || order.purchaseOrderNumber || 'N/A'}
               </div>
             </div>
 
