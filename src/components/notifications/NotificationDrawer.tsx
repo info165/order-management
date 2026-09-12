@@ -74,7 +74,12 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
               </div>
             ) : (
               notifications.map((n) => {
-                const isCritical = n.priority === 'CRITICAL';
+                // Once acknowledged (via "Mark all as read"), settle to the
+                // calm/read look instead of continuing to blink - the card
+                // stays listed since the payment is still genuinely overdue,
+                // it just stops demanding attention until a *different*
+                // order crosses the 7-day mark.
+                const isCritical = n.priority === 'CRITICAL' && !n.isRead;
                 return (
                   <div
                     key={n.notificationId}

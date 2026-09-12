@@ -98,13 +98,28 @@ function MainApp() {
     };
   }, [currentUser]);
 
+  // Acknowledged payment-overdue alerts (by notificationId) - "Mark all as
+  // read" adds the currently-shown ones here so the bell stops blinking,
+  // without pretending the payment is any less overdue: the card stays
+  // listed, just settles to the calm/read look. A DIFFERENT order that
+  // crosses the 7-day mark later has its own notificationId, so it isn't
+  // in this set and blinks again on its own. Persisted per-user so it
+  // survives a refresh instead of re-blinking every reload.
+  const getAcknowledgedStorageKey = () => `funscholar_acknowledged_critical_alerts_${currentUser?.userId || 'anon'}`;
+  const [acknowledgedCriticalAlertIds, setAcknowledgedCriticalAlertIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(`funscholar_acknowledged_critical_alerts_${currentUser?.userId || 'anon'}`);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
   // Payment-overdue-after-delivery alerts: computed live from the current
   // order list rather than stored, so they never need a background job to
   // create/update/expire them - an order drops off the instant its payment
   // is recorded, and a newly-crossed 7-day mark shows up the moment it's
-  // loaded. Deliberately excluded from "mark all as read" (see
-  // NotificationDrawer) since dismissing one doesn't make the payment any
-  // less overdue.
+  // loaded.
   const overduePaymentAlerts: AppNotification[] = useMemo(() => {
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const now = Date.now();
@@ -118,22 +133,24 @@ function MainApp() {
       })
       .map((o) => {
         const daysSinceDelivery = Math.floor((now - new Date(o.actualDeliveryDate!).getTime()) / (24 * 60 * 60 * 1000));
+        const notificationId = `OVERDUE-PAYMENT-${o.orderId}`;
         return {
-          notificationId: `OVERDUE-PAYMENT-${o.orderId}`,
+          notificationId,
           userId: currentUser?.userId || '',
           type: 'PAYMENT_OVERDUE',
           title: o.schoolName,
           message: `Delivered ${daysSinceDelivery} day${daysSinceDelivery === 1 ? '' : 's'} ago — ₹${(o.amountPending || 0).toLocaleString('en-IN')} payment still pending.`,
           orderId: o.orderId,
-          isRead: false,
+          isRead: acknowledgedCriticalAlertIds.has(notificationId),
           priority: 'CRITICAL',
           createdAt: o.actualDeliveryDate!
         } as AppNotification;
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [orders, currentUser?.userId]);
+  }, [orders, currentUser?.userId, acknowledgedCriticalAlertIds]);
 
   const allNotifications: AppNotification[] = [...overduePaymentAlerts, ...notifications];
+  const hasUnacknowledgedCriticalAlert = overduePaymentAlerts.some((a) => !a.isRead);
 
   // One-time backfill: give every pre-existing staff account (created before
   // real Firebase Auth sessions existed) a real account + a users/{uid} role
@@ -208,6 +225,25 @@ function MainApp() {
     await markNotificationsAsRead(currentUser.userId);
     const updated = await getNotifications(currentUser);
     setNotifications(updated);
+
+    // Also acknowledge every payment-overdue alert currently shown, so the
+    // bell's red blinking stops - the cards stay listed (still genuinely
+    // overdue), just settle to a calm/read look. A different order that
+    // crosses the 7-day mark afterwards gets its own notificationId and
+    // will blink again on its own.
+    if (overduePaymentAlerts.length > 0) {
+      setAcknowledgedCriticalAlertIds((prev) => {
+        const next = new Set(prev);
+        overduePaymentAlerts.forEach((a) => next.add(a.notificationId));
+        try {
+          localStorage.setItem(getAcknowledgedStorageKey(), JSON.stringify(Array.from(next)));
+        } catch {
+          // Local storage unavailable - acknowledgment just won't persist
+          // across a refresh, which is a harmless degradation.
+        }
+        return next;
+      });
+    }
   };
 
   const handleSelectNotification = (notif: AppNotification) => {
@@ -250,7 +286,7 @@ function MainApp() {
         onOpenImport={() => setShowImportModal(true)}
         onExportData={handleExportData}
         unreadNotificationCount={allNotifications.filter(n => !n.isRead).length}
-        hasCriticalAlert={overduePaymentAlerts.length > 0}
+        hasCriticalAlert={hasUnacknowledgedCriticalAlert}
         onToggleNotifications={() => setShowNotificationDrawer(true)}
         activeSection={activeSection}
         onNavigate={setActiveSection}
