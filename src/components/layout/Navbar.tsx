@@ -32,6 +32,7 @@ interface NavbarProps {
   onOpenImport?: () => void;
   onExportData: () => void;
   unreadNotificationCount: number;
+  hasCriticalAlert?: boolean;
   onToggleNotifications: () => void;
   searchQuery?: string;
   onSearch?: (query: string) => void;
@@ -42,6 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigate,
   onExportData,
   unreadNotificationCount,
+  hasCriticalAlert = false,
   onToggleNotifications
 }) => {
   const { currentUser, activeRole, logout } = useAuth();
@@ -121,12 +123,23 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onToggleNotifications}
-            className="relative p-2 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-            title="Activity Notifications"
+            className={`relative p-2 rounded-lg border transition-colors ${
+              hasCriticalAlert
+                ? 'bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 hover:text-white border-rose-500/60'
+                : 'bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border-slate-700'
+            }`}
+            title={hasCriticalAlert ? 'Critical alert: payment overdue since delivery' : 'Activity Notifications'}
           >
-            <Bell className="w-4 h-4" />
+            {hasCriticalAlert && (
+              <span className="absolute inset-0 rounded-lg ring-2 ring-rose-500 animate-ping opacity-75 pointer-events-none" />
+            )}
+            <Bell className={`w-4 h-4 relative ${hasCriticalAlert ? 'animate-pulse' : ''}`} />
             {unreadNotificationCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+              <span
+                className={`absolute -top-1 -right-1 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center ${
+                  hasCriticalAlert ? 'bg-rose-600 text-white animate-pulse' : 'bg-amber-500 text-slate-950'
+                }`}
+              >
                 {unreadNotificationCount}
               </span>
             )}

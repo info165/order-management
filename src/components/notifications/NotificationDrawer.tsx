@@ -21,6 +21,13 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
+      <style>{`
+        @keyframes pulse-border {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.35); border-left-color: rgb(225 29 72); }
+          50% { box-shadow: 0 0 0 4px rgba(225, 29, 72, 0); border-left-color: rgb(251 113 133); }
+        }
+        .critical-alert-blink { animation: pulse-border 1.8s ease-in-out infinite; }
+      `}</style>
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -66,41 +73,71 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                 No active notifications or alerts.
               </div>
             ) : (
-              notifications.map((n) => (
-                <div
-                  key={n.notificationId}
-                  onClick={() => onSelectNotification(n)}
-                  className={`p-3.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                    n.isRead ? 'bg-white hover:bg-slate-50 opacity-75' : 'bg-amber-50/40 hover:bg-amber-50/70 border-l-3 border-amber-500'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    {n.type === 'ERROR' || n.priority === 'HIGH' ? (
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    ) : n.type === 'WARNING' ? (
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              notifications.map((n) => {
+                const isCritical = n.priority === 'CRITICAL';
+                return (
+                  <div
+                    key={n.notificationId}
+                    onClick={() => onSelectNotification(n)}
+                    className={`relative p-3.5 rounded-lg text-xs cursor-pointer transition-colors overflow-hidden ${
+                      isCritical
+                        ? 'bg-gradient-to-r from-rose-50 to-rose-50/40 hover:from-rose-100 hover:to-rose-50/60 border-l-4 border-rose-600 shadow-sm shadow-rose-200 critical-alert-blink'
+                        : n.isRead
+                          ? 'bg-white hover:bg-slate-50 opacity-75'
+                          : 'bg-amber-50/40 hover:bg-amber-50/70 border-l-3 border-amber-500'
+                    }`}
+                  >
+                    {isCritical && (
+                      <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600" />
+                      </span>
                     )}
 
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900">{n.title}</span>
-                        <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(n.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                    <div className="flex items-start gap-2.5">
+                      {isCritical ? (
+                        <span className="relative shrink-0 mt-0.5">
+                          <span className="absolute inset-0 rounded-full bg-rose-400 animate-ping opacity-40" />
+                          <AlertTriangle className="w-4 h-4 text-rose-600 relative" />
                         </span>
-                      </div>
-                      <p className="text-slate-600 text-xs leading-relaxed">{n.message}</p>
-                      {n.orderId && (
-                        <div className="font-mono text-[10px] font-bold text-slate-700 pt-0.5">
-                          Order: {n.orderId}
-                        </div>
+                      ) : n.type === 'ERROR' || n.priority === 'HIGH' ? (
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      ) : n.type === 'WARNING' ? (
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                       )}
+
+                      <div className="flex-1 space-y-1 pr-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            {isCritical && (
+                              <span className="shrink-0 text-[9px] font-extrabold tracking-wider text-white bg-rose-600 px-1.5 py-0.5 rounded uppercase">
+                                Overdue
+                              </span>
+                            )}
+                            <span className={`font-bold truncate ${isCritical ? 'text-rose-950' : 'text-slate-900'}`}>
+                              {n.title}
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 shrink-0">
+                            <Clock className="w-3 h-3" />
+                            {new Date(n.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                        <p className={`text-xs leading-relaxed ${isCritical ? 'text-rose-800 font-semibold' : 'text-slate-600'}`}>
+                          {n.message}
+                        </p>
+                        {n.orderId && (
+                          <div className={`font-mono text-[10px] font-bold pt-0.5 ${isCritical ? 'text-rose-700' : 'text-slate-700'}`}>
+                            Order: {n.orderId}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

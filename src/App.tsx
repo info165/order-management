@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/layout/Navbar';
 import { Dashboard } from './components/dashboard/Dashboard';
@@ -97,6 +97,43 @@ function MainApp() {
       unsubscribe();
     };
   }, [currentUser]);
+
+  // Payment-overdue-after-delivery alerts: computed live from the current
+  // order list rather than stored, so they never need a background job to
+  // create/update/expire them - an order drops off the instant its payment
+  // is recorded, and a newly-crossed 7-day mark shows up the moment it's
+  // loaded. Deliberately excluded from "mark all as read" (see
+  // NotificationDrawer) since dismissing one doesn't make the payment any
+  // less overdue.
+  const overduePaymentAlerts: AppNotification[] = useMemo(() => {
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    return orders
+      .filter(o => {
+        if (o.isDeleted || o.status === 'CANCELLED' || !o.actualDeliveryDate) return false;
+        if (o.paymentStatus === 'PAID') return false;
+        const deliveredAt = new Date(o.actualDeliveryDate).getTime();
+        if (Number.isNaN(deliveredAt)) return false;
+        return now - deliveredAt >= SEVEN_DAYS_MS;
+      })
+      .map((o) => {
+        const daysSinceDelivery = Math.floor((now - new Date(o.actualDeliveryDate!).getTime()) / (24 * 60 * 60 * 1000));
+        return {
+          notificationId: `OVERDUE-PAYMENT-${o.orderId}`,
+          userId: currentUser?.userId || '',
+          type: 'PAYMENT_OVERDUE',
+          title: o.schoolName,
+          message: `Delivered ${daysSinceDelivery} day${daysSinceDelivery === 1 ? '' : 's'} ago — ₹${(o.amountPending || 0).toLocaleString('en-IN')} payment still pending.`,
+          orderId: o.orderId,
+          isRead: false,
+          priority: 'CRITICAL',
+          createdAt: o.actualDeliveryDate!
+        } as AppNotification;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [orders, currentUser?.userId]);
+
+  const allNotifications: AppNotification[] = [...overduePaymentAlerts, ...notifications];
 
   // One-time backfill: give every pre-existing staff account (created before
   // real Firebase Auth sessions existed) a real account + a users/{uid} role
@@ -212,7 +249,8 @@ function MainApp() {
         onOpenNewOrder={() => setShowNewOrderModal(true)}
         onOpenImport={() => setShowImportModal(true)}
         onExportData={handleExportData}
-        unreadNotificationCount={notifications.filter(n => !n.isRead).length}
+        unreadNotificationCount={allNotifications.filter(n => !n.isRead).length}
+        hasCriticalAlert={overduePaymentAlerts.length > 0}
         onToggleNotifications={() => setShowNotificationDrawer(true)}
         activeSection={activeSection}
         onNavigate={setActiveSection}
@@ -443,7 +481,7 @@ function MainApp() {
       <NotificationDrawer
         isOpen={showNotificationDrawer}
         onClose={() => setShowNotificationDrawer(false)}
-        notifications={notifications}
+        notifications={allNotifications}
         onMarkAllAsRead={handleMarkAllNotificationsRead}
         onSelectNotification={handleSelectNotification}
       />
