@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Printer } from 'lucide-react';
 import { Order } from '../../types';
@@ -102,6 +102,31 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
   const [senderAddressLine, setSenderAddressLine] = useState(DEFAULT_SENDER_ADDRESS_LINE);
   const [senderCityLine, setSenderCityLine] = useState(DEFAULT_SENDER_CITY_LINE);
   const [senderPhone, setSenderPhone] = useState(DEFAULT_SENDER_PHONE);
+
+  // The preview box on screen is much smaller than an actual A4 sheet, but
+  // the sticker inside it is rendered at true A4 size (210mm x 297mm) with
+  // the exact same font sizes that print - then visually shrunk with a
+  // measured CSS scale, so what you see here is a true miniature of the
+  // real printout, not a separate cramped layout that overflows/wraps
+  // differently.
+  const previewWrapperRef = useRef<HTMLDivElement>(null);
+  const previewInnerRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+
+  useLayoutEffect(() => {
+    function updateScale() {
+      if (previewWrapperRef.current && previewInnerRef.current) {
+        const wrapperWidth = previewWrapperRef.current.clientWidth;
+        const innerWidth = previewInnerRef.current.offsetWidth;
+        if (wrapperWidth > 0 && innerWidth > 0) {
+          setPreviewScale(wrapperWidth / innerWidth);
+        }
+      }
+    }
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
 
   const totalBoxes = Math.min(MAX_BOXES, Math.max(1, parseInt(numberOfBoxesInput, 10) || 1));
 
@@ -322,8 +347,17 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
               box gets its own identical page (differing only in the box
               number) when actually printed. */}
           <div className="bg-slate-100 rounded-xl p-3 flex flex-col items-center gap-2">
-            <div className="w-full aspect-[210/297] max-w-[380px] shadow-md border border-slate-200 overflow-hidden">
-              <StickerContent boxNumber={1} {...sharedProps} className="w-full h-full" />
+            <div
+              ref={previewWrapperRef}
+              className="w-full aspect-[210/297] max-w-[380px] shadow-md border border-slate-200 overflow-hidden relative bg-white"
+            >
+              <div
+                ref={previewInnerRef}
+                className="absolute top-0 left-0"
+                style={{ width: '210mm', height: '297mm', transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
+              >
+                <StickerContent boxNumber={1} {...sharedProps} className="w-full h-full" />
+              </div>
             </div>
             {totalBoxes > 1 && (
               <p className="text-[11px] text-slate-500 font-medium">
