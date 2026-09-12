@@ -337,7 +337,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       ]);
       setPayments(pList);
       setDocuments(dList);
-      setTimeline(tList);
+      // orderStatusHistory entries are permanent (Firestore rules forbid
+      // deleting them) and only ever get orphaned, never re-linked - if this
+      // order's ID was previously used by a different, since-deleted order,
+      // that order's old history entries would otherwise bleed into this
+      // one's timeline since they share the same orderId. An order can never
+      // have a genuine event before its own creation, so drop anything older
+      // than that as leftover noise from a reused ID.
+      setTimeline(tList.filter(t => !order.createdAt || new Date(t.changedAt).getTime() >= new Date(order.createdAt).getTime()));
     } catch (e) {
       console.error('Error fetching order subdata', e);
     } finally {
