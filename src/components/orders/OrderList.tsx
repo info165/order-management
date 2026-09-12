@@ -1395,6 +1395,14 @@ export const OrderList: React.FC<OrderListProps> = ({
                     order.deliveryStatus !== 'Delivered' &&
                     order.status !== 'DELIVERED' &&
                     order.status !== 'CANCELLED';
+                  // Delivered, but payment still not fully received 7+ days
+                  // later - same rule as the critical bell alert, so the two
+                  // always agree with each other.
+                  const isPaymentOverdueSinceDelivery =
+                    !!order.actualDeliveryDate &&
+                    order.status !== 'CANCELLED' &&
+                    order.paymentStatus !== 'PAID' &&
+                    Date.now() - new Date(order.actualDeliveryDate).getTime() >= 7 * 24 * 60 * 60 * 1000;
 
                   return (
                     <tr
@@ -1450,19 +1458,36 @@ export const OrderList: React.FC<OrderListProps> = ({
                       {/* SCHOOL NAME (Multiline Wrapping, Full Visibility, No Truncation) */}
                       <td
                         style={{ width: widths.schoolName }}
-                        className="px-3 py-2 align-middle border-r border-slate-100"
+                        className={`px-3 py-2 align-middle border-r border-slate-100 ${
+                          isPaymentOverdueSinceDelivery ? 'bg-rose-50/50' : ''
+                        }`}
                       >
-                        <div
-                          className="font-semibold text-slate-900 text-xs whitespace-normal break-words leading-relaxed"
-                          title={order.schoolName}
-                        >
-                          {order.schoolName}
-                        </div>
-                        {order.district && order.state && (
-                          <div className="text-[10.5px] text-slate-500 mt-0.5 whitespace-normal break-words leading-tight">
-                            {order.district}, {order.state}
+                        <div className="flex items-start gap-2">
+                          {isPaymentOverdueSinceDelivery && (
+                            <span
+                              className="relative shrink-0 mt-1"
+                              title="Payment overdue: 7+ days since delivery, not yet received"
+                            >
+                              <span className="absolute inset-0 rounded-full bg-rose-500 animate-ping opacity-60" />
+                              <span className="relative block w-2 h-2 rounded-full bg-rose-600 ring-2 ring-rose-200" />
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className={`font-semibold text-xs whitespace-normal break-words leading-relaxed ${
+                                isPaymentOverdueSinceDelivery ? 'text-rose-950' : 'text-slate-900'
+                              }`}
+                              title={order.schoolName}
+                            >
+                              {order.schoolName}
+                            </div>
+                            {order.district && order.state && (
+                              <div className="text-[10.5px] text-slate-500 mt-0.5 whitespace-normal break-words leading-tight">
+                                {order.district}, {order.state}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </td>
 
                       {/* CATEGORY */}
