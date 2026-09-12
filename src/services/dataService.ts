@@ -434,6 +434,21 @@ export async function syncDocToFirestore(collectionName: string, docId: string, 
   }
 }
 
+// Same write, but throws instead of swallowing a failure. Used for writes
+// where the caller genuinely needs to know the save didn't happen (e.g. a
+// user just clicked "Upload") rather than silently reporting success while
+// nothing was actually persisted - which is exactly what let an oversized
+// attached file (over Firestore's 1 MiB/document limit) look like it saved
+// right up until the next refresh revealed it never had.
+async function syncDocToFirestoreOrThrow(collectionName: string, docId: string, data: any): Promise<void> {
+  const ok = await syncDocToFirestore(collectionName, docId, data);
+  if (!ok) {
+    throw new Error(
+      'Could not save to the database. This usually happens when an attached file is too large, or from a connection issue - please try again with a smaller file.'
+    );
+  }
+}
+
 export async function deleteDocFromFirestore(collectionName: string, docId: string): Promise<boolean> {
   try {
     await deleteDoc(doc(db, collectionName, docId));
@@ -947,11 +962,14 @@ export async function updateOrder(
   // in flight when that read fires, the read could return the pre-edit
   // value and stomp the UI right back to it - which is exactly why an edit
   // could appear to "not save" despite genuinely succeeding moments later.
-  try {
-    await syncDocToFirestore('orders', orderId, updated);
-  } catch (err) {
-    console.warn(`Firestore sync note for ${orderId}:`, err);
-  }
+  //
+  // This throws (rather than swallowing a failure) deliberately: every
+  // caller already wraps this in try/catch with a user-facing alert(), so a
+  // genuine failure (most commonly an attached document pushing the order
+  // over Firestore's 1 MiB/document size limit) is now actually reported
+  // instead of silently discarded - which previously looked identical to a
+  // successful save right up until the next page refresh undid it.
+  await syncDocToFirestoreOrThrow('orders', orderId, updated);
 
   // If agent assignment changed, record specific audit log
   if (updates.agentId && updates.agentId !== existing.agentId) {
@@ -1542,7 +1560,12 @@ export async function markDelivered(
 
   memoryDeliveries = [deliveryRecord, ...memoryDeliveries];
   saveStorage(STORAGE_KEYS.DELIVERIES, memoryDeliveries);
-  syncDocToFirestore('deliveries', deliveryRecord.deliveryId, deliveryRecord);
+  // This write was previously fire-and-forget (not even awaited) - a
+  // failure here was invisible even in the console, let alone to the user,
+  // and "Mark as Delivered" would appear to work (since the order's own
+  // status update below could still succeed independently) while the
+  // delivery record itself silently never saved.
+  await syncDocToFirestoreOrThrow('deliveries', deliveryRecord.deliveryId, deliveryRecord);
 
   await updateOrder(
     orderId,
@@ -1910,7 +1933,10 @@ export async function uploadDocument(
 
   memoryDocuments = [newDoc, ...memoryDocuments];
   saveStorage(STORAGE_KEYS.DOCUMENTS, memoryDocuments);
-  await syncDocToFirestore('documents', documentId, newDoc);
+  // Throws on failure (e.g. the file pushed this document over Firestore's
+  // 1 MiB limit) instead of reporting success while nothing was saved -
+  // every caller already surfaces this to the user.
+  await syncDocToFirestoreOrThrow('documents', documentId, newDoc);
 
   await writeActivityLog({
     userId: user.userId,

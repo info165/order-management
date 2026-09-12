@@ -44,6 +44,7 @@ import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
+import { processFileForUpload } from '../../utils/fileUpload';
 import { PrintStickerModal } from './PrintStickerModal';
 import {
   getPaymentsForOrder,
@@ -298,6 +299,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [docFileData, setDocFileData] = useState<string>('');
   const [docVisibleToAgent, setDocVisibleToAgent] = useState(true);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  // Non-null while any quick-vault upload (CN, POD, invoices, etc.) is in
+  // progress - compressing a large photo and saving it can take a few
+  // seconds, and this gives visible feedback instead of the button looking
+  // unresponsive with no indication anything is happening.
+  const [uploadingLabel, setUploadingLabel] = useState<string | null>(null);
 
   // Attachment states for CN, POD, Invoices, and GeM Order Copy
   const [gemOrderCopyUrl, setGemOrderCopyUrl] = useState(order.gemOrderCopyUrl || '');
@@ -347,139 +353,154 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const handleCnFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    e.target.value = '';
+    setUploadingLabel('Consignment Note');
+    try {
+      // Images are compressed to comfortably fit under Firestore's 1 MiB
+      // per-document limit; oversized non-image files are rejected up
+      // front with a clear message rather than attempting a doomed write.
+      const dataUrl = await processFileForUpload(file);
+      await updateOrder(order.orderId, { cnCopyUrl: dataUrl, cnCopyFileName: file.name }, currentUser);
+      await uploadDocument(
+        {
+          orderId: order.orderId,
+          documentType: 'Dispatch Receipt',
+          fileName: `CN_Copy_${file.name}`,
+          fileUrl: dataUrl,
+          fileSize: `${Math.round(file.size / 1024)} KB`,
+          uploadedBy: currentUser.name,
+          visibleToAgent: true,
+          quickVaultCategory: 'cnCopy'
+        },
+        currentUser
+      );
+      // Only reflected locally once the save has actually succeeded -
+      // updating this beforehand is exactly what made a failed save look
+      // identical to a successful one until the next refresh.
       setCnCopyUrl(dataUrl);
       setCnCopyFileName(file.name);
-      try {
-        await updateOrder(order.orderId, { cnCopyUrl: dataUrl, cnCopyFileName: file.name }, currentUser);
-        await uploadDocument(
-          {
-            orderId: order.orderId,
-            documentType: 'Dispatch Receipt',
-            fileName: `CN_Copy_${file.name}`,
-            fileUrl: dataUrl,
-            fileSize: `${Math.round(file.size / 1024)} KB`,
-            uploadedBy: currentUser.name,
-            visibleToAgent: true,
-            quickVaultCategory: 'cnCopy'
-          },
-          currentUser
-        );
-        await loadData();
-        onOrderUpdated();
-        alert('Consignment Note (CN Copy) successfully uploaded and linked to order.');
-      } catch (err: any) {
-        alert('Failed to save Consignment Note: ' + err.message);
-      }
-    };
-    reader.readAsDataURL(file);
+      await loadData();
+      onOrderUpdated();
+      alert('Consignment Note (CN Copy) successfully uploaded and linked to order.');
+    } catch (err: any) {
+      alert('Failed to save Consignment Note: ' + err.message);
+    } finally {
+      setUploadingLabel(null);
+    }
   };
 
   // Upload handler for Proof of Delivery (POD Copy)
   const handlePodFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    e.target.value = '';
+    setUploadingLabel('Proof of Delivery');
+    try {
+      const dataUrl = await processFileForUpload(file);
+      await updateOrder(order.orderId, { podCopyUrl: dataUrl, podCopyFileName: file.name }, currentUser);
+      await uploadDocument(
+        {
+          orderId: order.orderId,
+          documentType: 'Delivery Challan',
+          fileName: `POD_Signed_${file.name}`,
+          fileUrl: dataUrl,
+          fileSize: `${Math.round(file.size / 1024)} KB`,
+          uploadedBy: currentUser.name,
+          visibleToAgent: true,
+          quickVaultCategory: 'podCopy'
+        },
+        currentUser
+      );
       setPodCopyUrl(dataUrl);
       setPodCopyFileName(file.name);
-      try {
-        await updateOrder(order.orderId, { podCopyUrl: dataUrl, podCopyFileName: file.name }, currentUser);
-        await uploadDocument(
-          {
-            orderId: order.orderId,
-            documentType: 'Delivery Challan',
-            fileName: `POD_Signed_${file.name}`,
-            fileUrl: dataUrl,
-            fileSize: `${Math.round(file.size / 1024)} KB`,
-            uploadedBy: currentUser.name,
-            visibleToAgent: true,
-            quickVaultCategory: 'podCopy'
-          },
-          currentUser
-        );
-        await loadData();
-        onOrderUpdated();
-        alert('Proof of Delivery (POD Copy) successfully uploaded.');
-      } catch (err: any) {
-        alert('Failed to save POD: ' + err.message);
-      }
-    };
-    reader.readAsDataURL(file);
+      await loadData();
+      onOrderUpdated();
+      alert('Proof of Delivery (POD Copy) successfully uploaded.');
+    } catch (err: any) {
+      alert('Failed to save POD: ' + err.message);
+    } finally {
+      setUploadingLabel(null);
+    }
   };
 
   // Upload handler for Specific Order Documents (Invoice, GeM, E-way bill, CN, POD)
   const handleQuickDocUpload = async (category: string, file: File) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    setUploadingLabel(file.name);
+    try {
+      const dataUrl = await processFileForUpload(file);
       const updates: Partial<Order> = {};
       let docTypeMapped: any = 'Invoice';
 
       if (category === 'gemOrderCopy') {
         updates.gemOrderCopyUrl = dataUrl;
         updates.gemOrderCopyFileName = file.name;
-        setGemOrderCopyUrl(dataUrl);
-        setGemOrderCopyFileName(file.name);
         docTypeMapped = 'GeM Order Copy';
       } else if (category === 'companyInvoice') {
         updates.companyInvoiceUrl = dataUrl;
         updates.companyInvoiceFileName = file.name;
-        setCompanyInvoiceUrl(dataUrl);
-        setCompanyInvoiceFileName(file.name);
         docTypeMapped = 'Invoice';
       } else if (category === 'gemInvoice') {
         updates.gemInvoiceUrl = dataUrl;
         updates.gemInvoiceFileName = file.name;
-        setGemInvoiceUrl(dataUrl);
-        setGemInvoiceFileName(file.name);
         docTypeMapped = 'Invoice';
       } else if (category === 'ewayBill') {
         updates.ewayBillUrl = dataUrl;
         updates.ewayBillFileName = file.name;
-        setEwayBillUrl(dataUrl);
-        setEwayBillFileName(file.name);
         docTypeMapped = 'Dispatch Receipt';
       } else if (category === 'cnCopy') {
         updates.cnCopyUrl = dataUrl;
         updates.cnCopyFileName = file.name;
-        setCnCopyUrl(dataUrl);
-        setCnCopyFileName(file.name);
         docTypeMapped = 'Dispatch Receipt';
       } else if (category === 'podCopy') {
         updates.podCopyUrl = dataUrl;
         updates.podCopyFileName = file.name;
-        setPodCopyUrl(dataUrl);
-        setPodCopyFileName(file.name);
         docTypeMapped = 'Delivery Challan';
       }
 
-      try {
-        await updateOrder(order.orderId, updates, currentUser);
-        await uploadDocument(
-          {
-            orderId: order.orderId,
-            documentType: docTypeMapped,
-            fileName: file.name,
-            fileUrl: dataUrl,
-            fileSize: `${Math.round(file.size / 1024)} KB`,
-            uploadedBy: currentUser.name,
-            visibleToAgent: true,
-            quickVaultCategory: category
-          },
-          currentUser
-        );
-        await loadData();
-        onOrderUpdated();
-        alert(`Document "${file.name}" uploaded and attached successfully.`);
-      } catch (err: any) {
-        alert('Document upload failed: ' + err.message);
+      await updateOrder(order.orderId, updates, currentUser);
+      await uploadDocument(
+        {
+          orderId: order.orderId,
+          documentType: docTypeMapped,
+          fileName: file.name,
+          fileUrl: dataUrl,
+          fileSize: `${Math.round(file.size / 1024)} KB`,
+          uploadedBy: currentUser.name,
+          visibleToAgent: true,
+          quickVaultCategory: category
+        },
+        currentUser
+      );
+
+      // Only reflected locally once the save has actually succeeded.
+      if (category === 'gemOrderCopy') {
+        setGemOrderCopyUrl(dataUrl);
+        setGemOrderCopyFileName(file.name);
+      } else if (category === 'companyInvoice') {
+        setCompanyInvoiceUrl(dataUrl);
+        setCompanyInvoiceFileName(file.name);
+      } else if (category === 'gemInvoice') {
+        setGemInvoiceUrl(dataUrl);
+        setGemInvoiceFileName(file.name);
+      } else if (category === 'ewayBill') {
+        setEwayBillUrl(dataUrl);
+        setEwayBillFileName(file.name);
+      } else if (category === 'cnCopy') {
+        setCnCopyUrl(dataUrl);
+        setCnCopyFileName(file.name);
+      } else if (category === 'podCopy') {
+        setPodCopyUrl(dataUrl);
+        setPodCopyFileName(file.name);
       }
-    };
-    reader.readAsDataURL(file);
+
+      await loadData();
+      onOrderUpdated();
+      alert(`Document "${file.name}" uploaded and attached successfully.`);
+    } catch (err: any) {
+      alert('Document upload failed: ' + err.message);
+    } finally {
+      setUploadingLabel(null);
+    }
   };
 
   // Clears the Quick Vault field for one category (order-level URL/filename
@@ -730,6 +751,18 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       alert(err.message);
     } finally {
       setDeletingPaymentId(null);
+    }
+  };
+
+  // Shared by both the file-picker and camera-scan inputs in the generic
+  // "attach a document" form below - compresses images / rejects oversized
+  // non-image files up front, same as every other quick-vault upload.
+  const handleGenericDocFileSelect = async (file: File) => {
+    try {
+      const dataUrl = await processFileForUpload(file);
+      setDocFileData(dataUrl);
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -1674,7 +1707,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     <span>GeM Status</span>
                   </h3>
-                  <span className="text-[11px] text-slate-500">Fast Upload & File Verification</span>
+                  {uploadingLabel ? (
+                    <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1.5">
+                      <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                      <span>Uploading {uploadingLabel}...</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-slate-500">Fast Upload & File Verification</span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
@@ -2242,7 +2282,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
                           <span>Proof of Delivery (POD) / Signed Delivery Slip</span>
                         </label>
-                        {podCopyUrl ? (
+                        {uploadingLabel ? (
+                          <span className="text-[11px] font-semibold text-amber-700 flex items-center gap-1.5">
+                            <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Uploading...</span>
+                          </span>
+                        ) : podCopyUrl ? (
                           <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
                             <Check className="w-3 h-3" />
                             <span>POD Attached</span>
@@ -2627,7 +2672,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     <span>Essential Compliance & Billing Vault</span>
                   </h3>
-                  <span className="text-[11px] text-slate-500">Fast Upload & File Verification</span>
+                  {uploadingLabel ? (
+                    <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1.5">
+                      <span className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                      <span>Uploading {uploadingLabel}...</span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-slate-500">Fast Upload & File Verification</span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
@@ -3217,11 +3269,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                             const file = e.target.files?.[0];
                             if (file) {
                               if (!docFileName) setDocFileName(file.name.replace(/\.[^/.]+$/, ''));
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                setDocFileData(reader.result as string);
-                              };
-                              reader.readAsDataURL(file);
+                              handleGenericDocFileSelect(file);
+                              e.target.value = '';
                             }
                           }}
                           className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200"
@@ -3236,11 +3285,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                               const file = e.target.files?.[0];
                               if (file) {
                                 if (!docFileName) setDocFileName(`Scanned_${Date.now()}`);
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  setDocFileData(reader.result as string);
-                                };
-                                reader.readAsDataURL(file);
+                                handleGenericDocFileSelect(file);
+                                e.target.value = '';
                               }
                             }}
                             className="hidden"
