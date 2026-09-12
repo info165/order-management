@@ -8,13 +8,13 @@ interface PrintStickerModalProps {
   onClose: () => void;
 }
 
-// Fixed sender care-of details - identical for every company shipping from
-// this address, so these are never editable, only the company name itself
-// (picked from the same company list used everywhere else in the app).
-const SENDER_CARE_OF = 'C/O-FUNSCHOLAR INNOVATIONS PVT LTD';
-const SENDER_ADDRESS_LINE = '59B CHOWRINGHEE ROAD, 6TH FLOOR';
-const SENDER_CITY_LINE = 'KOLKATA - 700020';
-const SENDER_PHONE = '9674193747';
+// Default sender care-of details - the same for every company shipping from
+// this address today, but editable below in case the return address ever
+// changes (e.g. office relocation) without needing a code change.
+const DEFAULT_SENDER_CARE_OF = 'C/O-FUNSCHOLAR INNOVATIONS PVT LTD';
+const DEFAULT_SENDER_ADDRESS_LINE = '59B CHOWRINGHEE ROAD, 6TH FLOOR';
+const DEFAULT_SENDER_CITY_LINE = 'KOLKATA - 700020';
+const DEFAULT_SENDER_PHONE = '9674193747';
 
 export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, companies, onClose }) => {
   const [boxNo, setBoxNo] = useState('1');
@@ -28,6 +28,10 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
   const [receiverAddress, setReceiverAddress] = useState(order.schoolAddress || '');
   const [receiverPincode, setReceiverPincode] = useState(order.schoolPincode || '');
   const [receiverPhone, setReceiverPhone] = useState(order.schoolContactPhone || '');
+  const [senderCareOf, setSenderCareOf] = useState(DEFAULT_SENDER_CARE_OF);
+  const [senderAddressLine, setSenderAddressLine] = useState(DEFAULT_SENDER_ADDRESS_LINE);
+  const [senderCityLine, setSenderCityLine] = useState(DEFAULT_SENDER_CITY_LINE);
+  const [senderPhone, setSenderPhone] = useState(DEFAULT_SENDER_PHONE);
 
   const handlePrint = () => {
     window.print();
@@ -116,9 +120,53 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Return address ({SENDER_CARE_OF}, Kolkata) is fixed for every company.
-              </p>
+            </div>
+
+            <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <label className="block text-slate-500 font-semibold uppercase tracking-wide text-[11px]">
+                Return Address (same for every company, editable)
+              </label>
+
+              <div>
+                <label className="block text-slate-500 mb-1">Care Of Line</label>
+                <input
+                  type="text"
+                  value={senderCareOf}
+                  onChange={(e) => setSenderCareOf(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1">Address Line</label>
+                <input
+                  type="text"
+                  value={senderAddressLine}
+                  onChange={(e) => setSenderAddressLine(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-500 mb-1">City / PIN Line</label>
+                  <input
+                    type="text"
+                    value={senderCityLine}
+                    onChange={(e) => setSenderCityLine(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={senderPhone}
+                    onChange={(e) => setSenderPhone(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
@@ -201,10 +249,10 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
               <div className="space-y-1.5 text-xl leading-relaxed">
                 <p className="text-lg">From,</p>
                 <p className="font-bold uppercase text-2xl leading-snug">{senderCompany}</p>
-                <p>{SENDER_CARE_OF}</p>
-                <p>{SENDER_ADDRESS_LINE}</p>
-                <p>{SENDER_CITY_LINE}</p>
-                <p className="font-semibold">Ph No- {SENDER_PHONE}</p>
+                <p>{senderCareOf}</p>
+                <p>{senderAddressLine}</p>
+                <p>{senderCityLine}</p>
+                <p className="font-semibold">Ph No- {senderPhone}</p>
               </div>
 
               <div>
