@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer, Plus, Trash2 } from 'lucide-react';
+import { X, Printer, Plus, Trash2, Scissors } from 'lucide-react';
 import { Order, UserProfile } from '../../types';
 import {
   getSystemSettings,
@@ -33,9 +33,15 @@ const DEFAULT_SENDER_COMPANIES = [
 
 const MAX_BOXES = 500;
 
+// Two box labels share one A4 sheet, stacked top and bottom, each getting
+// exactly half the page height - so a single box never stretches to fill
+// the whole sheet, and printing an even count never wastes a second page
+// per box.
+const PAGE_HEIGHT_MM = 297;
+const HALF_HEIGHT_MM = PAGE_HEIGHT_MM / 2;
+
 interface StickerContentProps {
   boxNumber: number;
-  totalBoxes: number;
   contractNumber: string;
   categoryText: string;
   receiverName: string;
@@ -47,15 +53,13 @@ interface StickerContentProps {
   senderAddressLine: string;
   senderCityLine: string;
   senderPhone: string;
-  className?: string;
 }
 
-// Shared sticker layout - used both for the single on-screen preview and for
-// every page rendered into the print portal, so the two can never drift out
-// of sync with each other.
+// One box's label content, sized to comfortably fill a half-A4 slot
+// (~210mm x 148.5mm). Used identically for the on-screen preview and every
+// half-slot rendered into the print portal, so they can never drift apart.
 const StickerContent: React.FC<StickerContentProps> = ({
   boxNumber,
-  totalBoxes,
   contractNumber,
   categoryText,
   receiverName,
@@ -66,27 +70,26 @@ const StickerContent: React.FC<StickerContentProps> = ({
   senderCareOf,
   senderAddressLine,
   senderCityLine,
-  senderPhone,
-  className = ''
+  senderPhone
 }) => (
-  <div className={`bg-white p-10 font-serif text-slate-900 flex flex-col justify-between ${className}`}>
-    <div className="text-center space-y-2">
-      <p className="text-lg">Contract No- {contractNumber || 'N/A'}</p>
-      <p className="text-2xl font-bold uppercase leading-snug">{categoryText || 'N/A'}</p>
-      <p className="text-lg">(Box No- {boxNumber})</p>
+  <div className="w-full h-full bg-white px-10 py-6 font-serif text-slate-900 flex flex-col justify-between overflow-hidden">
+    <div className="text-center space-y-0.5">
+      <p className="text-sm">Contract No- {contractNumber || 'N/A'}</p>
+      <p className="text-xl font-bold uppercase leading-snug">{categoryText || 'N/A'}</p>
+      <p className="text-sm">(Box No- {boxNumber})</p>
     </div>
 
-    <div className="space-y-1.5 text-xl leading-relaxed">
-      <p className="text-lg">To</p>
-      <p className="font-bold uppercase text-2xl leading-snug">{receiverName}</p>
+    <div className="space-y-0.5 text-base leading-snug">
+      <p className="text-sm">To</p>
+      <p className="font-bold uppercase text-lg leading-tight">{receiverName}</p>
       <p className="uppercase whitespace-pre-line">{receiverAddress}</p>
       {receiverPincode && <p className="font-semibold">PIN - {receiverPincode}</p>}
       <p className="font-semibold">PH NO- {receiverPhone || 'N/A'}</p>
     </div>
 
-    <div className="space-y-1.5 text-xl leading-relaxed">
-      <p className="text-lg">From,</p>
-      <p className="font-bold uppercase text-2xl leading-snug">{senderCompany}</p>
+    <div className="space-y-0.5 text-base leading-snug">
+      <p className="text-sm">From,</p>
+      <p className="font-bold uppercase text-lg leading-tight">{senderCompany}</p>
       <p>{senderCareOf}</p>
       <p>{senderAddressLine}</p>
       <p>{senderCityLine}</p>
@@ -94,9 +97,41 @@ const StickerContent: React.FC<StickerContentProps> = ({
     </div>
 
     <div>
-      <div className="border-b-2 border-slate-500 w-2/3" />
-      <p className="text-sm text-slate-400 mt-2">Receiver's Signature</p>
+      <div className="border-b-2 border-slate-500 w-1/2" />
+      <p className="text-[11px] text-slate-400 mt-1">Receiver's Signature</p>
     </div>
+  </div>
+);
+
+// One full A4 sheet holding one or two box labels stacked top/bottom, with a
+// dashed cut-line between them when there are two. When there's only one
+// (the last, odd box), the bottom half is left genuinely blank rather than
+// stretching the single label to fill the sheet.
+const StickerPage: React.FC<{ boxNumbers: number[]; shared: Omit<StickerContentProps, 'boxNumber'>; className?: string }> = ({
+  boxNumbers,
+  shared,
+  className = ''
+}) => (
+  <div className={`bg-white flex flex-col ${className}`} style={{ width: '210mm', height: `${PAGE_HEIGHT_MM}mm` }}>
+    <div style={{ height: `${HALF_HEIGHT_MM}mm` }}>
+      <StickerContent boxNumber={boxNumbers[0]} {...shared} />
+    </div>
+    {boxNumbers[1] !== undefined ? (
+      <>
+        <div className="flex items-center gap-2 px-6 text-slate-300 shrink-0">
+          <div className="flex-1 border-t border-dashed border-slate-300" />
+          <Scissors className="w-3.5 h-3.5 rotate-90" />
+          <div className="flex-1 border-t border-dashed border-slate-300" />
+        </div>
+        <div style={{ height: `${HALF_HEIGHT_MM}mm` }}>
+          <StickerContent boxNumber={boxNumbers[1]} {...shared} />
+        </div>
+      </>
+    ) : (
+      // Deliberately blank - this is what keeps a single box to half a page
+      // instead of stretching to fill the sheet.
+      <div style={{ height: `${HALF_HEIGHT_MM}mm` }} />
+    )}
   </div>
 );
 
@@ -170,7 +205,7 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
   const [senderPhone, setSenderPhone] = useState(DEFAULT_SENDER_PHONE);
 
   // The preview box on screen is much smaller than an actual A4 sheet, but
-  // the sticker inside it is rendered at true A4 size (210mm x 297mm) with
+  // the sheet inside it is rendered at true A4 size (210mm x 297mm) with
   // the exact same font sizes that print - then visually shrunk with a
   // measured CSS scale, so what you see here is a true miniature of the
   // real printout, not a separate cramped layout that overflows/wraps
@@ -195,9 +230,9 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
   }, []);
 
   const totalBoxes = Math.min(MAX_BOXES, Math.max(1, parseInt(numberOfBoxesInput, 10) || 1));
+  const totalPages = Math.ceil(totalBoxes / 2);
 
-  const sharedProps = {
-    totalBoxes,
+  const shared: Omit<StickerContentProps, 'boxNumber'> = {
     contractNumber: order.contractNumber || '',
     categoryText,
     receiverName,
@@ -210,6 +245,12 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
     senderCityLine,
     senderPhone
   };
+
+  // Groups box numbers into pages of 2: [1,2], [3,4], [5] for 5 boxes, etc.
+  const pages: number[][] = [];
+  for (let i = 1; i <= totalBoxes; i += 2) {
+    pages.push(i + 1 <= totalBoxes ? [i, i + 1] : [i]);
+  }
 
   const handlePrint = () => {
     window.print();
@@ -232,12 +273,10 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
             position: static;
           }
           .sticker-print-page {
-            width: 100%;
-            height: 297mm;
             break-after: page;
           }
           .sticker-print-page:last-child { break-after: auto; }
-          @page { size: A4; margin: 25mm 20mm; }
+          @page { size: A4; margin: 15mm 20mm; }
         }
       `}</style>
 
@@ -287,8 +326,8 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
               />
               <p className="text-[10px] text-slate-400 mt-1">
                 {totalBoxes > 1
-                  ? `Prints ${totalBoxes} pages, numbered "Box No- 1" through "Box No- ${totalBoxes}".`
-                  : 'Enter how many boxes this order is split across (e.g. 5 prints 5 pages, numbered 1 to 5).'}
+                  ? `Prints ${totalPages} page${totalPages > 1 ? 's' : ''} - 2 box labels per A4 sheet, numbered "Box No- 1" through "Box No- ${totalBoxes}".`
+                  : 'Enter how many boxes this order is split across - 2 labels share each A4 sheet (a single box takes only half a page).'}
               </p>
             </div>
 
@@ -484,13 +523,14 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
               className="w-full px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center justify-center gap-2 transition-colors"
             >
               <Printer className="w-4 h-4" />
-              <span>{totalBoxes > 1 ? `Print ${totalBoxes} Stickers / Save as PDF` : 'Print / Save as PDF'}</span>
+              <span>{totalPages > 1 ? `Print ${totalPages} Pages / Save as PDF` : 'Print / Save as PDF'}</span>
             </button>
           </div>
 
-          {/* Live Preview - shows Box 1 as a representative sample; every
-              box gets its own identical page (differing only in the box
-              number) when actually printed. */}
+          {/* Live Preview - shows Page 1 exactly as it will print (one or
+              two box labels sharing the sheet, with a cut-line between
+              them, and a genuinely blank bottom half if there's only one
+              box in total). */}
           <div className="bg-slate-100 rounded-xl p-3 flex flex-col items-center gap-2">
             <div
               ref={previewWrapperRef}
@@ -499,16 +539,18 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
               <div
                 ref={previewInnerRef}
                 className="absolute top-0 left-0"
-                style={{ width: '210mm', height: '297mm', transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
+                style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
               >
-                <StickerContent boxNumber={1} {...sharedProps} className="w-full h-full" />
+                <StickerPage boxNumbers={pages[0]} shared={shared} />
               </div>
             </div>
-            {totalBoxes > 1 && (
-              <p className="text-[11px] text-slate-500 font-medium">
-                Showing Box 1 of {totalBoxes} — {totalBoxes - 1} more identical page{totalBoxes > 2 ? 's' : ''} will print, numbered up to {totalBoxes}.
-              </p>
-            )}
+            <p className="text-[11px] text-slate-500 font-medium text-center">
+              {totalPages > 1
+                ? `Showing Page 1 of ${totalPages} — every sheet holds 2 box labels, numbered up to ${totalBoxes}.`
+                : totalBoxes === 1
+                  ? 'Box 1 takes the top half of the sheet; the bottom half prints blank.'
+                  : 'Both boxes share this one sheet.'}
+            </p>
           </div>
         </div>
       </div>
@@ -518,13 +560,8 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, cur
           print, and each page can stack normally to paginate correctly. */}
       {createPortal(
         <div id="sticker-print-portal" className="hidden print:block">
-          {Array.from({ length: totalBoxes }, (_, i) => i + 1).map((boxNumber) => (
-            <StickerContent
-              key={boxNumber}
-              boxNumber={boxNumber}
-              {...sharedProps}
-              className="sticker-print-page"
-            />
+          {pages.map((boxNumbers, idx) => (
+            <StickerPage key={idx} boxNumbers={boxNumbers} shared={shared} className="sticker-print-page" />
           ))}
         </div>,
         document.body
