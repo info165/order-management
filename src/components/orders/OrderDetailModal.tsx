@@ -26,7 +26,8 @@ import {
   Trash2,
   Download,
   Edit2,
-  UserCheck
+  UserCheck,
+  Printer
 } from 'lucide-react';
 import {
   Order,
@@ -43,6 +44,7 @@ import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
+import { PrintStickerModal } from './PrintStickerModal';
 import {
   getPaymentsForOrder,
   addPayment,
@@ -115,6 +117,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   // category, company, order value) - the fields captured at creation time
   // that previously had no way to be corrected afterward.
   const [isEditingContract, setIsEditingContract] = useState(false);
+  const [showPrintSticker, setShowPrintSticker] = useState(false);
   const [contractFormOrderNumber, setContractFormOrderNumber] = useState(order.orderNumber || '');
   const [contractFormPoNumber, setContractFormPoNumber] = useState(order.purchaseOrderNumber || '');
   const [contractFormOrderDate, setContractFormOrderDate] = useState(order.orderDate || '');
@@ -1533,9 +1536,20 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               {/* Status Update Form for Admin / Operations */}
               {!isAgent && (
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
-                    Advance Order Lifecycle Stage
-                  </h3>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">
+                      Advance Order Lifecycle Stage
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowPrintSticker(true)}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-700 font-semibold flex items-center gap-1 transition-colors"
+                      title="Print a box sticker for this order"
+                    >
+                      <Printer className="w-3 h-3 text-amber-600" />
+                      <span>Print Sticker</span>
+                    </button>
+                  </div>
 
                   <form onSubmit={handleUpdateStatus} className="space-y-4 text-xs">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3398,6 +3412,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showPrintSticker && (
+        <PrintStickerModal
+          order={activeOrder}
+          companies={companies}
+          onClose={() => setShowPrintSticker(false)}
+        />
       )}
     </div>
   );
