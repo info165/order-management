@@ -14,7 +14,7 @@ const DEFAULT_WIDTHS: ColumnWidthMap = {
   orderValue: 130,
   company: 110,
   status: 130,
-  dispatch: 165,
+  dispatch: 195,
   payment: 155,
   action: 70
 };
@@ -29,7 +29,7 @@ const MIN_WIDTHS: ColumnWidthMap = {
   orderValue: 95,
   company: 85,
   status: 100,
-  dispatch: 130,
+  dispatch: 150,
   payment: 120,
   action: 60
 };

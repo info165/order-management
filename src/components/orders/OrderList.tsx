@@ -15,7 +15,9 @@ import {
   ArrowUp,
   ArrowDown,
   Columns,
-  UserCheck
+  UserCheck,
+  Check,
+  CheckCheck
 } from 'lucide-react';
 import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile, Agent } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -26,6 +28,36 @@ import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExp
 import { clearAllOrders, getAgents, bulkUpdateOrderAgent } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
+
+// At-a-glance document status for the Dispatch & Courier column: a single
+// tick for the Consignment Note (CN) upload, a double tick (WhatsApp-style
+// "delivered/read" mark) for the Proof of Delivery (POD) upload - so the
+// two checkboxes on the Dispatch & Logistics tab never need to be opened
+// just to confirm they're both in.
+const DispatchDocStatus: React.FC<{ cnUploaded: boolean; podUploaded: boolean }> = ({ cnUploaded, podUploaded }) => (
+  <div className="inline-flex items-center gap-[3px] shrink-0">
+    <span
+      title={cnUploaded ? 'Consignment Note (CN) uploaded' : 'Consignment Note (CN) not uploaded yet'}
+      className={`flex items-center justify-center w-4 h-4 rounded-full transition-colors duration-200 ${
+        cnUploaded
+          ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+          : 'bg-slate-50 text-slate-300 ring-1 ring-slate-200'
+      }`}
+    >
+      <Check className="w-2.5 h-2.5" strokeWidth={3} />
+    </span>
+    <span
+      title={podUploaded ? 'Proof of Delivery (POD) uploaded' : 'Proof of Delivery (POD) not uploaded yet'}
+      className={`flex items-center justify-center w-4 h-4 rounded-full transition-colors duration-200 ${
+        podUploaded
+          ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+          : 'bg-slate-50 text-slate-300 ring-1 ring-slate-200'
+      }`}
+    >
+      <CheckCheck className="w-2.5 h-2.5" strokeWidth={3} />
+    </span>
+  </div>
+);
 
 interface OrderListProps {
   orders: Order[];
@@ -1222,7 +1254,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                     <div
                       onClick={() => handleSort('dispatch')}
                       className="flex items-center gap-1 cursor-pointer hover:text-slate-950 truncate"
-                      title="Sort by Dispatch Status"
+                      title="Sort by Dispatch Status. ✓ = CN Copy uploaded, ✓✓ = POD Copy uploaded"
                     >
                       <span>Dispatch &amp; Courier</span>
                       {renderSortIndicator('dispatch')}
@@ -1479,6 +1511,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                       >
                         <div className="flex items-center gap-1.5">
                           <TrackingLink courierName={order.courierName} docketNumber={order.docketNumber} compact />
+                          <DispatchDocStatus cnUploaded={!!order.cnCopyUrl} podUploaded={!!order.podCopyUrl} />
                           {isDeliveryOverdue && (
                             <span className="text-[10px] text-rose-600 font-bold flex items-center gap-0.5 shrink-0" title="Delivery Overdue">
                               <AlertCircle className="w-2.5 h-2.5 text-rose-600" />
