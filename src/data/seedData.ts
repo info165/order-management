@@ -18,7 +18,13 @@ export const INITIAL_SETTINGS: SystemSettings = {
   paymentModes: ['NEFT', 'RTGS', 'IMPS', 'Cheque', 'DD', 'PFMS', 'Other'],
   dispatchModes: ['Courier', 'India Post', 'Transport', 'Company Vehicle', 'Other'],
   couriers: ['Delhivery', 'India Post', 'Trackon', 'DTDC', 'Blue Dart', 'TCI Express', 'Other'],
-  companies: ['FIPL', 'ARKAY', 'VIGNAN', 'TTPL']
+  companies: ['FIPL', 'ARKAY', 'VIGNAN', 'TTPL'],
+  stickerSenderCompanies: [
+    'Funscholar Innovations Pvt Ltd',
+    'Torquev Technologies Pvt Ltd',
+    'Arkay Enterprises',
+    'Vignan Learning Solutions'
+  ]
 };
 
 export const INITIAL_AGENTS: Agent[] = [

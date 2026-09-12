@@ -3039,6 +3039,34 @@ export async function removeCategory(categoryName: string, user: UserProfile): P
   return updated.categories;
 }
 
+export async function addStickerSenderCompany(companyName: string, user: UserProfile): Promise<string[]> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can add a new sender company.');
+  }
+  const trimmed = companyName.trim();
+  if (!trimmed) {
+    throw new Error('Company name cannot be empty.');
+  }
+  const existing = memorySettings.stickerSenderCompanies || [];
+  if (existing.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+    throw new Error(`"${trimmed}" is already in the sender company list.`);
+  }
+  const updated = await updateSystemSettings({ stickerSenderCompanies: [...existing, trimmed] }, user);
+  return updated.stickerSenderCompanies;
+}
+
+export async function removeStickerSenderCompany(companyName: string, user: UserProfile): Promise<string[]> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can remove a sender company.');
+  }
+  const existing = memorySettings.stickerSenderCompanies || [];
+  const updated = await updateSystemSettings(
+    { stickerSenderCompanies: existing.filter(c => c !== companyName) },
+    user
+  );
+  return updated.stickerSenderCompanies;
+}
+
 // Batch import helper
 export async function batchImportOrders(ordersToImport: Order[], user: UserProfile, replaceAll: boolean = false): Promise<{ imported: number; errors: string[] }> {
   if (user.role === 'AGENT') throw new Error('Unauthorized');

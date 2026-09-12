@@ -397,4 +397,5 @@ export interface SystemSettings {
   dispatchModes: string[];
   couriers: string[];
   companies: string[];
+  stickerSenderCompanies: string[];
 }

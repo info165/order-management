@@ -1,11 +1,16 @@
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer } from 'lucide-react';
-import { Order } from '../../types';
+import { X, Printer, Plus, Trash2 } from 'lucide-react';
+import { Order, UserProfile } from '../../types';
+import {
+  getSystemSettings,
+  addStickerSenderCompany as addSenderCompanyToSettings,
+  removeStickerSenderCompany as removeSenderCompanyFromSettings
+} from '../../services/dataService';
 
 interface PrintStickerModalProps {
   order: Order;
-  companies: string[];
+  currentUser: UserProfile;
   onClose: () => void;
 }
 
@@ -16,6 +21,15 @@ const DEFAULT_SENDER_CARE_OF = 'C/O-FUNSCHOLAR INNOVATIONS PVT LTD';
 const DEFAULT_SENDER_ADDRESS_LINE = '59B CHOWRINGHEE ROAD, 6TH FLOOR';
 const DEFAULT_SENDER_CITY_LINE = 'KOLKATA - 700020';
 const DEFAULT_SENDER_PHONE = '9674193747';
+
+// Fallback shown before the real list loads from settings (and if it's
+// ever empty) - kept in sync with INITIAL_SETTINGS.stickerSenderCompanies.
+const DEFAULT_SENDER_COMPANIES = [
+  'Funscholar Innovations Pvt Ltd',
+  'Torquev Technologies Pvt Ltd',
+  'Arkay Enterprises',
+  'Vignan Learning Solutions'
+];
 
 const MAX_BOXES = 500;
 
@@ -86,11 +100,63 @@ const StickerContent: React.FC<StickerContentProps> = ({
   </div>
 );
 
-export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, companies, onClose }) => {
+export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, currentUser, onClose }) => {
   const [numberOfBoxesInput, setNumberOfBoxesInput] = useState('1');
-  const [senderCompany, setSenderCompany] = useState(
-    order.company && companies.includes(order.company) ? order.company : (companies[0] || '')
-  );
+  const [senderCompanies, setSenderCompanies] = useState<string[]>(DEFAULT_SENDER_COMPANIES);
+  const [senderCompany, setSenderCompany] = useState(DEFAULT_SENDER_COMPANIES[0] || '');
+  const [showAddSenderCompany, setShowAddSenderCompany] = useState(false);
+  const [newSenderCompanyName, setNewSenderCompanyName] = useState('');
+  const [isAddingSenderCompany, setIsAddingSenderCompany] = useState(false);
+  const [addSenderCompanyError, setAddSenderCompanyError] = useState<string | null>(null);
+  const [removingSenderCompany, setRemovingSenderCompany] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSystemSettings()
+      .then((s) => {
+        const list = s.stickerSenderCompanies && s.stickerSenderCompanies.length > 0
+          ? s.stickerSenderCompanies
+          : DEFAULT_SENDER_COMPANIES;
+        setSenderCompanies(list);
+        setSenderCompany(list[0] || '');
+      })
+      .catch(console.error);
+  }, []);
+
+  const handleAddSenderCompany = async () => {
+    const trimmed = newSenderCompanyName.trim();
+    if (!trimmed) return;
+    setIsAddingSenderCompany(true);
+    setAddSenderCompanyError(null);
+    try {
+      const updated = await addSenderCompanyToSettings(trimmed, currentUser);
+      setSenderCompanies(updated);
+      setSenderCompany(trimmed);
+      setNewSenderCompanyName('');
+      setShowAddSenderCompany(false);
+    } catch (err: any) {
+      setAddSenderCompanyError(err.message || 'Could not add company.');
+    } finally {
+      setIsAddingSenderCompany(false);
+    }
+  };
+
+  const handleRemoveSenderCompany = async (companyName: string) => {
+    if (!confirm(`Remove "${companyName}" from the sender company list?`)) return;
+    setRemovingSenderCompany(companyName);
+    setAddSenderCompanyError(null);
+    try {
+      const updated = await removeSenderCompanyFromSettings(companyName, currentUser);
+      setSenderCompanies(updated);
+      if (senderCompany === companyName) {
+        setSenderCompany(updated[0] || '');
+      }
+    } catch (err: any) {
+      setAddSenderCompanyError(err.message || 'Could not remove company.');
+    } finally {
+      setRemovingSenderCompany(null);
+    }
+  };
+
   // Pre-filled from the order but editable here - changes only affect this
   // sticker printout, never the order record itself.
   const [categoryText, setCategoryText] = useState(order.category || '');
@@ -227,16 +293,95 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
             </div>
 
             <div>
-              <label className="block text-slate-600 font-semibold mb-1">Sender Company</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-slate-600 font-semibold">Sender Company</label>
+                {currentUser.role === 'SUPER_ADMIN' && !showAddSenderCompany && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSenderCompany(true)}
+                    className="text-[11px] text-amber-700 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Company</span>
+                  </button>
+                )}
+              </div>
               <select
                 value={senderCompany}
                 onChange={(e) => setSenderCompany(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
               >
-                {companies.map((c) => (
+                {senderCompanies.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
+
+              {showAddSenderCompany && (
+                <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="New sender company name"
+                      value={newSenderCompanyName}
+                      onChange={(e) => setNewSenderCompanyName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSenderCompany();
+                        }
+                      }}
+                      className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSenderCompany}
+                      disabled={isAddingSenderCompany || !newSenderCompanyName.trim()}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs shrink-0"
+                    >
+                      {isAddingSenderCompany ? '...' : 'Add'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddSenderCompany(false);
+                        setNewSenderCompanyName('');
+                        setAddSenderCompanyError(null);
+                      }}
+                      className="px-2 py-1.5 text-slate-500 hover:text-slate-800 text-xs shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {addSenderCompanyError && (
+                    <p className="text-[11px] text-rose-600 font-medium">{addSenderCompanyError}</p>
+                  )}
+                  <p className="text-[10px] text-amber-700">
+                    Saved sender companies appear in this dropdown for every future sticker.
+                  </p>
+
+                  {/* Existing sender companies with a delete button each */}
+                  <div className="pt-1.5 border-t border-amber-200 space-y-1 max-h-40 overflow-y-auto">
+                    {senderCompanies.map((c) => (
+                      <div
+                        key={c}
+                        className="flex items-center justify-between gap-2 px-2 py-1 bg-white rounded border border-amber-100 text-xs"
+                      >
+                        <span className="truncate text-slate-800">{c}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSenderCompany(c)}
+                          disabled={removingSenderCompany === c}
+                          title={`Delete "${c}"`}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">

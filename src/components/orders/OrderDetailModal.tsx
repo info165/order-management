@@ -3417,7 +3417,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       {showPrintSticker && (
         <PrintStickerModal
           order={activeOrder}
-          companies={companies}
+          currentUser={currentUser}
           onClose={() => setShowPrintSticker(false)}
         />
       )}
