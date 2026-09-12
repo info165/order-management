@@ -34,7 +34,7 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 print:hidden">
+    <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4">
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -43,6 +43,11 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
             position: fixed;
             inset: 0;
             width: 100%;
+            height: 100%;
+            box-shadow: none !important;
+            border: none !important;
+            max-width: none !important;
+            aspect-ratio: auto !important;
           }
           @page { size: A4; margin: 25mm 20mm; }
         }
