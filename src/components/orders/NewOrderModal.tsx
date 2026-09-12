@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle, Trash2 } from 'lucide-react';
 import { Order, School, Agent, Product, UserProfile } from '../../types';
-import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings } from '../../services/dataService';
+import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, removeCompany as removeCompanyFromSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 
@@ -62,6 +62,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [newCompanyName, setNewCompanyName] = useState('');
   const [isAddingCompany, setIsAddingCompany] = useState(false);
   const [addCompanyError, setAddCompanyError] = useState<string | null>(null);
+  const [removingCompany, setRemovingCompany] = useState<string | null>(null);
 
   const [internalNotes, setInternalNotes] = useState('');
 
@@ -135,6 +136,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       setAddCompanyError(err.message || 'Could not add company.');
     } finally {
       setIsAddingCompany(false);
+    }
+  };
+
+  const handleRemoveCompany = async (companyName: string) => {
+    if (!confirm(`Remove "${companyName}" from the company list? Past orders already using it are not affected.`)) return;
+    setRemovingCompany(companyName);
+    setAddCompanyError(null);
+    try {
+      const updated = await removeCompanyFromSettings(companyName, currentUser);
+      setCompanies(updated);
+      if (company === companyName) {
+        setCompany('');
+      }
+    } catch (err: any) {
+      setAddCompanyError(err.message || 'Could not remove company.');
+    } finally {
+      setRemovingCompany(null);
     }
   };
 
@@ -853,6 +871,29 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   <p className="text-[10px] text-amber-700">
                     Saved company names appear in this dropdown for every future order.
                   </p>
+
+                  {/* Existing companies with a delete button each - covers
+                      both the original defaults and any added later, since
+                      this always renders from the live "companies" list. */}
+                  <div className="pt-1.5 border-t border-amber-200 space-y-1 max-h-40 overflow-y-auto">
+                    {companies.map((c) => (
+                      <div
+                        key={c}
+                        className="flex items-center justify-between gap-2 px-2 py-1 bg-white rounded border border-amber-100 text-xs"
+                      >
+                        <span className="truncate text-slate-800">{c}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCompany(c)}
+                          disabled={removingCompany === c}
+                          title={`Delete "${c}"`}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -3014,6 +3014,18 @@ export async function addCompany(companyName: string, user: UserProfile): Promis
   return updated.companies;
 }
 
+export async function removeCompany(companyName: string, user: UserProfile): Promise<string[]> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can remove a company.');
+  }
+  const existing = memorySettings.companies || [];
+  const updated = await updateSystemSettings(
+    { companies: existing.filter(c => c !== companyName) },
+    user
+  );
+  return updated.companies;
+}
+
 export async function addCategory(categoryName: string, user: UserProfile): Promise<string[]> {
   if (user.role !== 'SUPER_ADMIN') {
     throw new Error('Only Super Admin can add a new category.');
