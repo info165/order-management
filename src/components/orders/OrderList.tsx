@@ -1379,10 +1379,14 @@ export const OrderList: React.FC<OrderListProps> = ({
               ) : (
                 sortedOrders.map((order, idx) => {
                   const isSelected = selectedOrderIds.includes(order.orderId);
-                  // The order's own stored serial number, stable regardless of search/
-                  // filters or of other orders being deleted. Agents only ever receive
-                  // their own already-scoped order list without a serialNumber field set
-                  // consistently across it, so fall back to in-list position for them.
+                  // Number by this order's position among ALL active orders, not its
+                  // position within whatever search/filter is currently applied - a
+                  // search narrowing the list to one match must still show that order's
+                  // real SL. NO. (e.g. 148), not "1" just because it's the only row on
+                  // screen. Agents only ever receive their own already-scoped order list
+                  // (Firestore security rules don't allow fetching the full one), so
+                  // there's no true global position available to them - keep their
+                  // original in-list position numbering, the best available fallback.
                   const serialNum = isAgent ? idx + 1 : (getDisplaySerialNo(order, orders) ?? idx + 1);
                   const contractId = order.contractNumber || order.purchaseOrderNumber || order.orderNumber;
                   const isDeliveryOverdue =

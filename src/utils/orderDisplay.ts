@@ -1,12 +1,22 @@
 import { Order } from '../types';
 
-// The number shown as "SL. NO." / "Order No" throughout the app. This used
-// to be a gap-free *position* recomputed among non-deleted orders, which
-// meant every order's displayed number silently shifted whenever an earlier
-// order was deleted - e.g. order #123 would start showing as "122" once
-// order #122 was soft-deleted, making it look like the wrong order's data
-// was on screen. It now just returns the order's own stored serial number,
-// which never changes regardless of what else gets deleted.
-export function getDisplaySerialNo(order: Order, _allOrders: Order[]): number | undefined {
-  return order.serialNumber;
+// Gap-free position of an order among all currently active (non-deleted)
+// orders, i.e. the same number shown as "SL. NO." in the Orders Registry -
+// as opposed to order.orderId, whose numeric suffix only reflects a
+// creation-time counter that drifts away from that position once earlier
+// orders get deleted.
+//
+// `allOrders` MUST be the full, unfiltered order list this session can see
+// (never a subset already filtered down to one agent/school/etc.), or the
+// computed position will be wrong. Callers on a page that only ever holds a
+// scoped subset (e.g. an Agent/Partner's own restricted view) should not
+// call this at all - there's no way to compute a true global position from
+// a partial list, and Firestore's security rules don't allow that session
+// to fetch the full list to begin with.
+export function getDisplaySerialNo(order: Order, allOrders: Order[]): number | undefined {
+  const position = [...allOrders]
+    .filter(o => !o.isDeleted)
+    .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0))
+    .findIndex(o => o.orderId === order.orderId) + 1;
+  return position || undefined;
 }
