@@ -37,6 +37,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
         colorStyles = 'bg-cyan-50 text-cyan-800 border-cyan-200';
         break;
       case 'DISPATCHED':
+        colorStyles = 'bg-purple-50 text-purple-700 border-purple-300 font-semibold animate-pulse';
+        break;
       case 'IN_TRANSIT':
         colorStyles = 'bg-purple-50 text-purple-700 border-purple-200';
         break;
@@ -85,6 +87,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
         colorStyles = 'bg-emerald-50 text-emerald-800 border-emerald-200';
         break;
       case 'DISPATCHED':
+        colorStyles = 'bg-purple-50 text-purple-700 border-purple-300 font-semibold animate-pulse';
+        break;
       case 'IN_TRANSIT':
         colorStyles = 'bg-purple-50 text-purple-700 border-purple-200';
         break;
