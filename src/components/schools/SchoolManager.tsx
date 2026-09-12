@@ -288,7 +288,15 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
             {filteredSchools.map((s) => {
               const isSelected = selectedSchool?.schoolId === s.schoolId;
-              const count = orders.filter(o => o.schoolName.toLowerCase() === s.schoolName.toLowerCase()).length;
+              // Match by ID OR name, same as schoolOrders below - matching
+              // by name alone missed orders whose own school-name text
+              // differs slightly from the registry (e.g. old free-text
+              // spellings) even though their schoolId now correctly points
+              // here, showing "0 orders" in this list while the detail
+              // panel correctly listed them.
+              const count = orders.filter(
+                o => o.schoolId === s.schoolId || o.schoolName.toLowerCase() === s.schoolName.toLowerCase()
+              ).length;
               return (
                 <div
                   key={s.schoolId}
