@@ -59,7 +59,7 @@ const StickerContent: React.FC<StickerContentProps> = ({
     <div className="text-center space-y-2">
       <p className="text-lg">Contract No- {contractNumber || 'N/A'}</p>
       <p className="text-2xl font-bold uppercase leading-snug">{categoryText || 'N/A'}</p>
-      <p className="text-lg">(Box No- {boxNumber}{totalBoxes > 1 ? ` of ${totalBoxes}` : ''})</p>
+      <p className="text-lg">(Box No- {boxNumber})</p>
     </div>
 
     <div className="space-y-1.5 text-xl leading-relaxed">
@@ -196,8 +196,8 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
               />
               <p className="text-[10px] text-slate-400 mt-1">
                 {totalBoxes > 1
-                  ? `Prints ${totalBoxes} pages, numbered "Box No- 1 of ${totalBoxes}" through "Box No- ${totalBoxes} of ${totalBoxes}".`
-                  : 'Enter how many boxes this order is split across (e.g. 5 prints 5 pages, 1 to 5).'}
+                  ? `Prints ${totalBoxes} pages, numbered "Box No- 1" through "Box No- ${totalBoxes}".`
+                  : 'Enter how many boxes this order is split across (e.g. 5 prints 5 pages, numbered 1 to 5).'}
               </p>
             </div>
 
