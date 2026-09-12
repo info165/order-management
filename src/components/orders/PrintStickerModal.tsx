@@ -38,6 +38,13 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
       <style>{`
         @media print {
           body * { visibility: hidden; }
+          /* visibility:hidden still reserves layout space, so the full-height
+             app behind this modal (the orders table etc.) was producing a
+             second, blank page. Collapsing #root's height removes that
+             space; the sticker below still renders fully since position:fixed
+             escapes an ancestor's height/overflow (no transform on #root
+             creates a containing block for it). */
+          #root { height: 0 !important; overflow: hidden !important; }
           #sticker-print-area, #sticker-print-area * { visibility: visible; }
           #sticker-print-area {
             position: fixed;
