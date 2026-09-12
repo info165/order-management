@@ -116,7 +116,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                                 Overdue
                               </span>
                             )}
-                            <span className={`font-bold truncate ${isCritical ? 'text-rose-950' : 'text-slate-900'}`}>
+                            <span className={`font-bold truncate min-w-0 ${isCritical ? 'text-rose-950' : 'text-slate-900'}`}>
                               {n.title}
                             </span>
                           </span>
