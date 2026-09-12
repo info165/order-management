@@ -124,53 +124,6 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
 
             <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
               <label className="block text-slate-500 font-semibold uppercase tracking-wide text-[11px]">
-                Return Address (same for every company, editable)
-              </label>
-
-              <div>
-                <label className="block text-slate-500 mb-1">Care Of Line</label>
-                <input
-                  type="text"
-                  value={senderCareOf}
-                  onChange={(e) => setSenderCareOf(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-500 mb-1">Address Line</label>
-                <input
-                  type="text"
-                  value={senderAddressLine}
-                  onChange={(e) => setSenderAddressLine(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-500 mb-1">City / PIN Line</label>
-                  <input
-                    type="text"
-                    value={senderCityLine}
-                    onChange={(e) => setSenderCityLine(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-500 mb-1">Phone</label>
-                  <input
-                    type="text"
-                    value={senderPhone}
-                    onChange={(e) => setSenderPhone(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
-              <label className="block text-slate-500 font-semibold uppercase tracking-wide text-[11px]">
                 Receiver (pre-filled from order, editable)
               </label>
 
@@ -210,6 +163,53 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
                     type="text"
                     value={receiverPhone}
                     onChange={(e) => setReceiverPhone(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <label className="block text-slate-500 font-semibold uppercase tracking-wide text-[11px]">
+                Return Address (same for every company, editable)
+              </label>
+
+              <div>
+                <label className="block text-slate-500 mb-1">Care Of Line</label>
+                <input
+                  type="text"
+                  value={senderCareOf}
+                  onChange={(e) => setSenderCareOf(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1">Address Line</label>
+                <input
+                  type="text"
+                  value={senderAddressLine}
+                  onChange={(e) => setSenderAddressLine(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-500 mb-1">City / PIN Line</label>
+                  <input
+                    type="text"
+                    value={senderCityLine}
+                    onChange={(e) => setSenderCityLine(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={senderPhone}
+                    onChange={(e) => setSenderPhone(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   />
                 </div>
