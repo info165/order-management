@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Printer } from 'lucide-react';
 import { Order } from '../../types';
 
@@ -16,8 +17,77 @@ const DEFAULT_SENDER_ADDRESS_LINE = '59B CHOWRINGHEE ROAD, 6TH FLOOR';
 const DEFAULT_SENDER_CITY_LINE = 'KOLKATA - 700020';
 const DEFAULT_SENDER_PHONE = '9674193747';
 
+const MAX_BOXES = 500;
+
+interface StickerContentProps {
+  boxNumber: number;
+  totalBoxes: number;
+  contractNumber: string;
+  categoryText: string;
+  receiverName: string;
+  receiverAddress: string;
+  receiverPincode: string;
+  receiverPhone: string;
+  senderCompany: string;
+  senderCareOf: string;
+  senderAddressLine: string;
+  senderCityLine: string;
+  senderPhone: string;
+  className?: string;
+}
+
+// Shared sticker layout - used both for the single on-screen preview and for
+// every page rendered into the print portal, so the two can never drift out
+// of sync with each other.
+const StickerContent: React.FC<StickerContentProps> = ({
+  boxNumber,
+  totalBoxes,
+  contractNumber,
+  categoryText,
+  receiverName,
+  receiverAddress,
+  receiverPincode,
+  receiverPhone,
+  senderCompany,
+  senderCareOf,
+  senderAddressLine,
+  senderCityLine,
+  senderPhone,
+  className = ''
+}) => (
+  <div className={`bg-white p-10 font-serif text-slate-900 flex flex-col justify-between ${className}`}>
+    <div className="text-center space-y-2">
+      <p className="text-lg">Contract No- {contractNumber || 'N/A'}</p>
+      <p className="text-2xl font-bold uppercase leading-snug">{categoryText || 'N/A'}</p>
+      <p className="text-lg">(Box No- {boxNumber}{totalBoxes > 1 ? ` of ${totalBoxes}` : ''})</p>
+    </div>
+
+    <div className="space-y-1.5 text-xl leading-relaxed">
+      <p className="text-lg">To</p>
+      <p className="font-bold uppercase text-2xl leading-snug">{receiverName}</p>
+      <p className="uppercase whitespace-pre-line">{receiverAddress}</p>
+      {receiverPincode && <p className="font-semibold">PIN - {receiverPincode}</p>}
+      <p className="font-semibold">PH NO- {receiverPhone || 'N/A'}</p>
+    </div>
+
+    <div className="space-y-1.5 text-xl leading-relaxed">
+      <p className="text-lg">From,</p>
+      <p className="font-bold uppercase text-2xl leading-snug">{senderCompany}</p>
+      <p>{senderCareOf}</p>
+      <p>{senderAddressLine}</p>
+      <p>{senderCityLine}</p>
+      <p className="font-semibold">Ph No- {senderPhone}</p>
+    </div>
+
+    <div>
+      <div className="border-b-2 border-slate-500 w-2/3" />
+      <p className="text-sm text-slate-400 mt-2">Receiver's Signature</p>
+    </div>
+  </div>
+);
+
 export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, companies, onClose }) => {
-  const [boxNo, setBoxNo] = useState('1');
+  const [numberOfBoxesInput, setNumberOfBoxesInput] = useState('1');
   const [senderCompany, setSenderCompany] = useState(
     order.company && companies.includes(order.company) ? order.company : (companies[0] || '')
   );
@@ -33,6 +103,23 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
   const [senderCityLine, setSenderCityLine] = useState(DEFAULT_SENDER_CITY_LINE);
   const [senderPhone, setSenderPhone] = useState(DEFAULT_SENDER_PHONE);
 
+  const totalBoxes = Math.min(MAX_BOXES, Math.max(1, parseInt(numberOfBoxesInput, 10) || 1));
+
+  const sharedProps = {
+    totalBoxes,
+    contractNumber: order.contractNumber || '',
+    categoryText,
+    receiverName,
+    receiverAddress,
+    receiverPincode,
+    receiverPhone,
+    senderCompany,
+    senderCareOf,
+    senderAddressLine,
+    senderCityLine,
+    senderPhone
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -43,23 +130,22 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
         @media print {
           body * { visibility: hidden; }
           /* visibility:hidden still reserves layout space, so the full-height
-             app behind this modal (the orders table etc.) was producing a
-             second, blank page. Collapsing #root's height removes that
-             space; the sticker below still renders fully since position:fixed
-             escapes an ancestor's height/overflow (no transform on #root
-             creates a containing block for it). */
+             app behind this modal (the orders table etc.) was producing an
+             extra blank page. Collapsing #root's height removes that space;
+             the print pages below are rendered into a portal attached
+             directly to <body> (a sibling of #root), so they're completely
+             unaffected by #root's collapse and lay out normally. */
           #root { height: 0 !important; overflow: hidden !important; }
-          #sticker-print-area, #sticker-print-area * { visibility: visible; }
-          #sticker-print-area {
-            position: fixed;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            box-shadow: none !important;
-            border: none !important;
-            max-width: none !important;
-            aspect-ratio: auto !important;
+          #sticker-print-portal, #sticker-print-portal * { visibility: visible; }
+          #sticker-print-portal {
+            position: static;
           }
+          .sticker-print-page {
+            width: 100%;
+            height: 297mm;
+            break-after: page;
+          }
+          .sticker-print-page:last-child { break-after: auto; }
           @page { size: A4; margin: 25mm 20mm; }
         }
       `}</style>
@@ -99,14 +185,20 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
             </div>
 
             <div>
-              <label className="block text-slate-600 font-semibold mb-1">Box No.</label>
+              <label className="block text-slate-600 font-semibold mb-1">Number of Boxes</label>
               <input
-                type="text"
-                value={boxNo}
-                onChange={(e) => setBoxNo(e.target.value)}
-                placeholder="e.g. 1 or 1 of 3"
+                type="number"
+                min={1}
+                max={MAX_BOXES}
+                value={numberOfBoxesInput}
+                onChange={(e) => setNumberOfBoxesInput(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
               />
+              <p className="text-[10px] text-slate-400 mt-1">
+                {totalBoxes > 1
+                  ? `Prints ${totalBoxes} pages, numbered "Box No- 1 of ${totalBoxes}" through "Box No- ${totalBoxes} of ${totalBoxes}".`
+                  : 'Enter how many boxes this order is split across (e.g. 5 prints 5 pages, 1 to 5).'}
+              </p>
             </div>
 
             <div>
@@ -222,47 +314,42 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
               className="w-full px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center justify-center gap-2 transition-colors"
             >
               <Printer className="w-4 h-4" />
-              <span>Print / Save as PDF</span>
+              <span>{totalBoxes > 1 ? `Print ${totalBoxes} Stickers / Save as PDF` : 'Print / Save as PDF'}</span>
             </button>
           </div>
 
-          {/* Live Preview - this exact block is what actually prints */}
-          <div className="bg-slate-100 rounded-xl p-3 flex items-start justify-center">
-            <div
-              id="sticker-print-area"
-              className="bg-white w-full aspect-[210/297] max-w-[380px] shadow-md border border-slate-200 p-10 font-serif text-slate-900 flex flex-col justify-between"
-            >
-              <div className="text-center space-y-2">
-                <p className="text-lg">Contract No- {order.contractNumber || 'N/A'}</p>
-                <p className="text-2xl font-bold uppercase leading-snug">{categoryText || 'N/A'}</p>
-                <p className="text-lg">(Box No- {boxNo || '1'})</p>
-              </div>
-
-              <div className="space-y-1.5 text-xl leading-relaxed">
-                <p className="text-lg">To</p>
-                <p className="font-bold uppercase text-2xl leading-snug">{receiverName}</p>
-                <p className="uppercase whitespace-pre-line">{receiverAddress}</p>
-                {receiverPincode && <p className="font-semibold">PIN - {receiverPincode}</p>}
-                <p className="font-semibold">PH NO- {receiverPhone || 'N/A'}</p>
-              </div>
-
-              <div className="space-y-1.5 text-xl leading-relaxed">
-                <p className="text-lg">From,</p>
-                <p className="font-bold uppercase text-2xl leading-snug">{senderCompany}</p>
-                <p>{senderCareOf}</p>
-                <p>{senderAddressLine}</p>
-                <p>{senderCityLine}</p>
-                <p className="font-semibold">Ph No- {senderPhone}</p>
-              </div>
-
-              <div>
-                <div className="border-b-2 border-slate-500 w-2/3" />
-                <p className="text-sm text-slate-400 mt-2">Receiver's Signature</p>
-              </div>
+          {/* Live Preview - shows Box 1 as a representative sample; every
+              box gets its own identical page (differing only in the box
+              number) when actually printed. */}
+          <div className="bg-slate-100 rounded-xl p-3 flex flex-col items-center gap-2">
+            <div className="w-full aspect-[210/297] max-w-[380px] shadow-md border border-slate-200 overflow-hidden">
+              <StickerContent boxNumber={1} {...sharedProps} className="w-full h-full" />
             </div>
+            {totalBoxes > 1 && (
+              <p className="text-[11px] text-slate-500 font-medium">
+                Showing Box 1 of {totalBoxes} — {totalBoxes - 1} more identical page{totalBoxes > 2 ? 's' : ''} will print, numbered up to {totalBoxes}.
+              </p>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Print-only portal: rendered as a sibling of #root directly under
+          <body>, so it's unaffected when #root's height collapses for
+          print, and each page can stack normally to paginate correctly. */}
+      {createPortal(
+        <div id="sticker-print-portal" className="hidden print:block">
+          {Array.from({ length: totalBoxes }, (_, i) => i + 1).map((boxNumber) => (
+            <StickerContent
+              key={boxNumber}
+              boxNumber={boxNumber}
+              {...sharedProps}
+              className="sticker-print-page"
+            />
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
