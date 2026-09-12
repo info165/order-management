@@ -1536,17 +1536,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               {/* Status Update Form for Admin / Operations */}
               {!isAgent && (
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
                     <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">
                       Advance Order Lifecycle Stage
                     </h3>
                     <button
                       type="button"
                       onClick={() => setShowPrintSticker(true)}
-                      className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50 text-slate-700 font-semibold flex items-center gap-1 transition-colors"
+                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-bold text-sm flex items-center gap-2 shadow-md shadow-indigo-600/30 transition-all shrink-0"
                       title="Print a box sticker for this order"
                     >
-                      <Printer className="w-3 h-3 text-amber-600" />
+                      <Printer className="w-4 h-4" />
                       <span>Print Sticker</span>
                     </button>
                   </div>
