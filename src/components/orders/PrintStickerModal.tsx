@@ -21,6 +21,13 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
   const [senderCompany, setSenderCompany] = useState(
     order.company && companies.includes(order.company) ? order.company : (companies[0] || '')
   );
+  // Pre-filled from the order but editable here - changes only affect this
+  // sticker printout, never the order record itself.
+  const [categoryText, setCategoryText] = useState(order.category || '');
+  const [receiverName, setReceiverName] = useState(order.schoolName || '');
+  const [receiverAddress, setReceiverAddress] = useState(order.schoolAddress || '');
+  const [receiverPincode, setReceiverPincode] = useState(order.schoolPincode || '');
+  const [receiverPhone, setReceiverPhone] = useState(order.schoolContactPhone || '');
 
   const handlePrint = () => {
     window.print();
@@ -65,12 +72,14 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
             </div>
 
             <div>
-              <label className="block text-slate-500 font-semibold mb-1 uppercase tracking-wide text-[11px]">
-                Category / Kit
-              </label>
-              <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 font-semibold text-slate-800">
-                {order.category || 'N/A'}
-              </div>
+              <label className="block text-slate-600 font-semibold mb-1">Category / Kit</label>
+              <input
+                type="text"
+                value={categoryText}
+                onChange={(e) => setCategoryText(e.target.value)}
+                placeholder="e.g. TLM Class 3"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+              />
             </div>
 
             <div>
@@ -100,15 +109,50 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
               </p>
             </div>
 
-            <div>
-              <label className="block text-slate-500 font-semibold mb-1 uppercase tracking-wide text-[11px]">
-                Receiver (fetched from order)
+            <div className="space-y-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <label className="block text-slate-500 font-semibold uppercase tracking-wide text-[11px]">
+                Receiver (pre-filled from order, editable)
               </label>
-              <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 space-y-0.5">
-                <div className="font-semibold">{order.schoolName}</div>
-                <div>{order.schoolAddress || 'No address on file'}</div>
-                <div>{order.schoolPincode ? `PIN - ${order.schoolPincode}` : 'PIN not on file'}</div>
-                <div>{order.schoolContactPhone ? `PH NO- ${order.schoolContactPhone}` : 'Phone not on file'}</div>
+
+              <div>
+                <label className="block text-slate-500 mb-1">School Name</label>
+                <input
+                  type="text"
+                  value={receiverName}
+                  onChange={(e) => setReceiverName(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1">Address</label>
+                <textarea
+                  value={receiverAddress}
+                  onChange={(e) => setReceiverAddress(e.target.value)}
+                  rows={2}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-500 mb-1">PIN Code</label>
+                  <input
+                    type="text"
+                    value={receiverPincode}
+                    onChange={(e) => setReceiverPincode(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={receiverPhone}
+                    onChange={(e) => setReceiverPhone(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 
@@ -130,16 +174,16 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
             >
               <div className="text-center space-y-1 mb-8">
                 <p className="text-sm">Contract No- {order.contractNumber || 'N/A'}</p>
-                <p className="text-base font-semibold uppercase">{order.category || 'N/A'}</p>
+                <p className="text-base font-semibold uppercase">{categoryText || 'N/A'}</p>
                 <p className="text-sm">(Box No- {boxNo || '1'})</p>
               </div>
 
               <div className="space-y-1 text-sm mb-10">
                 <p>To</p>
-                <p className="font-semibold uppercase">{order.schoolName}</p>
-                <p className="uppercase whitespace-pre-line">{order.schoolAddress}</p>
-                {order.schoolPincode && <p>PIN - {order.schoolPincode}</p>}
-                <p>PH NO- {order.schoolContactPhone || 'N/A'}</p>
+                <p className="font-semibold uppercase">{receiverName}</p>
+                <p className="uppercase whitespace-pre-line">{receiverAddress}</p>
+                {receiverPincode && <p>PIN - {receiverPincode}</p>}
+                <p>PH NO- {receiverPhone || 'N/A'}</p>
               </div>
 
               <div className="space-y-1 text-sm">
