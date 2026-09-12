@@ -87,13 +87,6 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                           : 'bg-amber-50/40 hover:bg-amber-50/70 border-l-3 border-amber-500'
                     }`}
                   >
-                    {isCritical && (
-                      <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600" />
-                      </span>
-                    )}
-
                     <div className="flex items-start gap-2.5">
                       {isCritical ? (
                         <span className="relative shrink-0 mt-0.5">
@@ -108,9 +101,9 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                       )}
 
-                      <div className="flex-1 space-y-1 pr-4">
+                      <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="flex items-center gap-1.5 min-w-0 flex-1">
                             {isCritical && (
                               <span className="shrink-0 text-[9px] font-extrabold tracking-wider text-white bg-rose-600 px-1.5 py-0.5 rounded uppercase">
                                 Overdue
