@@ -182,34 +182,34 @@ export const PrintStickerModal: React.FC<PrintStickerModalProps> = ({ order, com
           <div className="bg-slate-100 rounded-xl p-3 flex items-start justify-center">
             <div
               id="sticker-print-area"
-              className="bg-white w-full aspect-[210/297] max-w-[380px] shadow-md border border-slate-200 p-8 font-serif text-slate-900 flex flex-col"
+              className="bg-white w-full aspect-[210/297] max-w-[380px] shadow-md border border-slate-200 p-10 font-serif text-slate-900 flex flex-col justify-between"
             >
-              <div className="text-center space-y-1 mb-8">
-                <p className="text-sm">Contract No- {order.contractNumber || 'N/A'}</p>
-                <p className="text-base font-semibold uppercase">{categoryText || 'N/A'}</p>
-                <p className="text-sm">(Box No- {boxNo || '1'})</p>
+              <div className="text-center space-y-2">
+                <p className="text-lg">Contract No- {order.contractNumber || 'N/A'}</p>
+                <p className="text-2xl font-bold uppercase leading-snug">{categoryText || 'N/A'}</p>
+                <p className="text-lg">(Box No- {boxNo || '1'})</p>
               </div>
 
-              <div className="space-y-1 text-sm mb-10">
-                <p>To</p>
-                <p className="font-semibold uppercase">{receiverName}</p>
+              <div className="space-y-1.5 text-xl leading-relaxed">
+                <p className="text-lg">To</p>
+                <p className="font-bold uppercase text-2xl leading-snug">{receiverName}</p>
                 <p className="uppercase whitespace-pre-line">{receiverAddress}</p>
-                {receiverPincode && <p>PIN - {receiverPincode}</p>}
-                <p>PH NO- {receiverPhone || 'N/A'}</p>
+                {receiverPincode && <p className="font-semibold">PIN - {receiverPincode}</p>}
+                <p className="font-semibold">PH NO- {receiverPhone || 'N/A'}</p>
               </div>
 
-              <div className="space-y-1 text-sm">
-                <p>From,</p>
-                <p className="font-semibold uppercase">{senderCompany}</p>
+              <div className="space-y-1.5 text-xl leading-relaxed">
+                <p className="text-lg">From,</p>
+                <p className="font-bold uppercase text-2xl leading-snug">{senderCompany}</p>
                 <p>{SENDER_CARE_OF}</p>
                 <p>{SENDER_ADDRESS_LINE}</p>
                 <p>{SENDER_CITY_LINE}</p>
-                <p>Ph No- {SENDER_PHONE}</p>
+                <p className="font-semibold">Ph No- {SENDER_PHONE}</p>
               </div>
 
-              <div className="mt-auto pt-16">
-                <div className="border-b border-slate-400 w-2/3" />
-                <p className="text-[10px] text-slate-400 mt-1">Receiver's Signature</p>
+              <div>
+                <div className="border-b-2 border-slate-500 w-2/3" />
+                <p className="text-sm text-slate-400 mt-2">Receiver's Signature</p>
               </div>
             </div>
           </div>
