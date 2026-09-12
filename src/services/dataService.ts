@@ -301,16 +301,6 @@ let memoryNotifications: NotificationItem[] = loadStorage(STORAGE_KEYS.NOTIFICAT
     createdAt: '2026-09-01T15:21:00Z'
   },
   {
-    notificationId: 'NOTIF-002',
-    userId: 'user_super_admin',
-    type: 'PAYMENT',
-    title: 'Payment Received',
-    message: '₹70,000 payment received for ORD-2026-00014 (KV Aligarh).',
-    orderId: 'ORD-2026-00014',
-    isRead: false,
-    createdAt: '2026-08-30T17:05:00Z'
-  },
-  {
     notificationId: 'NOTIF-003',
     userId: 'user_manoj_sarkar',
     type: 'DISPATCH',
@@ -321,6 +311,15 @@ let memoryNotifications: NotificationItem[] = loadStorage(STORAGE_KEYS.NOTIFICAT
     createdAt: '2026-08-27T09:00:00Z'
   }
 ]);
+
+// One-time cleanup: NOTIF-002 ("Payment Received" demo alert) used to ship
+// as part of the default seed above and is already cached in localStorage
+// for anyone who has opened the app before - removing it from the array
+// above doesn't clear an existing browser's copy, so purge it explicitly.
+if (memoryNotifications.some(n => n.notificationId === 'NOTIF-002')) {
+  memoryNotifications = memoryNotifications.filter(n => n.notificationId !== 'NOTIF-002');
+  saveStorage(STORAGE_KEYS.NOTIFICATIONS, memoryNotifications);
+}
 
 let memoryAuditLogs: ActivityLog[] = loadStorage(STORAGE_KEYS.AUDIT_LOGS, [
   {
@@ -1659,20 +1658,6 @@ export async function addPayment(
     visibleToAgent: true
   };
   await addTimelineEntry(timelineItem);
-
-  // Notify Agent
-  if (order.agentId) {
-    const agent = memoryAgents.find(a => a.agentId === order.agentId);
-    if (agent && agent.userId) {
-      await createNotification({
-        userId: agent.userId,
-        type: 'PAYMENT',
-        title: 'Payment Received from School',
-        message: `₹${paymentInput.amount.toLocaleString('en-IN')} received for ${order.orderId} (${order.schoolName}). Balance: ₹${newPending.toLocaleString('en-IN')}.`,
-        orderId: order.orderId
-      });
-    }
-  }
 
   await writeActivityLog({
     userId: user.userId,
