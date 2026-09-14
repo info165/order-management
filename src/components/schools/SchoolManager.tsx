@@ -175,6 +175,26 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
     }
   };
 
+  // Every field here used to keep whatever was typed the last time this
+  // modal was open - closing it (Cancel, the X, or a successful save) never
+  // cleared them, so the next school added would silently start from the
+  // previous one's leftover values (e.g. State still showing the last
+  // school's state) unless every field was manually retyped.
+  const resetAddSchoolForm = () => {
+    setNewSchoolName('');
+    setNewSchoolType('Kendriya Vidyalaya');
+    setNewState('');
+    setNewDistrict('');
+    setNewSchoolCode('');
+    setNewPrincipal('');
+    setNewPhone('');
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    resetAddSchoolForm();
+  };
+
   const handleCreateSchool = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSchoolName.trim()) return;
@@ -192,6 +212,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
         currentUser
       );
       setShowAddModal(false);
+      resetAddSchoolForm();
       setSelectedSchoolId(created.schoolId);
     } catch (err: any) {
       alert(err.message);
@@ -536,7 +557,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
           <div className="bg-white rounded-xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-sm text-slate-900">Add New Government School</h3>
-              <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-800">
+              <button type="button" onClick={handleCloseAddModal} className="text-slate-400 hover:text-slate-800">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -633,7 +654,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={handleCloseAddModal}
                   className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
                 >
                   Cancel
