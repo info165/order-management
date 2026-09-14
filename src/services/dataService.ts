@@ -2141,7 +2141,23 @@ export async function getSchools(): Promise<School[]> {
 
 export async function createSchool(schoolInput: Omit<School, 'schoolId' | 'createdAt' | 'updatedAt'>, user: UserProfile): Promise<School> {
   if (user.role === 'AGENT') throw new Error('Partners cannot create schools.');
-  const schoolId = `SCH-${String(memorySchools.length + 1).padStart(3, '0')}`;
+  // memorySchools.length + 1 used to be the whole scheme, with no check that
+  // the resulting ID wasn't already taken - registry IDs are not densely
+  // sequential (gaps and 4-digit outliers like SCH-0024/SCH-0040 exist), so
+  // that count could - and did - collide with a real existing schoolId,
+  // silently overwriting it via the merge write below. Same collision-loop
+  // fix already applied to createOrder()'s orderId generation.
+  const existingIds = new Set(memorySchools.map(s => s.schoolId));
+  const maxNumericId = memorySchools.reduce((max, s) => {
+    const match = /^SCH-(\d+)$/.exec(s.schoolId);
+    return match ? Math.max(max, parseInt(match[1], 10)) : max;
+  }, 0);
+  let schoolId = `SCH-${String(maxNumericId + 1).padStart(3, '0')}`;
+  let collisionCounter = 1;
+  while (existingIds.has(schoolId)) {
+    schoolId = `SCH-${String(maxNumericId + 1 + collisionCounter).padStart(3, '0')}`;
+    collisionCounter++;
+  }
   const now = new Date().toISOString();
   const newSchool: School = {
     ...schoolInput,
