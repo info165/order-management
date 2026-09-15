@@ -116,7 +116,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
             <span>Back</span>
           </button>
         </div>
-        <div className="flex-1 flex items-start justify-center p-6 pt-16">
+        <div className="flex-1 flex items-start justify-center p-6 pt-4">
           <div className="w-full max-w-md bg-slate-900 border border-rose-900/60 rounded-xl p-5 text-center space-y-3">
             <h1 className="text-sm font-semibold text-rose-400">Selected orders belong to different partners</h1>
             <p className="text-xs text-slate-400">
@@ -137,7 +137,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <div className="p-4 flex items-center justify-between">
+      <div className="p-2 flex items-center justify-between">
         <button
           type="button"
           onClick={onBack}
@@ -148,10 +148,9 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
         </button>
       </div>
 
-      <div className="flex-1 flex items-start justify-center p-6 pt-12">
+      <div className="flex-1 flex items-start justify-center px-6 pb-6">
         <div className="w-full max-w-lg space-y-4">
           <div className="text-center space-y-1">
-            <Calculator className="w-6 h-6 text-amber-400 mx-auto" />
             <h1 className="text-sm font-semibold text-slate-200">Commission Calculation</h1>
             <p className="text-xs text-slate-500">{orders.length} order{orders.length === 1 ? '' : 's'} selected</p>
             <p className={`text-xs font-semibold ${isDirectPayment ? 'text-sky-400' : 'text-amber-400'}`}>
