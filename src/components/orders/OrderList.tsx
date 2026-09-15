@@ -1156,12 +1156,12 @@ export const OrderList: React.FC<OrderListProps> = ({
                   </th>
                 )}
 
-                {/* 7. VALUE (₹) Column (Right-Aligned, GST-Inclusive) */}
+                {/* 7. VALUE (₹) Column (Left-Aligned, GST-Inclusive) */}
                 <th
                   style={{ width: widths.orderValue, minWidth: widths.orderValue }}
-                  className="px-2.5 py-2.5 relative border-r border-slate-200/60 bg-slate-100 group text-right"
+                  className="px-2.5 py-2.5 relative border-r border-slate-200/60 bg-slate-100 group text-left"
                 >
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-start gap-1">
                     <div
                       onClick={() => handleSort('orderValue')}
                       className="flex items-center gap-1 cursor-pointer hover:text-slate-950 font-bold"
@@ -1527,10 +1527,10 @@ export const OrderList: React.FC<OrderListProps> = ({
                         </td>
                       )}
 
-                      {/* VALUE (₹) (Right-Aligned, GST-Inclusive Final Figure) */}
+                      {/* VALUE (₹) (Left-Aligned, GST-Inclusive Final Figure) */}
                       <td
                         style={{ width: widths.orderValue }}
-                        className="px-3 py-2 text-right font-mono whitespace-nowrap align-middle border-r border-slate-100"
+                        className="px-3 py-2 text-left font-mono whitespace-nowrap align-middle border-r border-slate-100"
                       >
                         {order.status === 'CANCELLED' ? (
                           <div className="font-bold text-rose-600 text-xs">CANCELLED</div>
