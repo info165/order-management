@@ -3,6 +3,7 @@ import { ArrowLeft, Building2 } from 'lucide-react';
 import { Order, OrderStatus, School, UserProfile } from '../../types';
 import { subscribeToRealtimeSchools } from '../../services/dataService';
 import { OrderList } from '../orders/OrderList';
+import { CommissionCalculationPage } from './CommissionCalculationPage';
 
 interface CBPageProps {
   currentUser: UserProfile;
@@ -32,6 +33,7 @@ export const CBPage: React.FC<CBPageProps> = ({
   const [schools, setSchools] = useState<School[]>([]);
   const [loadingSchools, setLoadingSchools] = useState(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
+  const [commissionOrderIds, setCommissionOrderIds] = useState<string[] | null>(null);
 
   // Same live Firestore subscription the School Registry page uses, so this
   // dropdown is never a stale snapshot - a school added, renamed, or removed
@@ -57,6 +59,15 @@ export const CBPage: React.FC<CBPageProps> = ({
           o.schoolName.toLowerCase() === selectedSchool.schoolName.toLowerCase()
       )
     : [];
+
+  if (commissionOrderIds) {
+    return (
+      <CommissionCalculationPage
+        orders={orders.filter(o => commissionOrderIds.includes(o.orderId))}
+        onBack={() => setCommissionOrderIds(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -106,6 +117,10 @@ export const CBPage: React.FC<CBPageProps> = ({
               onDeleteOrder={onDeleteOrder}
               onBatchStatusUpdate={onBatchStatusUpdate}
               initialFilterCategory="ALL"
+              extraBulkAction={{
+                label: 'Commission Calculation',
+                onClick: (selectedOrderIds) => setCommissionOrderIds(selectedOrderIds)
+              }}
             />
           </div>
         )}

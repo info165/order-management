@@ -69,6 +69,10 @@ interface OrderListProps {
   onBatchStatusUpdate: (orderIds: string[], newStatus: OrderStatus) => void;
   onOrdersUpdated?: () => void;
   initialFilterCategory?: string;
+  // Lets a specific screen (e.g. the CB page's per-school view) add one more
+  // button to the existing bulk-selection bar, without every other OrderList
+  // usage in the app needing to know about it - omitted, nothing changes.
+  extraBulkAction?: { label: string; onClick: (selectedOrderIds: string[]) => void };
 }
 
 export const OrderList: React.FC<OrderListProps> = ({
@@ -80,7 +84,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   onDeleteOrder,
   onBatchStatusUpdate,
   onOrdersUpdated,
-  initialFilterCategory
+  initialFilterCategory,
+  extraBulkAction
 }) => {
   const isAgent = currentUser.role === 'AGENT';
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
@@ -913,6 +918,15 @@ export const OrderList: React.FC<OrderListProps> = ({
             >
               Export Selected
             </button>
+            {extraBulkAction && (
+              <button
+                type="button"
+                onClick={() => extraBulkAction.onClick(selectedOrderIds)}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+              >
+                {extraBulkAction.label}
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-3 ml-auto">
