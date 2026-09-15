@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Building2, Search } from 'lucide-react';
 import { Order, OrderStatus, School, UserProfile } from '../../types';
 import { subscribeToRealtimeSchools } from '../../services/dataService';
 import { OrderList } from '../orders/OrderList';
@@ -34,6 +34,9 @@ export const CBPage: React.FC<CBPageProps> = ({
   const [loadingSchools, setLoadingSchools] = useState(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [commissionOrderIds, setCommissionOrderIds] = useState<string[] | null>(null);
+  const [schoolSearch, setSchoolSearch] = useState('');
+  const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
+  const schoolDropdownRef = useRef<HTMLDivElement>(null);
 
   // Same live Firestore subscription the School Registry page uses, so this
   // dropdown is never a stale snapshot - a school added, renamed, or removed
@@ -46,8 +49,33 @@ export const CBPage: React.FC<CBPageProps> = ({
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (schoolDropdownRef.current && !schoolDropdownRef.current.contains(e.target as Node)) {
+        setShowSchoolDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const sortedSchools = [...schools].sort((a, b) => a.schoolName.localeCompare(b.schoolName));
   const selectedSchool = schools.find(s => s.schoolId === selectedSchoolId) || null;
+  const filteredSchools = sortedSchools.filter((s) => {
+    const q = schoolSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      s.schoolName.toLowerCase().includes(q) ||
+      (s.schoolCode && s.schoolCode.toLowerCase().includes(q)) ||
+      (s.state && s.state.toLowerCase().includes(q))
+    );
+  });
+
+  const handlePickSchool = (s: School) => {
+    setSelectedSchoolId(s.schoolId);
+    setSchoolSearch(s.schoolName);
+    setShowSchoolDropdown(false);
+  };
 
   // Same ID-or-name match SchoolManager.tsx uses for a school's order count,
   // so this list always agrees with what the School Registry page itself
@@ -90,19 +118,44 @@ export const CBPage: React.FC<CBPageProps> = ({
               <Building2 className="w-4 h-4 text-amber-400" />
               <span>Which school do you want to select?</span>
             </label>
-            <select
-              value={selectedSchoolId}
-              onChange={(e) => setSelectedSchoolId(e.target.value)}
-              disabled={loadingSchools}
-              className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
-            >
-              <option value="">{loadingSchools ? 'Loading schools…' : `Select a school... (${schools.length})`}</option>
-              {sortedSchools.map((s) => (
-                <option key={s.schoolId} value={s.schoolId}>
-                  {s.schoolName}{s.state ? ` — ${s.state}` : ''}
-                </option>
-              ))}
-            </select>
+            <div className="relative" ref={schoolDropdownRef}>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={schoolSearch}
+                  onChange={(e) => {
+                    setSchoolSearch(e.target.value);
+                    setSelectedSchoolId('');
+                    setShowSchoolDropdown(true);
+                  }}
+                  onFocus={() => setShowSchoolDropdown(true)}
+                  disabled={loadingSchools}
+                  placeholder={loadingSchools ? 'Loading schools…' : `Search a school... (${schools.length})`}
+                  className="w-full pl-3 pr-8 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                />
+                <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {showSchoolDropdown && !loadingSchools && (
+                <div className="absolute left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 max-h-64 overflow-y-auto divide-y divide-slate-700/60 text-xs">
+                  {filteredSchools.length > 0 ? (
+                    filteredSchools.map((s) => (
+                      <button
+                        key={s.schoolId}
+                        type="button"
+                        onClick={() => handlePickSchool(s)}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-700/60 transition-colors"
+                      >
+                        <div className="font-semibold text-slate-100">{s.schoolName}</div>
+                        {s.state && <div className="text-[11px] text-slate-500">{s.state}</div>}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-3 text-slate-500 text-center">No school found.</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
