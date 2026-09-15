@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft, Calculator } from 'lucide-react';
 import { Order } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -20,6 +20,14 @@ interface CommissionCalculationPageProps {
 export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, onBack }) => {
   const totalOrderValue = orders.reduce((sum, o) => sum + (o.orderValue || 0), 0);
   const calculatedAmount = totalOrderValue / 1.18;
+
+  // Free-text so a partial entry like "5." or "0." while typing a decimal
+  // (5.5, 0.5, etc.) isn't fought/reformatted mid-keystroke; parsed on
+  // render, with an empty/invalid entry treated as 0% rather than erroring.
+  const [commissionPercentInput, setCommissionPercentInput] = useState('');
+  const commissionPercent = parseFloat(commissionPercentInput);
+  const hasValidPercent = commissionPercentInput.trim() !== '' && !isNaN(commissionPercent);
+  const commissionAmount = hasValidPercent ? (calculatedAmount * commissionPercent) / 100 : 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -63,6 +71,30 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
             <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-200">Amount</span>
               <CurrencyFormatter amount={calculatedAmount} showDecimals className="text-lg font-bold text-amber-400" />
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <label className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-200">Commission %</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 10 or 5.5"
+                  value={commissionPercentInput}
+                  onChange={(e) => setCommissionPercentInput(e.target.value)}
+                  className="w-28 pl-2.5 pr-6 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-right font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+              </div>
+            </label>
+
+            <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-200">Commission Amount</span>
+              <CurrencyFormatter amount={commissionAmount} showDecimals className="text-lg font-bold text-emerald-400" />
             </div>
           </div>
         </div>
