@@ -820,6 +820,15 @@ export const OrderList: React.FC<OrderListProps> = ({
               </span>
               <span>POD Copy Uploaded</span>
             </div>
+
+            {/* Value column tick legend - explains the GeM Portal Invoice
+                mark shown beside the order value, same styling as above. */}
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-200 bg-slate-50 text-[11px] text-slate-500">
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
+                <Check className="w-2.5 h-2.5" strokeWidth={3} />
+              </span>
+              <span>GeM Portal Invoice Uploaded</span>
+            </div>
           </div>
 
           {/* Clear all active filters indicator */}
