@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Calculator, Wallet, Upload, Camera, X } from 'lucide-react';
+import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2 } from 'lucide-react';
 import { Order } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { processFileForUpload } from '../../utils/fileUpload';
@@ -66,6 +66,24 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const [screenshotFileName, setScreenshotFileName] = useState('');
   const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  const [isMarkedPaid, setIsMarkedPaid] = useState(false);
+  const [markPaidError, setMarkPaidError] = useState<string | null>(null);
+
+  // Not persisted anywhere yet (see the file-level note) - this only
+  // validates the minimum required fields are filled and flips the page
+  // into a confirmed/marked-paid state.
+  const handleMarkAsPaid = () => {
+    if (!paymentMode) {
+      setMarkPaidError('Select a Mode of Payment first.');
+      return;
+    }
+    if (!paymentDate) {
+      setMarkPaidError('Enter the Date of Payment first.');
+      return;
+    }
+    setMarkPaidError(null);
+    setIsMarkedPaid(true);
+  };
 
   const handleScreenshotSelect = async (file: File) => {
     setIsUploadingScreenshot(true);
@@ -451,6 +469,28 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                 )}
                 {screenshotError && (
                   <p className="text-[11px] text-rose-400">{screenshotError}</p>
+                )}
+              </div>
+
+              {/* Mark as Paid */}
+              <div className="space-y-2">
+                {isMarkedPaid ? (
+                  <div className="flex items-center justify-center gap-2 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-600/40 text-emerald-400 text-xs font-semibold">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Marked as Paid</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleMarkAsPaid}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-colors"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Mark as Paid</span>
+                  </button>
+                )}
+                {markPaidError && (
+                  <p className="text-[11px] text-rose-400 text-center">{markPaidError}</p>
                 )}
               </div>
             </div>
