@@ -79,13 +79,19 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
               <span className="font-semibold text-slate-200">Commission %</span>
               <div className="relative">
                 <input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  step="0.01"
-                  min="0"
                   placeholder="e.g. 10 or 5.5"
                   value={commissionPercentInput}
-                  onChange={(e) => setCommissionPercentInput(e.target.value)}
+                  onChange={(e) => {
+                    // Manual free-typing only - just numbers and at most one
+                    // decimal point, no spinner arrows or other browser-
+                    // supplied number-input behavior.
+                    const next = e.target.value;
+                    if (next === '' || /^\d*\.?\d*$/.test(next)) {
+                      setCommissionPercentInput(next);
+                    }
+                  }}
                   className="w-28 pl-2.5 pr-6 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-right font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500">%</span>
