@@ -43,6 +43,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const [accountNumber, setAccountNumber] = useState('');
   const [transactionRefNumber, setTransactionRefNumber] = useState('');
   const [neftUtrNumber, setNeftUtrNumber] = useState('');
+  const [transactionUtrPfmsRef, setTransactionUtrPfmsRef] = useState('');
   const [paymentRemarks, setPaymentRemarks] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
   const [screenshotDataUrl, setScreenshotDataUrl] = useState('');
@@ -148,11 +149,14 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                       placeholder="e.g. 10 or 5.5"
                       value={commissionPercentInput}
                       onChange={(e) => {
-                        // Manual free-typing only - just numbers and at most one
-                        // decimal point, no spinner arrows or other browser-
-                        // supplied number-input behavior.
+                        // Manual free-typing only - digits and at most one
+                        // decimal point, up to 5 digits after it (matching
+                        // CurrencyFormatter's own 5-decimal display cap
+                        // below) - no spinner arrows or other browser-
+                        // supplied number-input behavior. The typed value is
+                        // kept and parsed exactly as entered, never rounded.
                         const next = e.target.value;
-                        if (next === '' || /^\d*\.?\d*$/.test(next)) {
+                        if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
                           setCommissionPercentInput(next);
                         }
                       }}
@@ -297,6 +301,17 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                     </div>
                   </div>
                 )}
+
+                <div className="pt-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">Transaction / UTR / PFMS Reference</label>
+                  <input
+                    type="text"
+                    value={transactionUtrPfmsRef}
+                    onChange={(e) => setTransactionUtrPfmsRef(e.target.value)}
+                    placeholder="e.g. transaction, UTR, or PFMS reference number"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
 
                 <div className="pt-1">
                   <label className="block text-[11px] text-slate-400 mb-1">Remarks (optional)</label>
