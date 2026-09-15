@@ -84,7 +84,7 @@ export const CBPage: React.FC<CBPageProps> = ({
       </div>
 
       <div className={`flex-1 flex flex-col p-4 sm:p-6 pt-2 ${selectedSchool ? '' : 'items-center justify-start'}`}>
-        <div className={selectedSchool ? 'w-full max-w-md mb-4' : 'w-full max-w-md mt-16'}>
+        <div className={selectedSchool ? 'w-full max-w-md mb-4' : 'w-full max-w-md mt-4'}>
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-200">
               <Building2 className="w-4 h-4 text-amber-400" />
