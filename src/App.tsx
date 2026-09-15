@@ -17,6 +17,7 @@ import { DataEntryDashboard } from './components/dataentry/DataEntryDashboard';
 import { AgentPortalView } from './components/agents/AgentPortalView';
 import { LoginPage } from './components/auth/LoginPage';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
+import { CBPage } from './components/admin/CBPage';
 import { Order, AppNotification, OrderStatus } from './types';
 import {
   getOrders,
@@ -276,6 +277,16 @@ function MainApp() {
   // If not logged in or no currentUser, show Login Credential Page
   if (!isLoggedIn || !currentUser) {
     return <LoginPage />;
+  }
+
+  // Hidden Super-Admin-only page, reachable only by typing /cb directly -
+  // deliberately not part of the normal section shell (no Navbar, no menu
+  // entry anywhere) so it stays undiscoverable by browsing the app. Any
+  // other role hitting this URL just falls through to the normal dashboard
+  // below, as if the path doesn't exist, rather than showing an "access
+  // denied" that would hint something is here.
+  if (window.location.pathname === '/cb' && isSuperAdmin) {
+    return <CBPage currentUser={currentUser} />;
   }
 
   return (
