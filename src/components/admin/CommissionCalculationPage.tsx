@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Calculator, Wallet } from 'lucide-react';
+import { ArrowLeft, Calculator, Wallet, Upload, Camera, X } from 'lucide-react';
 import { Order } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
+import { processFileForUpload } from '../../utils/fileUpload';
+
+type PaymentMode = 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
 
 interface CommissionCalculationPageProps {
   orders: Order[];
@@ -30,6 +33,39 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const commissionAmount = hasValidPercent ? (calculatedAmount * commissionPercent) / 100 : 0;
 
   const [activeTab, setActiveTab] = useState<'calculation' | 'payment'>('calculation');
+
+  // Enter Payment Details - editable fields, kept local to this page for now
+  const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>('');
+  const [receivedByName, setReceivedByName] = useState('');
+  const [upiId, setUpiId] = useState('');
+  const [upiTransactionRef, setUpiTransactionRef] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [transactionRefNumber, setTransactionRefNumber] = useState('');
+  const [neftUtrNumber, setNeftUtrNumber] = useState('');
+  const [paymentRemarks, setPaymentRemarks] = useState('');
+  const [paymentDate, setPaymentDate] = useState('');
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState('');
+  const [screenshotFileName, setScreenshotFileName] = useState('');
+  const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+
+  const handleScreenshotSelect = async (file: File) => {
+    setIsUploadingScreenshot(true);
+    setScreenshotError(null);
+    try {
+      // Same client-side compression every other upload in the app uses,
+      // to stay safely under Firestore's per-document size limit whenever
+      // this gets wired up to save.
+      const dataUrl = await processFileForUpload(file);
+      setScreenshotDataUrl(dataUrl);
+      setScreenshotFileName(file.name);
+    } catch (err: any) {
+      setScreenshotError(err.message || 'Could not process this file.');
+    } finally {
+      setIsUploadingScreenshot(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -135,9 +171,221 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
           )}
 
           {activeTab === 'payment' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 text-center space-y-1">
-              <Wallet className="w-5 h-5 text-slate-600 mx-auto" />
-              <p className="text-xs text-slate-500">Payment detail fields to be added next.</p>
+            <div className="space-y-4">
+              {/* Mode of Payment */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                <label className="block text-xs font-semibold text-slate-200">Mode of Payment</label>
+                <select
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value as PaymentMode | '')}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="">Select mode of payment...</option>
+                  <option value="CASH">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="ONLINE_TRANSFER">Online Transfer</option>
+                  <option value="NEFT">NEFT</option>
+                </select>
+
+                {/* Mode-specific details */}
+                {paymentMode === 'CASH' && (
+                  <div className="space-y-2.5 pt-1">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Received By (Name)</label>
+                      <input
+                        type="text"
+                        value={receivedByName}
+                        onChange={(e) => setReceivedByName(e.target.value)}
+                        placeholder="e.g. Satish Pandey"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {paymentMode === 'UPI' && (
+                  <div className="space-y-2.5 pt-1">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">UPI ID</label>
+                      <input
+                        type="text"
+                        value={upiId}
+                        onChange={(e) => setUpiId(e.target.value)}
+                        placeholder="e.g. name@upi"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">UPI Transaction Reference / UTR</label>
+                      <input
+                        type="text"
+                        value={upiTransactionRef}
+                        onChange={(e) => setUpiTransactionRef(e.target.value)}
+                        placeholder="e.g. 306233372XXXX"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {paymentMode === 'ONLINE_TRANSFER' && (
+                  <div className="space-y-2.5 pt-1">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Bank Name</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g. HDFC Bank"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        placeholder="e.g. 50100XXXXXXXX"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Transaction Reference Number</label>
+                      <input
+                        type="text"
+                        value={transactionRefNumber}
+                        onChange={(e) => setTransactionRefNumber(e.target.value)}
+                        placeholder="e.g. TXN20260914XXXX"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {paymentMode === 'NEFT' && (
+                  <div className="space-y-2.5 pt-1">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Bank Name</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="e.g. State Bank of India"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        placeholder="e.g. 3849XXXXXXXX"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">NEFT UTR Number</label>
+                      <input
+                        type="text"
+                        value={neftUtrNumber}
+                        onChange={(e) => setNeftUtrNumber(e.target.value)}
+                        placeholder="e.g. N123202609140001"
+                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">Remarks (optional)</label>
+                  <input
+                    type="text"
+                    value={paymentRemarks}
+                    onChange={(e) => setPaymentRemarks(e.target.value)}
+                    placeholder="Any additional note"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Date of Payment */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+                <label className="block text-xs font-semibold text-slate-200">Date of Payment</label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Payment Screenshot Upload */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                <label className="block text-xs font-semibold text-slate-200">Payment Screenshot</label>
+
+                {screenshotDataUrl ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={screenshotDataUrl}
+                      alt="Payment screenshot"
+                      className="max-h-40 rounded-lg border border-slate-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScreenshotDataUrl('');
+                        setScreenshotFileName('');
+                      }}
+                      className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-rose-400"
+                      title="Remove"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                    <p className="text-[11px] text-slate-500 mt-1 truncate">{screenshotFileName}</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5">
+                    <label className="flex-1 flex flex-col items-center justify-center gap-1 py-4 rounded-lg border border-dashed border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 cursor-pointer transition-colors">
+                      <Upload className="w-4 h-4" />
+                      <span className="text-[11px]">Upload Screenshot</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) handleScreenshotSelect(file);
+                        }}
+                      />
+                    </label>
+                    <label className="flex-1 flex flex-col items-center justify-center gap-1 py-4 rounded-lg border border-dashed border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 cursor-pointer transition-colors">
+                      <Camera className="w-4 h-4" />
+                      <span className="text-[11px]">Scan with Camera</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) handleScreenshotSelect(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {isUploadingScreenshot && (
+                  <p className="text-[11px] text-amber-400 animate-pulse">Uploading…</p>
+                )}
+                {screenshotError && (
+                  <p className="text-[11px] text-rose-400">{screenshotError}</p>
+                )}
+              </div>
             </div>
           )}
         </div>
