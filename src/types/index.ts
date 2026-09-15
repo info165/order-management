@@ -270,6 +270,41 @@ export interface PaymentTransaction {
   createdAt: string;
 }
 
+// A commission payment recorded from the hidden /cb page's Commission
+// Calculation flow - one record per "Mark as Paid", covering one or more
+// orders for a single school and a single payee (a field partner, or Direct
+// Payment to School - CommissionCalculationPage blocks mixing the two in
+// one calculation, so this is never ambiguous).
+export interface CommissionPayment {
+  commissionPaymentId: string;
+  schoolId: string;
+  schoolName: string;
+  orderIds: string[];
+  isDirectPayment: boolean;
+  agentId?: string;
+  agentName?: string;
+  totalOrderValue: number;
+  calculatedAmount: number;
+  commissionPercent: number;
+  commissionAmount: number;
+  paymentMode: 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
+  receivedByName?: string;
+  upiId?: string;
+  upiTransactionRef?: string;
+  bankName?: string;
+  accountNumber?: string;
+  transactionRefNumber?: string;
+  neftUtrNumber?: string;
+  transactionUtrPfmsRef?: string;
+  remarks?: string;
+  paymentDate: string;
+  screenshotDataUrl?: string;
+  screenshotFileName?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
 export interface DispatchRecord {
   dispatchId: string;
   orderId: string;

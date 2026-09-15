@@ -17,7 +17,8 @@ import {
   UserProfile,
   UserRole,
   SystemSettings,
-  IssuedCredential
+  IssuedCredential,
+  CommissionPayment
 } from '../types';
 import {
   INITIAL_ORDERS,
@@ -3153,5 +3154,51 @@ export async function getAuditLogs(): Promise<AuditLog[]> {
     userRole: 'ADMIN',
     changes: l.newValue || l.previousValue || ''
   }));
+}
+
+// COMMISSION PAYMENTS - backs the hidden /cb page's "Mark as Paid" and
+// Transaction Details. Restricted to Super Admin by firestore.rules, so
+// unlike most of this file there's no local-cache/offline fallback here -
+// it's a small Super-Admin-only feature, not part of the app's main
+// always-available order-management flow.
+export async function saveCommissionPayment(
+  payment: Omit<CommissionPayment, 'commissionPaymentId' | 'createdAt'>,
+  user: UserProfile
+): Promise<CommissionPayment> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can record a commission payment.');
+  }
+  const commissionPaymentId = `CP-${Date.now()}`;
+  const record: CommissionPayment = {
+    ...payment,
+    commissionPaymentId,
+    createdAt: new Date().toISOString()
+  };
+  await syncDocToFirestoreOrThrow('commissionPayments', commissionPaymentId, record);
+  return record;
+}
+
+export function subscribeToRealtimeCommissionPayments(onUpdate: (payments: CommissionPayment[]) => void): () => void {
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'commissionPayments'),
+      (snapshot) => {
+        const payments: CommissionPayment[] = [];
+        snapshot.forEach((docSnap) => {
+          const p = docSnap.data() as CommissionPayment;
+          if (p && p.commissionPaymentId) payments.push(p);
+        });
+        payments.sort((a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime());
+        onUpdate(payments);
+      },
+      (err) => {
+        console.warn('Real-time commission payments listener notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Could not establish real-time commission payments listener:', err);
+    return () => {};
+  }
 }
 

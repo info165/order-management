@@ -94,6 +94,7 @@ export const CBPage: React.FC<CBPageProps> = ({
     return (
       <CommissionCalculationPage
         orders={orders.filter(o => commissionOrderIds.includes(o.orderId))}
+        currentUser={currentUser}
         onBack={() => setCommissionOrderIds(null)}
       />
     );

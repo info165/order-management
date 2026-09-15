@@ -180,6 +180,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // COMMISSION PAYMENTS (the hidden /cb page) - Super Admin only, both ways
+    match /commissionPayments/{paymentId} {
+      allow read, write: if isSuperAdmin();
+    }
+
     // Default catch-all rule
     match /{document=**} {
       allow read, write: if false;

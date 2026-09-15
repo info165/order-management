@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2 } from 'lucide-react';
-import { Order } from '../../types';
+import { Order, UserProfile } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { processFileForUpload } from '../../utils/fileUpload';
+import { saveCommissionPayment } from '../../services/dataService';
 
 type PaymentMode = 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
 
 interface CommissionCalculationPageProps {
   orders: Order[];
+  currentUser: UserProfile;
   onBack: () => void;
 }
 
@@ -20,7 +22,7 @@ interface CommissionCalculationPageProps {
 // time - see its `taxableValue` comment), so summing it across the selected
 // orders and dividing by 1.18 the same way gives the combined pre-GST
 // amount, per the exact formula requested: (order 1 + order 2) / 1.18.
-export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, onBack }) => {
+export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, currentUser, onBack }) => {
   // Who this payment is actually for: the field partner's name if every
   // selected order was placed through the same one, or "Direct Payment to
   // School" if they're all Direct/In-House orders (agentId AGT-DIRECT). A
@@ -68,11 +70,9 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const [isMarkedPaid, setIsMarkedPaid] = useState(false);
   const [markPaidError, setMarkPaidError] = useState<string | null>(null);
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
 
-  // Not persisted anywhere yet (see the file-level note) - this only
-  // validates the minimum required fields are filled and flips the page
-  // into a confirmed/marked-paid state.
-  const handleMarkAsPaid = () => {
+  const handleMarkAsPaid = async () => {
     if (!paymentMode) {
       setMarkPaidError('Select a Mode of Payment first.');
       return;
@@ -82,7 +82,44 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
       return;
     }
     setMarkPaidError(null);
-    setIsMarkedPaid(true);
+    setIsSavingPayment(true);
+    try {
+      await saveCommissionPayment(
+        {
+          schoolId: soleOrder.schoolId,
+          schoolName: soleOrder.schoolName,
+          orderIds: orders.map(o => o.orderId),
+          isDirectPayment,
+          agentId: isDirectPayment ? undefined : soleOrder.agentId,
+          agentName: isDirectPayment ? undefined : soleOrder.agentName,
+          totalOrderValue,
+          calculatedAmount,
+          commissionPercent: hasValidPercent ? commissionPercent : 0,
+          commissionAmount,
+          paymentMode,
+          receivedByName: paymentMode === 'CASH' ? receivedByName || undefined : undefined,
+          upiId: paymentMode === 'UPI' ? upiId || undefined : undefined,
+          upiTransactionRef: paymentMode === 'UPI' ? upiTransactionRef || undefined : undefined,
+          bankName: paymentMode === 'ONLINE_TRANSFER' || paymentMode === 'NEFT' ? bankName || undefined : undefined,
+          accountNumber: paymentMode === 'ONLINE_TRANSFER' || paymentMode === 'NEFT' ? accountNumber || undefined : undefined,
+          transactionRefNumber: paymentMode === 'ONLINE_TRANSFER' ? transactionRefNumber || undefined : undefined,
+          neftUtrNumber: paymentMode === 'NEFT' ? neftUtrNumber || undefined : undefined,
+          transactionUtrPfmsRef: transactionUtrPfmsRef || undefined,
+          remarks: paymentRemarks || undefined,
+          paymentDate,
+          screenshotDataUrl: screenshotDataUrl || undefined,
+          screenshotFileName: screenshotFileName || undefined,
+          createdBy: currentUser.userId,
+          createdByName: currentUser.name
+        },
+        currentUser
+      );
+      setIsMarkedPaid(true);
+    } catch (err: any) {
+      setMarkPaidError(err.message || 'Could not save this payment.');
+    } finally {
+      setIsSavingPayment(false);
+    }
   };
 
   const handleScreenshotSelect = async (file: File) => {
@@ -482,10 +519,11 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                   <button
                     type="button"
                     onClick={handleMarkAsPaid}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-colors"
+                    disabled={isSavingPayment}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-slate-950 font-bold text-sm transition-colors"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Mark as Paid</span>
+                    <span>{isSavingPayment ? 'Saving…' : 'Mark as Paid'}</span>
                   </button>
                 )}
                 {markPaidError && (
