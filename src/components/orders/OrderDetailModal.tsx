@@ -2618,7 +2618,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           key={p.paymentId}
                           className={`hover:bg-slate-50/60 ${editingPaymentId === p.paymentId ? 'bg-amber-50/70' : ''}`}
                         >
-                          <td className="px-4 py-2.5 font-mono text-slate-800">{p.paymentDate}</td>
+                          <td className="px-4 py-2.5 font-mono text-slate-800">
+                            {(() => {
+                              const [y, m, d] = p.paymentDate.split('-');
+                              return y && m && d ? `${d}/${m}/${y}` : p.paymentDate;
+                            })()}
+                          </td>
                           <td className="px-4 py-2.5">
                             <span className="font-semibold px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[11px]">
                               {p.paymentMode}
