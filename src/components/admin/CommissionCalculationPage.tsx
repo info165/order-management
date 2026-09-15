@@ -21,6 +21,22 @@ interface CommissionCalculationPageProps {
 // orders and dividing by 1.18 the same way gives the combined pre-GST
 // amount, per the exact formula requested: (order 1 + order 2) / 1.18.
 export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, onBack }) => {
+  // Who this payment is actually for: the field partner's name if every
+  // selected order was placed through the same one, or "Direct Payment to
+  // School" if they're all Direct/In-House orders (agentId AGT-DIRECT). A
+  // school's orders can be split across multiple partners (or Direct), so a
+  // selection spanning more than one is blocked below rather than guessing
+  // or silently combining two different payees into one payment.
+  const distinctAgentIds = new Set(orders.map(o => o.agentId));
+  const hasMixedPartners = distinctAgentIds.size > 1;
+  const soleOrder = orders[0];
+  const isDirectPayment = !hasMixedPartners && soleOrder?.agentId === 'AGT-DIRECT';
+  const payeeLabel = hasMixedPartners
+    ? null
+    : isDirectPayment
+    ? 'Direct Payment to School'
+    : soleOrder?.agentName || '—';
+
   const totalOrderValue = orders.reduce((sum, o) => sum + (o.orderValue || 0), 0);
   const calculatedAmount = totalOrderValue / 1.18;
 
@@ -68,6 +84,39 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
     }
   };
 
+  if (hasMixedPartners) {
+    const involved = Array.from(new Set(orders.map(o => (o.agentId === 'AGT-DIRECT' ? 'Direct Payment to School' : o.agentName))));
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <div className="p-4">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back</span>
+          </button>
+        </div>
+        <div className="flex-1 flex items-start justify-center p-6 pt-16">
+          <div className="w-full max-w-md bg-slate-900 border border-rose-900/60 rounded-xl p-5 text-center space-y-3">
+            <h1 className="text-sm font-semibold text-rose-400">Selected orders belong to different partners</h1>
+            <p className="text-xs text-slate-400">
+              This selection mixes orders from more than one payee, so a single commission payment can't be calculated for it.
+              Go back and select orders that all belong to the same partner (or are all Direct).
+            </p>
+            <div className="pt-2 border-t border-slate-800 text-left space-y-1">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Involved</p>
+              {involved.map((name) => (
+                <p key={name} className="text-xs text-slate-300">{name}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <div className="p-4 flex items-center justify-between">
@@ -87,6 +136,9 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
             <Calculator className="w-6 h-6 text-amber-400 mx-auto" />
             <h1 className="text-sm font-semibold text-slate-200">Commission Calculation</h1>
             <p className="text-xs text-slate-500">{orders.length} order{orders.length === 1 ? '' : 's'} selected</p>
+            <p className={`text-xs font-semibold ${isDirectPayment ? 'text-sky-400' : 'text-amber-400'}`}>
+              {isDirectPayment ? payeeLabel : `Paying: ${payeeLabel}`}
+            </p>
           </div>
 
           {/* Tabs */}
