@@ -16,7 +16,8 @@ import {
   PhoneCall,
   FileEdit,
   GraduationCap,
-  Shield
+  Shield,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -388,6 +389,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span>Export Orders to Excel</span>
                   </button>
                 </div>
+
+                {activeRole === 'SUPER_ADMIN' && (
+                  <div className="py-1 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        window.location.href = '/cb';
+                      }}
+                      className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                      <Lock className="w-4 h-4 text-slate-500" />
+                      <span>CB</span>
+                    </button>
+                  </div>
+                )}
 
               </div>
             )}
