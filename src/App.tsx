@@ -38,6 +38,28 @@ function MainApp() {
 
   // Orders is the default operations workspace
   const [activeSection, setActiveSection] = useState('orders');
+
+  // /cb is a hidden standalone page, not one of the normal `activeSection`
+  // tabs - tracked as its own bit of client-side "routing" state (updated
+  // via history.pushState, never a real browser navigation) so opening or
+  // leaving it never causes a full page reload, which would otherwise
+  // re-run Firebase's session check and flash the "Verifying authorized
+  // session..." loader every time.
+  const [pathname, setPathname] = useState(window.location.pathname);
+  const navigateToCB = () => {
+    window.history.pushState({}, '', '/cb');
+    setPathname('/cb');
+  };
+  const navigateHome = () => {
+    window.history.pushState({}, '', '/');
+    setPathname('/');
+  };
+  useEffect(() => {
+    const onPopState = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -285,8 +307,8 @@ function MainApp() {
   // other role hitting this URL just falls through to the normal dashboard
   // below, as if the path doesn't exist, rather than showing an "access
   // denied" that would hint something is here.
-  if (window.location.pathname === '/cb' && isSuperAdmin) {
-    return <CBPage currentUser={currentUser} />;
+  if (pathname === '/cb' && isSuperAdmin) {
+    return <CBPage currentUser={currentUser} onBack={navigateHome} />;
   }
 
   return (
@@ -302,6 +324,7 @@ function MainApp() {
         activeSection={activeSection}
         onNavigate={setActiveSection}
         onLogoClick={() => setActiveSection('dashboard')}
+        onNavigateToCB={navigateToCB}
       />
 
       {/* Main Full-Screen Workspace (No left sidebar taking space) */}

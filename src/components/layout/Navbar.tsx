@@ -37,6 +37,7 @@ interface NavbarProps {
   onToggleNotifications: () => void;
   searchQuery?: string;
   onSearch?: (query: string) => void;
+  onNavigateToCB?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,7 +46,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onExportData,
   unreadNotificationCount,
   hasCriticalAlert = false,
-  onToggleNotifications
+  onToggleNotifications,
+  onNavigateToCB
 }) => {
   const { currentUser, activeRole, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -396,7 +398,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       type="button"
                       onClick={() => {
                         setShowMoreMenu(false);
-                        window.location.href = '/cb';
+                        onNavigateToCB?.();
                       }}
                       className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
                     >
