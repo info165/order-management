@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Building2, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronDown, ChevronRight, Receipt } from 'lucide-react';
 import { Order, OrderStatus, School, UserProfile } from '../../types';
 import { subscribeToRealtimeSchools } from '../../services/dataService';
 import { OrderList } from '../orders/OrderList';
 import { CommissionCalculationPage } from './CommissionCalculationPage';
+import { TransactionDetailsPage } from './TransactionDetailsPage';
 
 interface CBPageProps {
   currentUser: UserProfile;
@@ -34,6 +35,7 @@ export const CBPage: React.FC<CBPageProps> = ({
   const [loadingSchools, setLoadingSchools] = useState(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [commissionOrderIds, setCommissionOrderIds] = useState<string[] | null>(null);
+  const [showTransactionDetails, setShowTransactionDetails] = useState(false);
   const [schoolSearch, setSchoolSearch] = useState('');
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
   const schoolDropdownRef = useRef<HTMLDivElement>(null);
@@ -97,6 +99,10 @@ export const CBPage: React.FC<CBPageProps> = ({
     );
   }
 
+  if (showTransactionDetails) {
+    return <TransactionDetailsPage onBack={() => setShowTransactionDetails(false)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <div className="p-4 flex items-center justify-between">
@@ -113,6 +119,21 @@ export const CBPage: React.FC<CBPageProps> = ({
 
       <div className={`flex-1 flex flex-col p-4 sm:p-6 pt-2 ${selectedSchool ? '' : 'items-center justify-start'}`}>
         <div className={selectedSchool ? 'w-full max-w-md mb-4' : 'w-full max-w-md mt-4'}>
+          <button
+            type="button"
+            onClick={() => setShowTransactionDetails(true)}
+            className="w-full mb-4 group flex items-center gap-3.5 p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/30 hover:border-amber-400/60 shadow-lg shadow-amber-950/20 transition-all"
+          >
+            <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+              <Receipt className="w-5 h-5 text-amber-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <div className="text-sm font-bold text-slate-100">Transaction Details</div>
+              <div className="text-[11px] text-slate-400">History of commissions paid</div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
+          </button>
+
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-200">
               <Building2 className="w-4 h-4 text-amber-400" />
