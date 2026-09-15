@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Building2, Search } from 'lucide-react';
+import { ArrowLeft, Building2, ChevronDown } from 'lucide-react';
 import { Order, OrderStatus, School, UserProfile } from '../../types';
 import { subscribeToRealtimeSchools } from '../../services/dataService';
 import { OrderList } from '../orders/OrderList';
@@ -133,7 +133,17 @@ export const CBPage: React.FC<CBPageProps> = ({
                   placeholder={loadingSchools ? 'Loading schools…' : `Search a school... (${schools.length})`}
                   className="w-full pl-3 pr-8 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
                 />
-                <Search className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                {/* Explicit toggle so the full list can be browsed with one
+                    click, not just found by typing. */}
+                <button
+                  type="button"
+                  disabled={loadingSchools}
+                  onClick={() => setShowSchoolDropdown((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-200 disabled:opacity-50"
+                  title="Show all schools"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showSchoolDropdown ? 'rotate-180' : ''}`} />
+                </button>
               </div>
 
               {showSchoolDropdown && !loadingSchools && (
