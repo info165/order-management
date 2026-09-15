@@ -1535,8 +1535,16 @@ export const OrderList: React.FC<OrderListProps> = ({
                         {order.status === 'CANCELLED' ? (
                           <div className="font-bold text-rose-600 text-xs">CANCELLED</div>
                         ) : (
-                          <div className="font-bold text-slate-950 text-xs">
+                          <div className="font-bold text-slate-950 text-xs flex items-center gap-1.5">
                             <CurrencyFormatter amount={order.orderValue} />
+                            {!!order.gemInvoiceUrl && (
+                              <span
+                                title="GeM Portal Invoice uploaded"
+                                className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0"
+                              >
+                                <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
