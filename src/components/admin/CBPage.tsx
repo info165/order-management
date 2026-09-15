@@ -1,21 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Building2 } from 'lucide-react';
-import { School, UserProfile } from '../../types';
+import { Order, OrderStatus, School, UserProfile } from '../../types';
 import { subscribeToRealtimeSchools } from '../../services/dataService';
+import { OrderList } from '../orders/OrderList';
 
 interface CBPageProps {
   currentUser: UserProfile;
+  orders: Order[];
   onBack: () => void;
+  onSelectOrder: (order: Order) => void;
+  onDeleteOrder: (orderId: string) => void;
+  onBatchStatusUpdate: (orderIds: string[], newStatus: OrderStatus) => void;
+  onOpenNewOrder: () => void;
+  onOpenImport: () => void;
 }
 
 // Reachable only at the /cb URL, typed directly - there is no link, button,
 // or menu entry anywhere in the app that points here (aside from a
 // deliberately plain, Super-Admin-only entry tucked into the 3-dots menu),
-// and it is not part of the normal Navbar/section shell. More content to be
-// added next.
-export const CBPage: React.FC<CBPageProps> = ({ currentUser, onBack }) => {
+// and it is not part of the normal Navbar/section shell.
+export const CBPage: React.FC<CBPageProps> = ({
+  currentUser,
+  orders,
+  onBack,
+  onSelectOrder,
+  onDeleteOrder,
+  onBatchStatusUpdate,
+  onOpenNewOrder,
+  onOpenImport
+}) => {
   const [schools, setSchools] = useState<School[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingSchools, setLoadingSchools] = useState(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
 
   // Same live Firestore subscription the School Registry page uses, so this
@@ -24,7 +39,7 @@ export const CBPage: React.FC<CBPageProps> = ({ currentUser, onBack }) => {
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeSchools((data) => {
       setSchools(data);
-      setLoading(false);
+      setLoadingSchools(false);
     });
     return unsubscribe;
   }, []);
@@ -32,9 +47,20 @@ export const CBPage: React.FC<CBPageProps> = ({ currentUser, onBack }) => {
   const sortedSchools = [...schools].sort((a, b) => a.schoolName.localeCompare(b.schoolName));
   const selectedSchool = schools.find(s => s.schoolId === selectedSchoolId) || null;
 
+  // Same ID-or-name match SchoolManager.tsx uses for a school's order count,
+  // so this list always agrees with what the School Registry page itself
+  // would show for the same school.
+  const schoolOrders = selectedSchool
+    ? orders.filter(
+        o =>
+          o.schoolId === selectedSchool.schoolId ||
+          o.schoolName.toLowerCase() === selectedSchool.schoolName.toLowerCase()
+      )
+    : [];
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <div className="p-4">
+      <div className="p-4 flex items-center justify-between">
         <button
           type="button"
           onClick={onBack}
@@ -43,14 +69,11 @@ export const CBPage: React.FC<CBPageProps> = ({ currentUser, onBack }) => {
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back</span>
         </button>
+        <p className="text-xs text-slate-500">Signed in as {currentUser.name}</p>
       </div>
-      <div className="flex-1 flex items-start justify-center p-6 pt-16">
-        <div className="w-full max-w-md space-y-4">
-          <div className="text-center space-y-1">
-            <p className="text-sm font-mono text-slate-500">/cb</p>
-            <p className="text-xs text-slate-500">Signed in as {currentUser.name}</p>
-          </div>
 
+      <div className={`flex-1 flex flex-col p-4 sm:p-6 pt-2 ${selectedSchool ? '' : 'items-center justify-start'}`}>
+        <div className={selectedSchool ? 'w-full max-w-md mb-4' : 'w-full max-w-md mt-16'}>
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-200">
               <Building2 className="w-4 h-4 text-amber-400" />
@@ -59,26 +82,33 @@ export const CBPage: React.FC<CBPageProps> = ({ currentUser, onBack }) => {
             <select
               value={selectedSchoolId}
               onChange={(e) => setSelectedSchoolId(e.target.value)}
-              disabled={loading}
+              disabled={loadingSchools}
               className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
             >
-              <option value="">{loading ? 'Loading schools…' : `Select a school... (${schools.length})`}</option>
+              <option value="">{loadingSchools ? 'Loading schools…' : `Select a school... (${schools.length})`}</option>
               {sortedSchools.map((s) => (
                 <option key={s.schoolId} value={s.schoolId}>
                   {s.schoolName}{s.state ? ` — ${s.state}` : ''}
                 </option>
               ))}
             </select>
-
-            {selectedSchool && (
-              <div className="mt-1 p-3 rounded-lg bg-slate-800/60 border border-slate-700 text-xs text-slate-300 space-y-0.5">
-                <div><span className="text-slate-500">School ID:</span> {selectedSchool.schoolId}</div>
-                <div><span className="text-slate-500">Type:</span> {selectedSchool.schoolType}</div>
-                {selectedSchool.state && <div><span className="text-slate-500">State:</span> {selectedSchool.state}</div>}
-              </div>
-            )}
           </div>
         </div>
+
+        {selectedSchool && (
+          <div className="w-full flex-1 min-h-0 bg-slate-100 rounded-xl p-2.5 sm:p-4 -mx-1">
+            <OrderList
+              orders={schoolOrders}
+              currentUser={currentUser}
+              onSelectOrder={onSelectOrder}
+              onOpenNewOrder={onOpenNewOrder}
+              onOpenImport={onOpenImport}
+              onDeleteOrder={onDeleteOrder}
+              onBatchStatusUpdate={onBatchStatusUpdate}
+              initialFilterCategory="ALL"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

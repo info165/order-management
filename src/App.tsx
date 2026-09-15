@@ -308,7 +308,35 @@ function MainApp() {
   // below, as if the path doesn't exist, rather than showing an "access
   // denied" that would hint something is here.
   if (pathname === '/cb' && isSuperAdmin) {
-    return <CBPage currentUser={currentUser} onBack={navigateHome} />;
+    return (
+      <>
+        <CBPage
+          currentUser={currentUser}
+          orders={orders}
+          onBack={navigateHome}
+          onSelectOrder={handleSelectOrder}
+          onDeleteOrder={handleDeleteOrder}
+          onBatchStatusUpdate={handleBatchStatusUpdate}
+          onOpenNewOrder={() => {
+            navigateHome();
+            setShowNewOrderModal(true);
+          }}
+          onOpenImport={() => {
+            navigateHome();
+            setShowImportModal(true);
+          }}
+        />
+        {selectedOrder && (
+          <OrderDetailModal
+            order={selectedOrder}
+            displaySerialNo={getDisplaySerialNo(selectedOrder, orders)}
+            currentUser={currentUser}
+            onClose={() => setSelectedOrder(null)}
+            onOrderUpdated={handleOrderUpdated}
+          />
+        )}
+      </>
+    );
   }
 
   return (
