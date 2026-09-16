@@ -86,6 +86,12 @@ interface OrderListProps {
   // registry-wide position. Optional: defaults to `orders`, so every
   // existing caller is unaffected.
   allOrders?: Order[];
+  // The CB page's Add Payments screen wants the table empty until the user
+  // has actually searched or picked a school - showing every order by
+  // default (like the main Orders tab does) isn't what that screen is for.
+  // Opt-in only: every other OrderList usage keeps showing everything by
+  // default, unaffected.
+  requireSchoolSelection?: boolean;
 }
 
 export const OrderList: React.FC<OrderListProps> = ({
@@ -100,7 +106,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   initialFilterCategory,
   extraBulkAction,
   showCommissionPaidBadge,
-  allOrders
+  allOrders,
+  requireSchoolSelection
 }) => {
   const isAgent = currentUser.role === 'AGENT';
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
@@ -357,6 +364,11 @@ export const OrderList: React.FC<OrderListProps> = ({
 
   // Core Filtering Pipeline
   const filteredOrders = useMemo(() => {
+    // Nothing searched/selected yet on a requireSchoolSelection screen -
+    // show nothing rather than every order in the system.
+    if (requireSchoolSelection && !searchQuery.trim() && !isSchoolFiltered) {
+      return [];
+    }
     return orders.filter(o => {
       if (o.isDeleted) return false;
 
@@ -462,6 +474,7 @@ export const OrderList: React.FC<OrderListProps> = ({
     });
   }, [
     orders,
+    requireSchoolSelection,
     searchQuery,
     selectedFY,
     filterOverdueDelivery,
@@ -1424,10 +1437,21 @@ export const OrderList: React.FC<OrderListProps> = ({
                       <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
                         <Search className="w-6 h-6" />
                       </div>
-                      <div className="font-bold text-slate-800 text-sm">No orders match your filter criteria</div>
-                      <p className="text-xs text-slate-500">
-                        Try adjusting or clearing your column filters to display matching orders from the registry.
-                      </p>
+                      {requireSchoolSelection && !searchQuery.trim() && !isSchoolFiltered ? (
+                        <>
+                          <div className="font-bold text-slate-800 text-sm">Search or select a school to begin</div>
+                          <p className="text-xs text-slate-500">
+                            Use the search bar or the School filter above to find the school you want to record a payment for.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-bold text-slate-800 text-sm">No orders match your filter criteria</div>
+                          <p className="text-xs text-slate-500">
+                            Try adjusting or clearing your column filters to display matching orders from the registry.
+                          </p>
+                        </>
+                      )}
                       {hasAnyFilterActive && (
                         <button
                           type="button"
