@@ -1464,7 +1464,7 @@ export async function updateOrderStatus(
   comment: string,
   visibleToAgent: boolean,
   user: UserProfile
-): Promise<void> {
+): Promise<Order> {
   const order = memoryOrders.find(o => o.orderId === orderId);
   if (!order) throw new Error('Order not found');
 
@@ -1476,7 +1476,7 @@ export async function updateOrderStatus(
   const now = new Date().toISOString();
 
   // Update order record
-  await updateOrder(orderId, { status: newStatus }, user);
+  const updatedOrder = await updateOrder(orderId, { status: newStatus }, user);
 
   // Create timeline record
   const historyItem: OrderStatusHistoryItem = {
@@ -1518,6 +1518,8 @@ export async function updateOrderStatus(
       });
     }
   }
+
+  return updatedOrder;
 }
 
 export async function softDeleteOrder(orderId: string, user: UserProfile): Promise<void> {

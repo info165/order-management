@@ -594,10 +594,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     if (newStatus === order.status && !statusComment.trim()) return;
     setIsSubmittingStatus(true);
     try {
-      await updateOrderStatus(order.orderId, newStatus, statusComment, visibleToAgent, currentUser);
+      const updated = await updateOrderStatus(order.orderId, newStatus, statusComment, visibleToAgent, currentUser);
+      setActiveOrder(updated);
       setStatusComment('');
       await loadData();
-      onOrderUpdated();
+      onOrderUpdated(updated);
     } catch (err: any) {
       alert(err.message);
     } finally {
