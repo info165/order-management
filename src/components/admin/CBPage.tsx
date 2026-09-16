@@ -35,7 +35,10 @@ export const CBPage: React.FC<CBPageProps> = ({
   const [loadingSchools, setLoadingSchools] = useState(true);
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
   const [commissionOrderIds, setCommissionOrderIds] = useState<string[] | null>(null);
-  const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+  // Transaction Details is the landing view for /cb - opens straight to the
+  // payment history rather than requiring a school pick first. Its own
+  // "+ Add Payments" button is what reveals the school picker below.
+  const [showTransactionDetails, setShowTransactionDetails] = useState(true);
   const [schoolSearch, setSchoolSearch] = useState('');
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
   const schoolDropdownRef = useRef<HTMLDivElement>(null);
@@ -101,7 +104,13 @@ export const CBPage: React.FC<CBPageProps> = ({
   }
 
   if (showTransactionDetails) {
-    return <TransactionDetailsPage currentUser={currentUser} onBack={() => setShowTransactionDetails(false)} />;
+    return (
+      <TransactionDetailsPage
+        currentUser={currentUser}
+        onBack={onBack}
+        onAddPayment={() => setShowTransactionDetails(false)}
+      />
+    );
   }
 
   return (

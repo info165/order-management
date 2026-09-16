@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ImageOff, X, Trash2 } from 'lucide-react';
+import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ImageOff, X, Trash2, Plus } from 'lucide-react';
 import { CommissionPayment, UserProfile } from '../../types';
 import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -7,6 +7,7 @@ import { CurrencyFormatter } from '../common/CurrencyFormatter';
 interface TransactionDetailsPageProps {
   currentUser: UserProfile;
   onBack: () => void;
+  onAddPayment: () => void;
 }
 
 const PAYMENT_MODE_LABELS: Record<string, string> = {
@@ -34,7 +35,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // by the same commissionPayments records "Mark as Paid" writes there, live
 // via subscribeToRealtimeCommissionPayments so a payment appears here the
 // moment it's recorded, with no refresh needed.
-export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, onBack }) => {
+export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, onBack, onAddPayment }) => {
   const [payments, setPayments] = useState<CommissionPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
@@ -128,7 +129,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <div className="p-4 border-b border-slate-900">
+      <div className="p-4 border-b border-slate-900 flex items-center justify-between">
         <button
           type="button"
           onClick={onBack}
@@ -136,6 +137,14 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back</span>
+        </button>
+        <button
+          type="button"
+          onClick={onAddPayment}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-[0.98] text-slate-950 text-xs font-bold shadow-md shadow-amber-500/20 transition-all"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Add Payments</span>
         </button>
       </div>
 
