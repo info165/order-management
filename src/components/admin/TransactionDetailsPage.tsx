@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ImageOff, X } from 'lucide-react';
-import { CommissionPayment } from '../../types';
-import { subscribeToRealtimeCommissionPayments } from '../../services/dataService';
+import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ImageOff, X, Trash2 } from 'lucide-react';
+import { CommissionPayment, UserProfile } from '../../types';
+import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 
 interface TransactionDetailsPageProps {
+  currentUser: UserProfile;
   onBack: () => void;
 }
 
@@ -33,12 +34,28 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // by the same commissionPayments records "Mark as Paid" writes there, live
 // via subscribeToRealtimeCommissionPayments so a payment appears here the
 // moment it's recorded, with no refresh needed.
-export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ onBack }) => {
+export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, onBack }) => {
   const [payments, setPayments] = useState<CommissionPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
-  const [previewScreenshot, setPreviewScreenshot] = useState<{ url: string; fileName?: string } | null>(null);
+  const [previewScreenshot, setPreviewScreenshot] = useState<{ url: string; fileName?: string; paymentId: string } | null>(null);
+  const [deletingScreenshotId, setDeletingScreenshotId] = useState<string | null>(null);
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
+
+  const handleDeleteScreenshot = async (paymentId: string) => {
+    if (!window.confirm('Delete this payment screenshot? This cannot be undone.')) return;
+    setDeletingScreenshotId(paymentId);
+    setScreenshotError(null);
+    try {
+      await deleteCommissionPaymentScreenshot(paymentId, currentUser);
+      setPreviewScreenshot((prev) => (prev?.paymentId === paymentId ? null : prev));
+    } catch (err: any) {
+      setScreenshotError(err.message || 'Could not delete screenshot.');
+    } finally {
+      setDeletingScreenshotId(null);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeCommissionPayments((data) => {
@@ -81,14 +98,28 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
 
   const renderScreenshotCell = (p: CommissionPayment) =>
     p.screenshotDataUrl ? (
-      <button
-        type="button"
-        onClick={() => setPreviewScreenshot({ url: p.screenshotDataUrl!, fileName: p.screenshotFileName })}
-        className="block w-10 h-10 rounded-lg overflow-hidden border border-slate-700 hover:border-amber-500/60 transition-colors shrink-0"
-        title="View payment screenshot"
-      >
-        <img src={p.screenshotDataUrl} alt="Payment screenshot" className="w-full h-full object-cover" />
-      </button>
+      <div className="relative group w-10 h-10 shrink-0">
+        <button
+          type="button"
+          onClick={() => setPreviewScreenshot({ url: p.screenshotDataUrl!, fileName: p.screenshotFileName, paymentId: p.commissionPaymentId })}
+          className="block w-10 h-10 rounded-lg overflow-hidden border border-slate-700 hover:border-amber-500/60 transition-colors"
+          title="View payment screenshot"
+        >
+          <img src={p.screenshotDataUrl} alt="Payment screenshot" className="w-full h-full object-cover" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteScreenshot(p.commissionPaymentId);
+          }}
+          disabled={deletingScreenshotId === p.commissionPaymentId}
+          className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50 shadow"
+          title="Delete screenshot"
+        >
+          <Trash2 className="w-2.5 h-2.5" />
+        </button>
+      </div>
     ) : (
       <span className="flex items-center justify-center w-10 h-10 rounded-lg border border-dashed border-slate-800 text-slate-700" title="No screenshot">
         <ImageOff className="w-4 h-4" />
@@ -326,17 +357,31 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
             className="relative max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 gap-3">
               <p className="text-xs text-slate-400 truncate">{previewScreenshot.fileName || 'Payment screenshot'}</p>
-              <button
-                type="button"
-                onClick={() => setPreviewScreenshot(null)}
-                className="p-1 text-slate-500 hover:text-slate-200 transition-colors shrink-0"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteScreenshot(previewScreenshot.paymentId)}
+                  disabled={deletingScreenshotId === previewScreenshot.paymentId}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-600/15 border border-rose-600/40 text-rose-400 hover:bg-rose-600/25 text-[11px] font-semibold transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>{deletingScreenshotId === previewScreenshot.paymentId ? 'Deleting…' : 'Delete'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewScreenshot(null)}
+                  className="p-1 text-slate-500 hover:text-slate-200 transition-colors"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
+            {screenshotError && (
+              <p className="px-4 py-2 text-[11px] text-rose-400 border-b border-slate-800">{screenshotError}</p>
+            )}
             <img src={previewScreenshot.url} alt="Payment screenshot" className="w-full max-h-[75vh] object-contain bg-slate-950" />
           </div>
         </div>

@@ -43,7 +43,8 @@ import {
   orderBy,
   limit,
   onSnapshot,
-  writeBatch
+  writeBatch,
+  deleteField
 } from 'firebase/firestore';
 
 // In-memory runtime storage with localStorage backup for resilient and instantaneous user experience
@@ -3264,6 +3265,16 @@ export async function saveCommissionPayment(
   };
   await syncDocToFirestoreOrThrow('commissionPayments', commissionPaymentId, record);
   return record;
+}
+
+export async function deleteCommissionPaymentScreenshot(paymentId: string, user: UserProfile): Promise<void> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can remove a commission payment screenshot.');
+  }
+  await updateDoc(doc(db, 'commissionPayments', paymentId), {
+    screenshotDataUrl: deleteField(),
+    screenshotFileName: deleteField()
+  });
 }
 
 export function subscribeToRealtimeCommissionPayments(onUpdate: (payments: CommissionPayment[]) => void): () => void {

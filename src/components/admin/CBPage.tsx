@@ -101,7 +101,7 @@ export const CBPage: React.FC<CBPageProps> = ({
   }
 
   if (showTransactionDetails) {
-    return <TransactionDetailsPage onBack={() => setShowTransactionDetails(false)} />;
+    return <TransactionDetailsPage currentUser={currentUser} onBack={() => setShowTransactionDetails(false)} />;
   }
 
   return (
