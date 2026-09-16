@@ -984,7 +984,6 @@ export async function updateOrder(
   // them is.
   const firestoreUpdates: Partial<Order> = {
     ...updates,
-    amountPending: updated.amountPending,
     updatedAt: now,
     updatedBy: user.name
   };
@@ -1004,6 +1003,16 @@ export async function updateOrder(
     firestoreUpdates.taxAmount = 0;
     firestoreUpdates.grossOrderValue = finalVal;
     firestoreUpdates.totalAmount = finalVal;
+  }
+  // Same reasoning for amountPending: only send it when this call actually
+  // affects it (a direct amountPending update, or a paymentStatus/orderValue
+  // change that forces it to be recomputed). A pure status/dispatch-only
+  // update (e.g. Dispatch marking Delivered, or Accounts/Dispatch advancing
+  // the lifecycle stage) never touches amountPending, and neither role has
+  // it on their firestore.rules allow-list - so including it unconditionally
+  // risked rejecting those writes too, the exact same way orderValue did.
+  if (updates.amountPending !== undefined || updates.paymentStatus !== undefined || updates.orderValue !== undefined) {
+    firestoreUpdates.amountPending = updated.amountPending;
   }
   await syncDocToFirestoreOrThrow('orders', orderId, firestoreUpdates);
 
