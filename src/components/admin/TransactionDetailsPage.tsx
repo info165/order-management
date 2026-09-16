@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown } from 'lucide-react';
 import { CommissionPayment } from '../../types';
 import { subscribeToRealtimeCommissionPayments } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -22,6 +22,9 @@ interface SchoolGroup {
   totalPaid: number;
 }
 
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
 // Reached only from the CB page's "Transaction Details" link - a history of
 // commissions paid across every school/partner, not scoped to any one
 // school's selection (that's what CommissionCalculationPage is for). Backed
@@ -31,7 +34,8 @@ interface SchoolGroup {
 export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ onBack }) => {
   const [payments, setPayments] = useState<CommissionPayment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedSchoolId, setExpandedSchoolId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
+  const [selectedSchoolId, setSelectedSchoolId] = useState('');
 
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeCommissionPayments((data) => {
@@ -43,9 +47,6 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
 
   const totalPaid = payments.reduce((sum, p) => sum + (p.commissionAmount || 0), 0);
 
-  // Grouped by school, most-recently-paid school first, each school's own
-  // payments kept in the already-newest-first order the subscription hands
-  // them in.
   const schoolGroups: SchoolGroup[] = useMemo(() => {
     const map = new Map<string, SchoolGroup>();
     payments.forEach((p) => {
@@ -62,16 +63,18 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
         });
       }
     });
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName));
   }, [payments]);
 
-  // Auto-expand the only group, or the first one, once data arrives - so a
-  // school's history is visible immediately rather than needing a click.
+  // Default to the first school once data arrives, so the tab shows
+  // something immediately instead of an empty picker.
   useEffect(() => {
-    if (!expandedSchoolId && schoolGroups.length > 0) {
-      setExpandedSchoolId(schoolGroups[0].schoolId);
+    if (!selectedSchoolId && schoolGroups.length > 0) {
+      setSelectedSchoolId(schoolGroups[0].schoolId);
     }
-  }, [schoolGroups, expandedSchoolId]);
+  }, [schoolGroups, selectedSchoolId]);
+
+  const selectedGroup = schoolGroups.find(g => g.schoolId === selectedSchoolId) || null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -132,92 +135,156 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
             </div>
           </div>
 
+          {/* Tabs */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                activeTab === 'all' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>All Transactions</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('schoolwise')}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                activeTab === 'schoolwise' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>School-wise Payment History</span>
+            </button>
+          </div>
+
           {loading ? (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center">
               <p className="text-xs text-slate-500">Loading…</p>
             </div>
-          ) : schoolGroups.length === 0 ? (
+          ) : payments.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center space-y-2">
               <Receipt className="w-6 h-6 text-slate-600 mx-auto" />
               <p className="text-xs text-slate-500">No commission payments recorded yet.</p>
             </div>
+          ) : activeTab === 'all' ? (
+            /* ALL TRANSACTIONS - every school in one whole table */
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl shadow-black/20">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                      <th className="px-4 py-3 w-12">#</th>
+                      <th className="px-4 py-3">School Name</th>
+                      <th className="px-4 py-3">Amount</th>
+                      <th className="px-4 py-3">Mode of Payment</th>
+                      <th className="px-4 py-3">Date of Payment</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {payments.map((p, idx) => (
+                      <tr key={p.commissionPaymentId} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-[11px] shrink-0">
+                              {p.schoolName.trim().charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-100 truncate">{p.schoolName}</div>
+                              <div className="text-[11px] text-slate-500 truncate">
+                                {p.isDirectPayment ? 'Direct Payment to School' : p.agentName}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          <CurrencyFormatter amount={p.commissionAmount} showDecimals className="text-emerald-400 font-bold" />
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
+                            {PAYMENT_MODE_LABELS[p.paymentMode] || p.paymentMode}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
+                          {formatDate(p.paymentDate)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
-            <div className="space-y-3">
-              <h2 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-1">
-                School-wise Payment History
-              </h2>
-              {schoolGroups.map((group) => {
-                const isExpanded = expandedSchoolId === group.schoolId;
-                const latestPayment = group.payments[0];
-                return (
-                  <div
-                    key={group.schoolId}
-                    className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl shadow-black/20"
-                  >
-                    {/* School summary row - click to expand/collapse */}
-                    <button
-                      type="button"
-                      onClick={() => setExpandedSchoolId(isExpanded ? null : group.schoolId)}
-                      className="w-full flex items-center gap-4 p-4 text-left hover:bg-slate-800/40 transition-colors"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0">
-                        {group.schoolName.trim().charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-100 truncate">{group.schoolName}</div>
-                        <div className="text-[11px] text-slate-500 truncate">
-                          {latestPayment.isDirectPayment ? 'Direct Payment to School' : latestPayment.agentName} · {group.payments.length} payment{group.payments.length === 1 ? '' : 's'}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-[10px] text-slate-500 uppercase tracking-wide">Total Paid</div>
-                        <CurrencyFormatter amount={group.totalPaid} showDecimals className="text-base font-bold text-emerald-400" />
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </button>
+            /* SCHOOL-WISE PAYMENT HISTORY - pick a school, see only its payments */
+            <div className="space-y-4">
+              <div className="relative max-w-md">
+                <select
+                  value={selectedSchoolId}
+                  onChange={(e) => setSelectedSchoolId(e.target.value)}
+                  className="w-full appearance-none pl-3 pr-9 py-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  {schoolGroups.map((g) => (
+                    <option key={g.schoolId} value={g.schoolId}>
+                      {g.schoolName} ({g.payments.length})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
 
-                    {/* Individual payments for this school */}
-                    {isExpanded && (
-                      <div className="border-t border-slate-800 overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-800/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
-                              <th className="px-4 py-2.5 w-12">#</th>
-                              <th className="px-4 py-2.5">Mode</th>
-                              <th className="px-4 py-2.5">Reference</th>
-                              <th className="px-4 py-2.5">Amount</th>
-                              <th className="px-4 py-2.5">Date</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/80">
-                            {group.payments.map((p, idx) => (
-                              <tr key={p.commissionPaymentId} className="hover:bg-slate-800/40 transition-colors">
-                                <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
-                                <td className="px-4 py-3 align-middle">
-                                  <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
-                                    {PAYMENT_MODE_LABELS[p.paymentMode] || p.paymentMode}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 align-middle text-slate-400 font-mono text-[11px]">
-                                  {p.transactionUtrPfmsRef || p.upiTransactionRef || p.transactionRefNumber || p.neftUtrNumber || '—'}
-                                </td>
-                                <td className="px-4 py-3 align-middle">
-                                  <CurrencyFormatter amount={p.commissionAmount} showDecimals className="text-emerald-400 font-bold" />
-                                </td>
-                                <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
-                                  {new Date(p.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+              {selectedGroup && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl shadow-black/20">
+                  <div className="flex items-center gap-4 p-4 border-b border-slate-800">
+                    <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0">
+                      {selectedGroup.schoolName.trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-slate-100 truncate">{selectedGroup.schoolName}</div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {selectedGroup.payments[0].isDirectPayment ? 'Direct Payment to School' : selectedGroup.payments[0].agentName}
                       </div>
-                    )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wide">Total Paid</div>
+                      <CurrencyFormatter amount={selectedGroup.totalPaid} showDecimals className="text-base font-bold text-emerald-400" />
+                    </div>
                   </div>
-                );
-              })}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-800/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                          <th className="px-4 py-2.5 w-12">#</th>
+                          <th className="px-4 py-2.5">School Name</th>
+                          <th className="px-4 py-2.5">Amount</th>
+                          <th className="px-4 py-2.5">Mode of Payment</th>
+                          <th className="px-4 py-2.5">Date of Payment</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {selectedGroup.payments.map((p, idx) => (
+                          <tr key={p.commissionPaymentId} className="hover:bg-slate-800/40 transition-colors">
+                            <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
+                            <td className="px-4 py-3 align-middle font-semibold text-slate-100">{p.schoolName}</td>
+                            <td className="px-4 py-3 align-middle">
+                              <CurrencyFormatter amount={p.commissionAmount} showDecimals className="text-emerald-400 font-bold" />
+                            </td>
+                            <td className="px-4 py-3 align-middle">
+                              <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
+                                {PAYMENT_MODE_LABELS[p.paymentMode] || p.paymentMode}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
+                              {formatDate(p.paymentDate)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
