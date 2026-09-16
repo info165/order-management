@@ -186,7 +186,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
       </div>
 
       <div className="flex-1 flex items-start justify-center px-6 pb-6">
-        <div className="w-full max-w-lg space-y-4">
+        <div className="w-full max-w-6xl space-y-4">
           <div className="text-center space-y-1">
             <h1 className="text-sm font-semibold text-slate-200">Commission Calculation</h1>
             <p className="text-xs text-slate-500">{orders.length} order{orders.length === 1 ? '' : 's'} selected</p>
@@ -195,8 +195,9 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
             </p>
           </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1">
+          {/* Tabs - only needed to switch panels on narrower screens; from
+              lg: up both panels show side by side instead, so they're hidden. */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 lg:hidden">
             <button
               type="button"
               onClick={() => setActiveTab('calculation')}
@@ -219,8 +220,12 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
             </button>
           </div>
 
-          {activeTab === 'calculation' && (
-            <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className={`space-y-4 ${activeTab === 'calculation' ? '' : 'hidden lg:block'}`}>
+            <h2 className="hidden lg:flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              <Calculator className="w-3.5 h-3.5" />
+              <span>Calculation</span>
+            </h2>
               <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800">
                 {orders.map((o) => (
                   <div key={o.orderId} className="px-4 py-2.5 flex items-center justify-between text-xs">
@@ -277,11 +282,13 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                   <CurrencyFormatter amount={commissionAmount} showDecimals className="text-lg font-bold text-emerald-400" />
                 </div>
               </div>
-            </>
-          )}
+          </div>
 
-          {activeTab === 'payment' && (
-            <div className="space-y-4">
+          <div className={`space-y-4 ${activeTab === 'payment' ? '' : 'hidden lg:block'}`}>
+            <h2 className="hidden lg:flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              <Wallet className="w-3.5 h-3.5" />
+              <span>Enter Payment Details</span>
+            </h2>
               {/* Mode of Payment */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
                 <label className="block text-xs font-semibold text-slate-200">Mode of Payment</label>
@@ -530,8 +537,8 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                   <p className="text-[11px] text-rose-400 text-center">{markPaidError}</p>
                 )}
               </div>
-            </div>
-          )}
+          </div>
+          </div>
         </div>
       </div>
     </div>
