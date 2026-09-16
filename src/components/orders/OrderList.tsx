@@ -879,15 +879,6 @@ export const OrderList: React.FC<OrderListProps> = ({
                 <Check className="w-2.5 h-2.5" strokeWidth={3} />
               </span>
               <span>GeM Portal Invoice Uploaded</span>
-              {showCommissionPaidBadge && (
-                <>
-                  <span className="text-slate-300">•</span>
-                  <span className="flex items-center justify-center h-4 min-w-[1.15rem] px-1 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white text-[9px] font-black tracking-tight shadow-sm ring-1 ring-white/40 shrink-0">
-                    CB
-                  </span>
-                  <span>Commission Paid</span>
-                </>
-              )}
             </div>
           </div>
 
