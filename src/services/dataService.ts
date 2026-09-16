@@ -970,7 +970,28 @@ export async function updateOrder(
   // over Firestore's 1 MiB/document size limit) is now actually reported
   // instead of silently discarded - which previously looked identical to a
   // successful save right up until the next page refresh undid it.
-  await syncDocToFirestoreOrThrow('orders', orderId, updated);
+  // Write only the fields this call actually changes (plus the derived
+  // financial figures/updatedAt this function always recomputes) - NOT the
+  // full `updated` object spread from this browser's local `existing`
+  // cache. A full-object write meant that any edit made from a tab whose
+  // cache predated some other fix (e.g. a school repointed via a direct
+  // database correction) would silently drag every one of that tab's other,
+  // untouched-but-stale fields back onto the live document along with it -
+  // exactly how a corrected schoolId got silently reverted to its old value
+  // by an unrelated later edit. Fields never included in `updates` now stay
+  // completely untouched in Firestore, however stale this tab's own copy of
+  // them is.
+  const firestoreUpdates: Partial<Order> = {
+    ...updates,
+    orderValue: finalVal,
+    taxAmount: 0,
+    grossOrderValue: finalVal,
+    totalAmount: finalVal,
+    amountPending: updated.amountPending,
+    updatedAt: now,
+    updatedBy: user.name
+  };
+  await syncDocToFirestoreOrThrow('orders', orderId, firestoreUpdates);
 
   // If agent assignment changed, record specific audit log
   if (updates.agentId && updates.agentId !== existing.agentId) {
@@ -1080,7 +1101,25 @@ export async function updateOrderSchoolDetails(
     await syncDocToFirestore('schools', existingSchool.schoolId, updatedSchool);
   } else {
     // Register matching school in master structure without creating duplicate
-    const newSchoolId = targetOrder.schoolId || `SCH-${String(memorySchools.length + 1).padStart(4, '0')}`;
+    // Same collision-safe ID generation as createSchool() - a raw count-
+    // based ID (the old `SCH-${memorySchools.length + 1}` here) could land
+    // on a number already used by an existing school and silently overwrite
+    // it via the merge write below, exactly like the incident that fix
+    // addressed.
+    let newSchoolId = targetOrder.schoolId;
+    if (!newSchoolId) {
+      const existingSchoolIds = new Set(memorySchools.map(s => s.schoolId));
+      const maxNumericId = memorySchools.reduce((max, s) => {
+        const match = /^SCH-(\d+)$/.exec(s.schoolId);
+        return match ? Math.max(max, parseInt(match[1], 10)) : max;
+      }, 0);
+      newSchoolId = `SCH-${String(maxNumericId + 1).padStart(3, '0')}`;
+      let collisionCounter = 1;
+      while (existingSchoolIds.has(newSchoolId)) {
+        newSchoolId = `SCH-${String(maxNumericId + 1 + collisionCounter).padStart(3, '0')}`;
+        collisionCounter++;
+      }
+    }
     updatedSchool = {
       schoolId: newSchoolId,
       schoolName: trimmedName,
@@ -1146,11 +1185,32 @@ export async function updateOrderSchoolDetails(
 
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
+  // Write only the fields this call actually changes, not the full
+  // `updatedOrder`/sibling objects spread from this browser's local cache -
+  // same fix and same reasoning as updateOrder(): any other field in that
+  // cache which happens to be stale (e.g. a schoolId corrected elsewhere by
+  // a direct database fix since this tab last loaded) must never get
+  // silently dragged back onto the live document by an unrelated edit here.
+  //
   // Wait for the write to land before returning - see the matching comment
   // in updateOrder() for why this avoids the immediately-following refresh
   // reading a stale pre-edit value back.
+  const targetOrderFirestoreUpdates: Partial<Order> = {
+    schoolName: trimmedName,
+    schoolContactPhone: trimmedPhone,
+    schoolAddress: trimmedAddress,
+    schoolType: updatedOrder.schoolType,
+    state: trimmedState,
+    district: trimmedDistrict,
+    schoolCode: trimmedSchoolCode,
+    schoolEmail: trimmedEmail,
+    schoolPincode: trimmedPincode,
+    schoolId: updatedOrder.schoolId,
+    updatedAt: now,
+    updatedBy: user.name
+  };
   try {
-    await syncDocToFirestore('orders', orderId, updatedOrder);
+    await syncDocToFirestore('orders', orderId, targetOrderFirestoreUpdates);
   } catch (err) {
     console.warn(`Firestore sync note for ${orderId}:`, err);
   }
@@ -1160,15 +1220,20 @@ export async function updateOrderSchoolDetails(
   // different browser/account kept seeing the old phone/address - push
   // each one now too.
   if (siblingOrderIds.length > 0) {
+    const siblingFirestoreUpdates: Partial<Order> = {
+      schoolName: trimmedName,
+      schoolContactPhone: trimmedPhone,
+      schoolAddress: trimmedAddress,
+      schoolEmail: trimmedEmail,
+      schoolPincode: trimmedPincode,
+      updatedAt: now
+    };
     await Promise.all(
-      siblingOrderIds.map(sid => {
-        const sibling = memoryOrders.find(o => o.orderId === sid);
-        return sibling
-          ? syncDocToFirestore('orders', sid, sibling).catch(err =>
-              console.warn(`Firestore sync note for sibling order ${sid}:`, err)
-            )
-          : Promise.resolve();
-      })
+      siblingOrderIds.map(sid =>
+        syncDocToFirestore('orders', sid, siblingFirestoreUpdates).catch(err =>
+          console.warn(`Firestore sync note for sibling order ${sid}:`, err)
+        )
+      )
     );
   }
 
@@ -1237,9 +1302,18 @@ export async function updateOrderAgent(
   memoryOrders[orderIdx] = updatedOrder;
   saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
+  // Write only the changed fields, not the full stale-cache-derived
+  // `updatedOrder` - see the matching comment in updateOrder().
   // Wait for the write to land - see the matching comment in updateOrder().
   try {
-    await syncDocToFirestore('orders', orderId, updatedOrder);
+    await syncDocToFirestore('orders', orderId, {
+      agentId: newAgentId,
+      agentName,
+      agentCode,
+      ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+      updatedAt: now,
+      updatedBy: user.name
+    });
   } catch (err) {
     console.warn(`Firestore sync note for ${orderId}:`, err);
   }
@@ -1333,8 +1407,18 @@ export async function bulkUpdateOrderAgent(
       await batch.commit();
     } catch (err) {
       console.warn('Firebase batch update fallback note:', err);
+      // Same targeted-fields payload as the batch path above, not the full
+      // stale-cache-derived `ord` object - see the matching comment in
+      // updateOrder().
       for (const ord of updatedOrders) {
-        syncDocToFirestore('orders', ord.orderId, ord).catch(() => {});
+        syncDocToFirestore('orders', ord.orderId, {
+          agentId: newAgentId,
+          agentName,
+          agentCode,
+          ...(commissionRate !== undefined ? { agentCommissionPercentage: commissionRate } : {}),
+          updatedAt: now,
+          updatedBy: user.name
+        }).catch(() => {});
       }
     }
   })();
@@ -2225,15 +2309,19 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
     });
     if (linkedOrderIds.length > 0) {
       saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+      // Targeted fields only, not the full stale-cache-derived order object -
+      // see the matching comment in updateOrder().
+      const linkedOrderFirestoreUpdates: Partial<Order> = {
+        ...(phoneChanged ? { schoolContactPhone: newPhone } : {}),
+        ...(addressChanged ? { schoolAddress: newAddress } : {}),
+        updatedAt: now
+      };
       await Promise.all(
-        linkedOrderIds.map(oid => {
-          const o = memoryOrders.find(x => x.orderId === oid);
-          return o
-            ? syncDocToFirestore('orders', oid, o).catch(err =>
-                console.warn(`Firestore sync note for order ${oid}:`, err)
-              )
-            : Promise.resolve();
-        })
+        linkedOrderIds.map(oid =>
+          syncDocToFirestore('orders', oid, linkedOrderFirestoreUpdates).catch(err =>
+            console.warn(`Firestore sync note for order ${oid}:`, err)
+          )
+        )
       );
     }
   }
