@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ImageOff, X } from 'lucide-react';
 import { CommissionPayment } from '../../types';
 import { subscribeToRealtimeCommissionPayments } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -38,6 +38,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
+  const [previewScreenshot, setPreviewScreenshot] = useState<{ url: string; fileName?: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeCommissionPayments((data) => {
@@ -77,6 +78,22 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   }, [schoolGroups, selectedSchoolId]);
 
   const selectedGroup = schoolGroups.find(g => g.schoolId === selectedSchoolId) || null;
+
+  const renderScreenshotCell = (p: CommissionPayment) =>
+    p.screenshotDataUrl ? (
+      <button
+        type="button"
+        onClick={() => setPreviewScreenshot({ url: p.screenshotDataUrl!, fileName: p.screenshotFileName })}
+        className="block w-10 h-10 rounded-lg overflow-hidden border border-slate-700 hover:border-amber-500/60 transition-colors shrink-0"
+        title="View payment screenshot"
+      >
+        <img src={p.screenshotDataUrl} alt="Payment screenshot" className="w-full h-full object-cover" />
+      </button>
+    ) : (
+      <span className="flex items-center justify-center w-10 h-10 rounded-lg border border-dashed border-slate-800 text-slate-700" title="No screenshot">
+        <ImageOff className="w-4 h-4" />
+      </span>
+    );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -182,6 +199,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       <th className="px-4 py-3">Amount</th>
                       <th className="px-4 py-3">Mode of Payment</th>
                       <th className="px-4 py-3">Date of Payment</th>
+                      <th className="px-4 py-3">Screenshot</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
@@ -211,6 +229,9 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                         </td>
                         <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
                           {formatDate(p.paymentDate)}
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          {renderScreenshotCell(p)}
                         </td>
                       </tr>
                     ))}
@@ -262,6 +283,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           <th className="px-4 py-2.5">Amount</th>
                           <th className="px-4 py-2.5">Mode of Payment</th>
                           <th className="px-4 py-2.5">Date of Payment</th>
+                          <th className="px-4 py-2.5">Screenshot</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/80">
@@ -280,6 +302,9 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                             <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
                               {formatDate(p.paymentDate)}
                             </td>
+                            <td className="px-4 py-3 align-middle">
+                              {renderScreenshotCell(p)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -291,6 +316,31 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
           )}
         </div>
       </div>
+
+      {previewScreenshot && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setPreviewScreenshot(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800">
+              <p className="text-xs text-slate-400 truncate">{previewScreenshot.fileName || 'Payment screenshot'}</p>
+              <button
+                type="button"
+                onClick={() => setPreviewScreenshot(null)}
+                className="p-1 text-slate-500 hover:text-slate-200 transition-colors shrink-0"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img src={previewScreenshot.url} alt="Payment screenshot" className="w-full max-h-[75vh] object-contain bg-slate-950" />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
