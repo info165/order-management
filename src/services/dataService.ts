@@ -984,14 +984,27 @@ export async function updateOrder(
   // them is.
   const firestoreUpdates: Partial<Order> = {
     ...updates,
-    orderValue: finalVal,
-    taxAmount: 0,
-    grossOrderValue: finalVal,
-    totalAmount: finalVal,
     amountPending: updated.amountPending,
     updatedAt: now,
     updatedBy: user.name
   };
+  // Only send orderValue/taxAmount/grossOrderValue/totalAmount when this
+  // call actually changes orderValue. Sending them unconditionally on every
+  // update (even payment-only edits that never touch orderValue) meant a
+  // role restricted to a narrow field allow-list in firestore.rules - like
+  // Accounts, who may only touch payment-related fields on an order - had
+  // its entire write rejected the moment this browser's cached orderValue
+  // no longer matched the live document (e.g. after a direct DB correction
+  // elsewhere), since Firestore then saw orderValue/totalAmount as genuinely
+  // changed fields outside that role's allowed set. Admin/Ops writes were
+  // never affected, since their rule has no such allow-list to violate -
+  // which is exactly why this only ever broke for non-admin roles.
+  if (updates.orderValue !== undefined) {
+    firestoreUpdates.orderValue = finalVal;
+    firestoreUpdates.taxAmount = 0;
+    firestoreUpdates.grossOrderValue = finalVal;
+    firestoreUpdates.totalAmount = finalVal;
+  }
   await syncDocToFirestoreOrThrow('orders', orderId, firestoreUpdates);
 
   // If agent assignment changed, record specific audit log
