@@ -27,6 +27,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [schoolAddress, setSchoolAddress] = useState('');
   const [principalName, setPrincipalName] = useState('');
   const [schoolContactPhone, setSchoolContactPhone] = useState('');
+  const [schoolEmail, setSchoolEmail] = useState('');
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
   const [isNewSchool, setIsNewSchool] = useState(false);
   const schoolDropdownRef = useRef<HTMLDivElement>(null);
@@ -201,6 +202,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
     setSchoolAddress(s.address || '');
     setPrincipalName(s.principalName || '');
     setSchoolContactPhone(s.contactPhone || '');
+    setSchoolEmail(s.email || '');
     setShowSchoolDropdown(false);
     setIsNewSchool(false);
   };
@@ -331,7 +333,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               address: schoolAddress.trim() || `${schoolName}, ${district}, ${state}`,
               principalName: principalName.trim(),
               contactPhone: schoolContactPhone.trim(),
-              email: '',
+              email: schoolEmail.trim(),
               status: 'Active'
             },
             currentUser
@@ -382,6 +384,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           schoolAddress: schoolAddress.trim(),
           principalName: principalName.trim(),
           schoolContactPhone: schoolContactPhone.trim(),
+          schoolEmail: schoolEmail.trim(),
           agentId,
           agentName,
           agentCode,
@@ -602,6 +605,17 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">School Email</label>
+              <input
+                type="email"
+                value={schoolEmail}
+                onChange={(e) => setSchoolEmail(e.target.value)}
+                placeholder="e.g. school@kvsedu.gov.in"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+              />
             </div>
           </div>
 
