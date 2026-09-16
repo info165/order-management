@@ -338,16 +338,12 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                         onChange={(e) => {
                           const next = e.target.value;
                           if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
+                            // Amount and % are independently manual now -
+                            // editing one never touches the other, so a
+                            // small rounding tweak to the amount (e.g.
+                            // 847.46 -> 847) can't silently turn a clean
+                            // 10% into an imprecise back-calculated figure.
                             setManualAmountInput(next);
-                            // Keep Commission % in sync with whatever amount
-                            // is actually being paid, instead of leaving it
-                            // showing a % that no longer matches.
-                            const parsedAmount = parseFloat(next);
-                            if (!isNaN(parsedAmount) && calculatedAmount > 0) {
-                              const impliedPercent = (parsedAmount / calculatedAmount) * 100;
-                              setCommissionPercentInput(String(Math.round(impliedPercent * 100000) / 100000));
-                              setIsEditingPercent(false);
-                            }
                           }
                         }}
                         onKeyDown={(e) => {
