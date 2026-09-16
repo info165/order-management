@@ -92,6 +92,11 @@ interface OrderListProps {
   // Opt-in only: every other OrderList usage keeps showing everything by
   // default, unaffected.
   requireSchoolSelection?: boolean;
+  // Pins the checkbox column to the left edge while scrolling horizontally,
+  // so it can't drift out of alignment with the row you're trying to select
+  // once other columns are wider than the viewport. Opt-in only - the CB
+  // page's wide order list is the only place this was actually confusing.
+  freezeCheckboxColumn?: boolean;
 }
 
 export const OrderList: React.FC<OrderListProps> = ({
@@ -107,7 +112,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   extraBulkAction,
   showCommissionPaidBadge,
   allOrders,
-  requireSchoolSelection
+  requireSchoolSelection,
+  freezeCheckboxColumn
 }) => {
   const isAgent = currentUser.role === 'AGENT';
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
@@ -1019,8 +1025,8 @@ export const OrderList: React.FC<OrderListProps> = ({
                 {/* 1. Select Checkbox Column */}
                 {!isAgent && (
                   <th
-                    style={{ width: widths.select, minWidth: widths.select }}
-                    className="px-2 py-2.5 text-center relative border-r border-slate-200/60 bg-slate-100"
+                    style={freezeCheckboxColumn ? { width: widths.select, minWidth: widths.select, left: 0 } : { width: widths.select, minWidth: widths.select }}
+                    className={`px-2 py-2.5 text-center relative border-r border-slate-200/60 bg-slate-100 ${freezeCheckboxColumn ? 'sticky z-30 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]' : ''}`}
                   >
                     <button
                       type="button"
@@ -1496,15 +1502,17 @@ export const OrderList: React.FC<OrderListProps> = ({
                     <tr
                       key={order.orderId}
                       onClick={() => onSelectOrder(order)}
-                      className={`hover:bg-amber-50/40 cursor-pointer transition-colors border-b border-slate-100 ${
+                      className={`group hover:bg-amber-50/40 cursor-pointer transition-colors border-b border-slate-100 ${
                         isSelected ? 'bg-amber-50/60' : idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
                       }`}
                     >
                       {/* Checkbox */}
                       {!isAgent && (
                         <td
-                          style={{ width: widths.select }}
-                          className="px-2 py-2 text-center align-middle border-r border-slate-100"
+                          style={freezeCheckboxColumn ? { width: widths.select, left: 0 } : { width: widths.select }}
+                          className={`px-2 py-2 text-center align-middle border-r border-slate-100 ${
+                            freezeCheckboxColumn ? `sticky z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] group-hover:bg-amber-50/40 ${isSelected ? 'bg-amber-50/60' : idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'}` : ''
+                          }`}
                           onClick={(e) => handleToggleSelectOrder(order.orderId, e)}
                         >
                           <button type="button" className="text-slate-400 hover:text-slate-700 flex items-center justify-center mx-auto">

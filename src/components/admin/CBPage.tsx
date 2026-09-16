@@ -92,6 +92,7 @@ export const CBPage: React.FC<CBPageProps> = ({
             }}
             showCommissionPaidBadge
             requireSchoolSelection
+            freezeCheckboxColumn
           />
         </div>
       </div>
