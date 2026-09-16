@@ -420,6 +420,11 @@ function MainApp() {
               onOpenImport={() => setShowImportModal(true)}
               onDeleteOrder={handleDeleteOrder}
               onBatchStatusUpdate={handleBatchStatusUpdate}
+              // Super Admin only - same "CB" commission-paid badge the /cb
+              // page's own order list already shows, surfaced here too so
+              // Super Admin can see it without leaving the main registry.
+              // Every other role's view of this same list is unaffected.
+              showCommissionPaidBadge={isSuperAdmin}
             />
           )}
 
