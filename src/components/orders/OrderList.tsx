@@ -17,8 +17,7 @@ import {
   Columns,
   UserCheck,
   Check,
-  CheckCheck,
-  IndianRupee
+  CheckCheck
 } from 'lucide-react';
 import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile, Agent } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -845,8 +844,8 @@ export const OrderList: React.FC<OrderListProps> = ({
               </span>
               <span>GeM Portal Invoice Uploaded</span>
               <span className="text-slate-300">•</span>
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-200 shrink-0">
-                <IndianRupee className="w-2.5 h-2.5" strokeWidth={3} />
+              <span className="flex items-center justify-center h-4 min-w-[1.15rem] px-1 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white text-[9px] font-black tracking-tight shadow-sm ring-1 ring-white/40 shrink-0">
+                CB
               </span>
               <span>Commission Paid</span>
             </div>
@@ -1578,9 +1577,9 @@ export const OrderList: React.FC<OrderListProps> = ({
                             {commissionPaidOrderIds.has(order.orderId) && (
                               <span
                                 title="Commission Paid"
-                                className="flex items-center justify-center w-4 h-4 rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-200 shrink-0"
+                                className="flex items-center justify-center h-4 min-w-[1.15rem] px-1 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white text-[9px] font-black tracking-tight shadow-sm ring-1 ring-white/40 shrink-0"
                               >
-                                <IndianRupee className="w-2.5 h-2.5" strokeWidth={3} />
+                                CB
                               </span>
                             )}
                           </div>
