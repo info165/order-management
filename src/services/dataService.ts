@@ -1648,7 +1648,7 @@ export async function markDelivered(
     proofOfDeliveryUrl?: string;
   },
   user: UserProfile
-): Promise<void> {
+): Promise<Order> {
   if (user.role === 'AGENT') {
     throw new Error('Partners cannot record delivery completions.');
   }
@@ -1675,7 +1675,7 @@ export async function markDelivered(
   // delivery record itself silently never saved.
   await syncDocToFirestoreOrThrow('deliveries', deliveryRecord.deliveryId, deliveryRecord);
 
-  await updateOrder(
+  const updatedOrder = await updateOrder(
     orderId,
     {
       deliveryStatus: 'Delivered',
@@ -1722,6 +1722,8 @@ export async function markDelivered(
     entityId: orderId,
     newValue: `Delivered on ${deliveryInput.deliveryDate}${deliveryInput.receiverDesignation ? ` (${deliveryInput.receiverDesignation})` : ''}`
   });
+
+  return updatedOrder;
 }
 
 // ----------------------------------------------------

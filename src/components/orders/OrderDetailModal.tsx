@@ -642,7 +642,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     e.preventDefault();
     setIsSubmittingDelivery(true);
     try {
-      await markDelivered(
+      const updated = await markDelivered(
         order.orderId,
         {
           deliveryDate,
@@ -651,8 +651,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         },
         currentUser
       );
+      setActiveOrder(updated);
       await loadData();
-      onOrderUpdated();
+      onOrderUpdated(updated);
       alert('Order marked as delivered with receiving verification.');
     } catch (err: any) {
       alert(err.message);
