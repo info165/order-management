@@ -46,6 +46,11 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   // (5.5, 0.5, etc.) isn't fought/reformatted mid-keystroke; parsed on
   // render, with an empty/invalid entry treated as 0% rather than erroring.
   const [commissionPercentInput, setCommissionPercentInput] = useState('');
+  // Starts open since there's nothing calculated to show until a % is
+  // typed - once confirmed (Enter or the checkmark) it collapses to a
+  // static display with its own pencil-to-edit, matching Commission
+  // Amount's pattern below.
+  const [isEditingPercent, setIsEditingPercent] = useState(true);
   const commissionPercent = parseFloat(commissionPercentInput);
   const hasValidPercent = commissionPercentInput.trim() !== '' && !isNaN(commissionPercent);
   const calculatedCommissionAmount = hasValidPercent ? (calculatedAmount * commissionPercent) / 100 : 0;
@@ -260,35 +265,65 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
               </div>
 
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-                <label className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-200">Commission %</span>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="e.g. 10 or 5.5"
-                      value={commissionPercentInput}
-                      onChange={(e) => {
-                        // Manual free-typing only - digits and at most one
-                        // decimal point, up to 5 digits after it (matching
-                        // CurrencyFormatter's own 5-decimal display cap
-                        // below) - no spinner arrows or other browser-
-                        // supplied number-input behavior. The typed value is
-                        // kept and parsed exactly as entered, never rounded.
-                        const next = e.target.value;
-                        if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
-                          setCommissionPercentInput(next);
-                          // A new % means a fresh calculation - drop any
-                          // manual amount override from before.
-                          setManualAmountInput(null);
-                          setIsEditingAmount(false);
-                        }
-                      }}
-                      className="w-28 pl-2.5 pr-6 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-right font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500">%</span>
-                  </div>
-                </label>
+                  {isEditingPercent ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          autoFocus
+                          placeholder="e.g. 10 or 5.5"
+                          value={commissionPercentInput}
+                          onChange={(e) => {
+                            // Manual free-typing only - digits and at most one
+                            // decimal point, up to 5 digits after it (matching
+                            // CurrencyFormatter's own 5-decimal display cap
+                            // below) - no spinner arrows or other browser-
+                            // supplied number-input behavior. The typed value is
+                            // kept and parsed exactly as entered, never rounded.
+                            const next = e.target.value;
+                            if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
+                              setCommissionPercentInput(next);
+                              // A new % means a fresh calculation - drop any
+                              // manual amount override from before.
+                              setManualAmountInput(null);
+                              setIsEditingAmount(false);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && hasValidPercent) setIsEditingPercent(false);
+                          }}
+                          className="w-24 pl-2.5 pr-6 py-1.5 rounded-lg bg-slate-800 border border-amber-500 text-slate-100 text-right font-mono focus:outline-none"
+                        />
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                      </div>
+                      {hasValidPercent && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingPercent(false)}
+                          className="p-1 rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                          title="Done"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-slate-100">{commissionPercentInput}%</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingPercent(true)}
+                        className="p-1 rounded-md text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                        title="Edit commission %"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-slate-200 shrink-0">Commission Amount</span>
@@ -311,6 +346,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                             if (!isNaN(parsedAmount) && calculatedAmount > 0) {
                               const impliedPercent = (parsedAmount / calculatedAmount) * 100;
                               setCommissionPercentInput(String(Math.round(impliedPercent * 100000) / 100000));
+                              setIsEditingPercent(false);
                             }
                           }
                         }}
