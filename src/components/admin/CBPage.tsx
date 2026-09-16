@@ -259,6 +259,7 @@ export const CBPage: React.FC<CBPageProps> = ({
             <div className="w-full flex-1 min-h-0 bg-slate-100 rounded-xl p-2.5 sm:p-4 -mx-1">
             <OrderList
               orders={schoolOrders}
+              allOrders={orders}
               currentUser={currentUser}
               onSelectOrder={onSelectOrder}
               onOpenNewOrder={onOpenNewOrder}

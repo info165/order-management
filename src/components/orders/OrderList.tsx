@@ -78,6 +78,14 @@ interface OrderListProps {
   // opt-in only, so it stays invisible (and doesn't even subscribe to
   // commissionPayments) everywhere else.
   showCommissionPaidBadge?: boolean;
+  // getDisplaySerialNo() needs the FULL, unfiltered order list to compute a
+  // real SL. NO. - every other OrderList caller already passes that as
+  // `orders` itself, but the CB page pre-filters `orders` down to just one
+  // school before handing it to this component, which made SL. NO. show
+  // 1, 2, 3... (that school's own position) instead of each order's true
+  // registry-wide position. Optional: defaults to `orders`, so every
+  // existing caller is unaffected.
+  allOrders?: Order[];
 }
 
 export const OrderList: React.FC<OrderListProps> = ({
@@ -91,7 +99,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   onOrdersUpdated,
   initialFilterCategory,
   extraBulkAction,
-  showCommissionPaidBadge
+  showCommissionPaidBadge,
+  allOrders
 }) => {
   const isAgent = currentUser.role === 'AGENT';
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
@@ -1442,7 +1451,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                   // (Firestore security rules don't allow fetching the full one), so
                   // there's no true global position available to them - keep their
                   // original in-list position numbering, the best available fallback.
-                  const serialNum = isAgent ? idx + 1 : (getDisplaySerialNo(order, orders) ?? idx + 1);
+                  const serialNum = isAgent ? idx + 1 : (getDisplaySerialNo(order, allOrders ?? orders) ?? idx + 1);
                   const contractId = order.contractNumber || order.purchaseOrderNumber || order.orderNumber;
                   const isDeliveryOverdue =
                     order.expectedDeliveryDate &&
