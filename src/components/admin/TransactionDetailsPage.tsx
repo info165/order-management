@@ -237,6 +237,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       <th className="px-4 py-3 w-12">#</th>
                       <th className="px-4 py-3">School Name</th>
                       <th className="px-4 py-3">Amount</th>
+                      <th className="px-4 py-3">%</th>
                       <th className="px-4 py-3">Mode of Payment</th>
                       <th className="px-4 py-3">Date of Payment</th>
                       <th className="px-4 py-3">Screenshot</th>
@@ -261,6 +262,9 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                         </td>
                         <td className="px-4 py-3 align-middle">
                           <CurrencyFormatter amount={round2(p.commissionAmount)} showDecimals className="text-emerald-400 font-bold" />
+                        </td>
+                        <td className="px-4 py-3 align-middle text-slate-300 font-mono whitespace-nowrap">
+                          {p.commissionPercent}%
                         </td>
                         <td className="px-4 py-3 align-middle">
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
@@ -321,6 +325,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           <th className="px-4 py-2.5 w-12">#</th>
                           <th className="px-4 py-2.5">School Name</th>
                           <th className="px-4 py-2.5">Amount</th>
+                          <th className="px-4 py-2.5">%</th>
                           <th className="px-4 py-2.5">Mode of Payment</th>
                           <th className="px-4 py-2.5">Date of Payment</th>
                           <th className="px-4 py-2.5">Screenshot</th>
@@ -333,6 +338,9 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                             <td className="px-4 py-3 align-middle font-semibold text-slate-100">{p.schoolName}</td>
                             <td className="px-4 py-3 align-middle">
                               <CurrencyFormatter amount={round2(p.commissionAmount)} showDecimals className="text-emerald-400 font-bold" />
+                            </td>
+                            <td className="px-4 py-3 align-middle text-slate-300 font-mono whitespace-nowrap">
+                              {p.commissionPercent}%
                             </td>
                             <td className="px-4 py-3 align-middle">
                               <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
