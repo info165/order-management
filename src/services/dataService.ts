@@ -1182,16 +1182,35 @@ export async function updateOrderSchoolDetails(
 
   memoryOrders[orderIdx] = updatedOrder;
 
-  // Also sync any other orders linked to the exact same school
-  const siblingOrderIds: string[] = [];
+  // Also sync any other orders linked to the exact same school. Queried
+  // directly from Firestore rather than only mapped over this browser's
+  // local memoryOrders cache - same reasoning as updateSchool()'s reverse
+  // sync: a stale/incomplete local cache would silently skip a sibling
+  // order that genuinely needed this update.
+  let siblingOrderIds: string[] = [];
   if (updatedSchool) {
-    memoryOrders = memoryOrders.map(o => {
+    try {
+      const siblingSnap = await getDocs(query(collection(db, 'orders'), where('schoolId', '==', updatedSchool.schoolId)));
+      siblingSnap.forEach(d => {
+        if (d.id !== orderId) siblingOrderIds.push(d.id);
+      });
+    } catch (err) {
+      console.warn(`Could not query live sibling orders for school ${updatedSchool.schoolId}:`, err);
+    }
+    // Also catch any order only matched by school name (e.g. missing a
+    // schoolId), the same fallback the old local-only check used.
+    memoryOrders.forEach(o => {
       if (
         o.orderId !== orderId &&
-        (o.schoolId === updatedSchool!.schoolId ||
-          (targetOrder.schoolName && o.schoolName.toLowerCase().trim() === targetOrder.schoolName.toLowerCase().trim()))
+        !siblingOrderIds.includes(o.orderId) &&
+        targetOrder.schoolName &&
+        o.schoolName.toLowerCase().trim() === targetOrder.schoolName.toLowerCase().trim()
       ) {
         siblingOrderIds.push(o.orderId);
+      }
+    });
+    memoryOrders = memoryOrders.map(o => {
+      if (siblingOrderIds.includes(o.orderId)) {
         return {
           ...o,
           schoolName: trimmedName,
@@ -2321,10 +2340,24 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
   if (phoneChanged || addressChanged) {
     const newPhone = updates.contactPhone ?? updates.phone ?? '';
     const newAddress = updates.address ?? '';
-    const linkedOrderIds: string[] = [];
+    // Query Firestore directly for every order actually linked to this
+    // school, rather than trusting this browser's local memoryOrders cache -
+    // which can be stale or incomplete (e.g. loaded before some order was
+    // repointed to this school), silently skipping orders that genuinely
+    // needed this update. This is exactly how two orders for a real school
+    // kept showing a blank phone/address for hours after the school's own
+    // record was correctly updated: the editing session's cache simply
+    // didn't have them.
+    let linkedOrderIds: string[] = [];
+    try {
+      const linkedSnap = await getDocs(query(collection(db, 'orders'), where('schoolId', '==', schoolId)));
+      linkedSnap.forEach(d => linkedOrderIds.push(d.id));
+    } catch (err) {
+      console.warn(`Could not query live orders for school ${schoolId}, falling back to local cache:`, err);
+      linkedOrderIds = memoryOrders.filter(o => o.schoolId === schoolId).map(o => o.orderId);
+    }
     memoryOrders = memoryOrders.map(o => {
-      if (o.schoolId === schoolId) {
-        linkedOrderIds.push(o.orderId);
+      if (linkedOrderIds.includes(o.orderId)) {
         return {
           ...o,
           schoolContactPhone: phoneChanged ? newPhone : o.schoolContactPhone,
