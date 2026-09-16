@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw } from 'lucide-react';
 import { Order, UserProfile } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { processFileForUpload } from '../../utils/fileUpload';
@@ -48,7 +48,16 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const [commissionPercentInput, setCommissionPercentInput] = useState('');
   const commissionPercent = parseFloat(commissionPercentInput);
   const hasValidPercent = commissionPercentInput.trim() !== '' && !isNaN(commissionPercent);
-  const commissionAmount = hasValidPercent ? (calculatedAmount * commissionPercent) / 100 : 0;
+  const calculatedCommissionAmount = hasValidPercent ? (calculatedAmount * commissionPercent) / 100 : 0;
+
+  // Lets the auto-calculated Commission Amount be manually fine-tuned
+  // afterward (e.g. a small rounding adjustment) without touching the %
+  // itself. null = not overridden, use the calculated value; changing the %
+  // clears any override, since a new % means a fresh calculation.
+  const [isEditingAmount, setIsEditingAmount] = useState(false);
+  const [manualAmountInput, setManualAmountInput] = useState<string | null>(null);
+  const hasManualOverride = manualAmountInput !== null && manualAmountInput.trim() !== '' && !isNaN(parseFloat(manualAmountInput));
+  const commissionAmount = hasManualOverride ? parseFloat(manualAmountInput!) : calculatedCommissionAmount;
 
   const [activeTab, setActiveTab] = useState<'calculation' | 'payment'>('calculation');
 
@@ -269,6 +278,10 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                         const next = e.target.value;
                         if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
                           setCommissionPercentInput(next);
+                          // A new % means a fresh calculation - drop any
+                          // manual amount override from before.
+                          setManualAmountInput(null);
+                          setIsEditingAmount(false);
                         }
                       }}
                       className="w-28 pl-2.5 pr-6 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-right font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -277,10 +290,63 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                   </div>
                 </label>
 
-                <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-200">Commission Amount</span>
-                  <CurrencyFormatter amount={Math.round(commissionAmount * 100) / 100} showDecimals className="text-lg font-bold text-emerald-400" />
+                <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-200 shrink-0">Commission Amount</span>
+                  {isEditingAmount ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 text-sm">₹</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoFocus
+                        value={manualAmountInput ?? String(Math.round(calculatedCommissionAmount * 100) / 100)}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
+                            setManualAmountInput(next);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') setIsEditingAmount(false);
+                        }}
+                        className="w-28 px-2 py-1 rounded-lg bg-slate-800 border border-amber-500 text-emerald-400 text-right font-mono font-bold focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingAmount(false)}
+                        className="p-1 rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                        title="Done"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <CurrencyFormatter amount={Math.round(commissionAmount * 100) / 100} showDecimals className="text-lg font-bold text-emerald-400" />
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingAmount(true)}
+                        className="p-1 rounded-md text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                        title="Edit commission amount"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {hasManualOverride && (
+                        <button
+                          type="button"
+                          onClick={() => setManualAmountInput(null)}
+                          className="p-1 rounded-md text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                          title="Reset to calculated amount"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
+                {hasManualOverride && !isEditingAmount && (
+                  <p className="text-[10px] text-amber-400/80 text-right">Manually adjusted (calculated: ₹{(Math.round(calculatedCommissionAmount * 100) / 100).toLocaleString('en-IN')})</p>
+                )}
               </div>
           </div>
 
