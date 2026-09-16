@@ -245,8 +245,8 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                   <span>÷ 1.18</span>
                 </div>
                 <div className="pt-2.5 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-200">Amount</span>
-                  <CurrencyFormatter amount={calculatedAmount} showDecimals className="text-lg font-bold text-amber-400" />
+                  <span className="text-sm font-semibold text-slate-200">Taxable Amount</span>
+                  <CurrencyFormatter amount={Math.round(calculatedAmount * 100) / 100} showDecimals className="text-lg font-bold text-white" />
                 </div>
               </div>
 
