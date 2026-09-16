@@ -265,6 +265,18 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [visibleToAgent, setVisibleToAgent] = useState(true);
   const [isSubmittingStatus, setIsSubmittingStatus] = useState(false);
 
+  // This dropdown used to only be seeded from the order's status once, when
+  // the modal first mounted - so marking Dispatched or Delivered elsewhere
+  // in the same still-open modal left it silently showing the OLD status.
+  // Submitting the form at that point (even without touching the dropdown)
+  // would revert the order straight back to that stale value - exactly how
+  // an order got marked Delivered and then flipped back to Dispatched 26
+  // seconds later by the same action. Now it stays in sync with whatever
+  // the order's real current status is.
+  useEffect(() => {
+    setNewStatus(activeOrder.status);
+  }, [activeOrder.status]);
+
   // Form states for dispatch
   const [courierName, setCourierName] = useState(order.courierName || 'Delhivery');
   const [trackingNumber, setTrackingNumber] = useState(order.docketNumber || '');
