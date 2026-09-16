@@ -118,29 +118,101 @@ export const CBPage: React.FC<CBPageProps> = ({
         <p className="text-xs text-slate-500">Signed in as {currentUser.name}</p>
       </div>
 
-      <div className={`flex-1 flex flex-col p-4 sm:p-6 pt-2 ${selectedSchool ? '' : 'items-center justify-start'}`}>
-        <div className={selectedSchool ? 'w-full max-w-md mb-4' : 'w-full max-w-md mt-4'}>
-          <button
-            type="button"
-            onClick={() => setShowTransactionDetails(true)}
-            className="w-full mb-4 group flex items-center gap-3.5 p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/30 hover:border-amber-400/60 shadow-lg shadow-amber-950/20 transition-all"
-          >
-            <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
-              <Receipt className="w-5 h-5 text-amber-400" />
-            </div>
-            <div className="flex-1 text-left">
-              <div className="text-sm font-bold text-slate-100">Transaction Details</div>
-              <div className="text-[11px] text-slate-400">History of commissions paid</div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
-          </button>
+      <div className={`flex-1 flex flex-col p-4 sm:p-6 ${selectedSchool ? '' : 'items-center justify-center'}`}>
+        {!selectedSchool && (
+          <div className="w-full max-w-lg">
+            <div className="relative rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 shadow-2xl shadow-black/40 p-8 space-y-6 overflow-hidden">
+              {/* Subtle premium glow accents */}
+              <div className="pointer-events-none absolute -top-24 -right-24 w-56 h-56 rounded-full bg-amber-500/10 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-24 -left-24 w-56 h-56 rounded-full bg-sky-500/10 blur-3xl" />
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-              <Building2 className="w-4 h-4 text-amber-400" />
-              <span>Which school do you want to select?</span>
-            </label>
-            <div className="relative" ref={schoolDropdownRef}>
+              <div className="relative text-center space-y-1.5">
+                <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
+                  <Building2 className="w-6 h-6 text-amber-400" />
+                </div>
+                <h2 className="text-lg font-bold text-slate-100">Which school do you want to select?</h2>
+                <p className="text-xs text-slate-500">Search or browse the full registry below</p>
+              </div>
+
+              <div className="relative" ref={schoolDropdownRef}>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={schoolSearch}
+                    onChange={(e) => {
+                      setSchoolSearch(e.target.value);
+                      setSelectedSchoolId('');
+                      setShowSchoolDropdown(true);
+                    }}
+                    onFocus={() => setShowSchoolDropdown(true)}
+                    disabled={loadingSchools}
+                    placeholder={loadingSchools ? 'Loading schools…' : `Search a school... (${schools.length})`}
+                    className="w-full pl-4 pr-9 py-3 rounded-xl bg-slate-800/80 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                  />
+                  {/* Explicit toggle so the full list can be browsed with one
+                      click, not just found by typing. */}
+                  <button
+                    type="button"
+                    disabled={loadingSchools}
+                    onClick={() => setShowSchoolDropdown((prev) => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-200 disabled:opacity-50"
+                    title="Show all schools"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showSchoolDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {showSchoolDropdown && !loadingSchools && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 max-h-64 overflow-y-auto divide-y divide-slate-700/60 text-xs">
+                    {filteredSchools.length > 0 ? (
+                      filteredSchools.map((s) => (
+                        <button
+                          key={s.schoolId}
+                          type="button"
+                          onClick={() => handlePickSchool(s)}
+                          className="w-full text-left px-3.5 py-2.5 hover:bg-slate-700/60 transition-colors"
+                        >
+                          <div className="font-semibold text-slate-100">{s.schoolName}</div>
+                          {s.state && <div className="text-[11px] text-slate-500">{s.state}</div>}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-3 text-slate-500 text-center">No school found.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="relative flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-800" />
+                <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider">or</span>
+                <div className="flex-1 h-px bg-slate-800" />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTransactionDetails(true)}
+                className="relative w-full group flex items-center gap-3.5 p-4 rounded-xl bg-slate-800/60 border border-slate-700 hover:border-amber-500/50 hover:bg-slate-800 transition-all"
+              >
+                <div className="w-10 h-10 rounded-lg bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+                  <Receipt className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex-1 text-left">
+                  <div className="text-sm font-bold text-slate-100">Transaction Details</div>
+                  <div className="text-[11px] text-slate-400">History of commissions paid</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedSchool && (
+          <>
+            {/* Compact school switcher - the full premium picker only
+                shows on the landing state above, but switching schools
+                without going Back needs to stay possible. */}
+            <div className="w-full max-w-md mb-4 relative" ref={schoolDropdownRef}>
               <div className="relative">
                 <input
                   type="text"
@@ -151,24 +223,19 @@ export const CBPage: React.FC<CBPageProps> = ({
                     setShowSchoolDropdown(true);
                   }}
                   onFocus={() => setShowSchoolDropdown(true)}
-                  disabled={loadingSchools}
-                  placeholder={loadingSchools ? 'Loading schools…' : `Search a school... (${schools.length})`}
-                  className="w-full pl-3 pr-8 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50"
+                  placeholder={`Search a school... (${schools.length})`}
+                  className="w-full pl-3 pr-8 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
-                {/* Explicit toggle so the full list can be browsed with one
-                    click, not just found by typing. */}
                 <button
                   type="button"
-                  disabled={loadingSchools}
                   onClick={() => setShowSchoolDropdown((prev) => !prev)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-200 disabled:opacity-50"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-200"
                   title="Show all schools"
                 >
                   <ChevronDown className={`w-4 h-4 transition-transform ${showSchoolDropdown ? 'rotate-180' : ''}`} />
                 </button>
               </div>
-
-              {showSchoolDropdown && !loadingSchools && (
+              {showSchoolDropdown && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 max-h-64 overflow-y-auto divide-y divide-slate-700/60 text-xs">
                   {filteredSchools.length > 0 ? (
                     filteredSchools.map((s) => (
@@ -188,11 +255,8 @@ export const CBPage: React.FC<CBPageProps> = ({
                 </div>
               )}
             </div>
-          </div>
-        </div>
 
-        {selectedSchool && (
-          <div className="w-full flex-1 min-h-0 bg-slate-100 rounded-xl p-2.5 sm:p-4 -mx-1">
+            <div className="w-full flex-1 min-h-0 bg-slate-100 rounded-xl p-2.5 sm:p-4 -mx-1">
             <OrderList
               orders={schoolOrders}
               currentUser={currentUser}
@@ -207,7 +271,8 @@ export const CBPage: React.FC<CBPageProps> = ({
                 onClick: (selectedOrderIds) => setCommissionOrderIds(selectedOrderIds)
               }}
             />
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
