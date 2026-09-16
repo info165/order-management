@@ -304,6 +304,14 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                           const next = e.target.value;
                           if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
                             setManualAmountInput(next);
+                            // Keep Commission % in sync with whatever amount
+                            // is actually being paid, instead of leaving it
+                            // showing a % that no longer matches.
+                            const parsedAmount = parseFloat(next);
+                            if (!isNaN(parsedAmount) && calculatedAmount > 0) {
+                              const impliedPercent = (parsedAmount / calculatedAmount) * 100;
+                              setCommissionPercentInput(String(Math.round(impliedPercent * 100000) / 100000));
+                            }
                           }
                         }}
                         onKeyDown={(e) => {
