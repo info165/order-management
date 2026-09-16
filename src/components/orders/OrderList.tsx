@@ -17,7 +17,8 @@ import {
   Columns,
   UserCheck,
   Check,
-  CheckCheck
+  CheckCheck,
+  IndianRupee
 } from 'lucide-react';
 import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile, Agent } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -25,7 +26,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExportService';
-import { clearAllOrders, getAgents, bulkUpdateOrderAgent } from '../../services/dataService';
+import { clearAllOrders, getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
 
@@ -141,6 +142,21 @@ export const OrderList: React.FC<OrderListProps> = ({
 
   React.useEffect(() => {
     getAgents().then(setAgentsList).catch(console.error);
+  }, []);
+
+  // Which orders have a recorded commission payment (from the hidden /cb
+  // page's "Mark as Paid"), so the master list can show it at a glance - a
+  // single commissionPayments record can cover more than one order at once,
+  // hence flattening every record's orderIds into one lookup set rather
+  // than assuming a 1:1 relationship.
+  const [commissionPaidOrderIds, setCommissionPaidOrderIds] = useState<Set<string>>(new Set());
+  React.useEffect(() => {
+    const unsubscribe = subscribeToRealtimeCommissionPayments((payments) => {
+      const ids = new Set<string>();
+      payments.forEach(p => p.orderIds.forEach(oid => ids.add(oid)));
+      setCommissionPaidOrderIds(ids);
+    });
+    return unsubscribe;
   }, []);
 
   const handleApplyBulkAgent = async () => {
@@ -828,6 +844,11 @@ export const OrderList: React.FC<OrderListProps> = ({
                 <Check className="w-2.5 h-2.5" strokeWidth={3} />
               </span>
               <span>GeM Portal Invoice Uploaded</span>
+              <span className="text-slate-300">•</span>
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-200 shrink-0">
+                <IndianRupee className="w-2.5 h-2.5" strokeWidth={3} />
+              </span>
+              <span>Commission Paid</span>
             </div>
           </div>
 
@@ -1552,6 +1573,14 @@ export const OrderList: React.FC<OrderListProps> = ({
                                 className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0"
                               >
                                 <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                              </span>
+                            )}
+                            {commissionPaidOrderIds.has(order.orderId) && (
+                              <span
+                                title="Commission Paid"
+                                className="flex items-center justify-center w-4 h-4 rounded-full bg-violet-50 text-violet-600 ring-1 ring-violet-200 shrink-0"
+                              >
+                                <IndianRupee className="w-2.5 h-2.5" strokeWidth={3} />
                               </span>
                             )}
                           </div>
