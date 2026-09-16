@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ImageOff, X, Trash2, Plus } from 'lucide-react';
-import { CommissionPayment, UserProfile } from '../../types';
+import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ChevronRight, ImageOff, X, Trash2, Plus, PackageSearch } from 'lucide-react';
+import { CommissionPayment, Order, UserProfile } from '../../types';
 import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
+import { getDisplaySerialNo } from '../../utils/orderDisplay';
+import { StatusBadge } from '../common/StatusBadge';
 
 interface TransactionDetailsPageProps {
   currentUser: UserProfile;
+  orders: Order[];
   onBack: () => void;
   onAddPayment: () => void;
 }
@@ -35,7 +38,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // by the same commissionPayments records "Mark as Paid" writes there, live
 // via subscribeToRealtimeCommissionPayments so a payment appears here the
 // moment it's recorded, with no refresh needed.
-export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, onBack, onAddPayment }) => {
+export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, orders, onBack, onAddPayment }) => {
   const [payments, setPayments] = useState<CommissionPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
@@ -43,6 +46,9 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   const [previewScreenshot, setPreviewScreenshot] = useState<{ url: string; fileName?: string; paymentId: string } | null>(null);
   const [deletingScreenshotId, setDeletingScreenshotId] = useState<string | null>(null);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  // Which payment row's linked orders are currently expanded - one at a
+  // time, toggled by clicking the row itself.
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
 
   const handleDeleteScreenshot = async (paymentId: string) => {
     if (!window.confirm('Delete this payment screenshot? This cannot be undone.')) return;
@@ -102,7 +108,10 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
       <div className="relative group w-10 h-10 shrink-0">
         <button
           type="button"
-          onClick={() => setPreviewScreenshot({ url: p.screenshotDataUrl!, fileName: p.screenshotFileName, paymentId: p.commissionPaymentId })}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewScreenshot({ url: p.screenshotDataUrl!, fileName: p.screenshotFileName, paymentId: p.commissionPaymentId });
+          }}
           className="block w-10 h-10 rounded-lg overflow-hidden border border-slate-700 hover:border-amber-500/60 transition-colors"
           title="View payment screenshot"
         >
@@ -126,6 +135,62 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
         <ImageOff className="w-4 h-4" />
       </span>
     );
+
+  // The orders a payment actually covers, in their real registry-wide SL.
+  // NO. order (same numbering the master Orders list shows), not just the
+  // order in which orderIds happens to be stored.
+  const renderOrdersPanel = (p: CommissionPayment, colSpan: number) => {
+    if (expandedPaymentId !== p.commissionPaymentId) return null;
+    const linkedOrders = p.orderIds
+      .map(oid => orders.find(o => o.orderId === oid))
+      .filter((o): o is Order => !!o)
+      .sort((a, b) => (getDisplaySerialNo(a, orders) ?? 0) - (getDisplaySerialNo(b, orders) ?? 0));
+
+    return (
+      <tr className="bg-slate-950/60">
+        <td colSpan={colSpan} className="px-4 py-4">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden">
+            <div className="px-3.5 py-2 border-b border-slate-800 flex items-center gap-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+              <PackageSearch className="w-3.5 h-3.5 text-amber-400" />
+              <span>Orders covered by this payment ({linkedOrders.length})</span>
+            </div>
+            {linkedOrders.length === 0 ? (
+              <p className="px-3.5 py-3 text-[11px] text-slate-500">No matching orders found (they may have been deleted since).</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-800/50 text-slate-500 uppercase tracking-wide">
+                      <th className="px-3.5 py-2 w-14">SL. NO.</th>
+                      <th className="px-3.5 py-2">Contract #</th>
+                      <th className="px-3.5 py-2">Category</th>
+                      <th className="px-3.5 py-2">Value (₹)</th>
+                      <th className="px-3.5 py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/70">
+                    {linkedOrders.map(o => (
+                      <tr key={o.orderId}>
+                        <td className="px-3.5 py-2 font-mono font-bold text-amber-400">{getDisplaySerialNo(o, orders) ?? '—'}</td>
+                        <td className="px-3.5 py-2 text-slate-300 font-mono">{o.contractNumber || o.purchaseOrderNumber || o.orderNumber}</td>
+                        <td className="px-3.5 py-2 text-slate-300">{o.category}</td>
+                        <td className="px-3.5 py-2">
+                          <CurrencyFormatter amount={o.orderValue} className="text-slate-200 font-semibold" />
+                        </td>
+                        <td className="px-3.5 py-2">
+                          <StatusBadge status={o.status} type="order" compact />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -234,6 +299,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-800/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                      <th className="px-4 py-3 w-8"></th>
                       <th className="px-4 py-3 w-12">#</th>
                       <th className="px-4 py-3">School Name</th>
                       <th className="px-4 py-3">Amount</th>
@@ -245,7 +311,14 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
                     {payments.map((p, idx) => (
-                      <tr key={p.commissionPaymentId} className="hover:bg-slate-800/40 transition-colors">
+                      <React.Fragment key={p.commissionPaymentId}>
+                      <tr
+                        onClick={() => setExpandedPaymentId(prev => prev === p.commissionPaymentId ? null : p.commissionPaymentId)}
+                        className="hover:bg-slate-800/40 transition-colors cursor-pointer"
+                      >
+                        <td className="px-4 py-3 align-middle text-slate-500">
+                          {expandedPaymentId === p.commissionPaymentId ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        </td>
                         <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
                         <td className="px-4 py-3 align-middle">
                           <div className="flex items-center gap-3">
@@ -278,6 +351,8 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           {renderScreenshotCell(p)}
                         </td>
                       </tr>
+                      {renderOrdersPanel(p, 8)}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -322,6 +397,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="bg-slate-800/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+                          <th className="px-4 py-2.5 w-8"></th>
                           <th className="px-4 py-2.5 w-12">#</th>
                           <th className="px-4 py-2.5">School Name</th>
                           <th className="px-4 py-2.5">Amount</th>
@@ -333,7 +409,14 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       </thead>
                       <tbody className="divide-y divide-slate-800/80">
                         {selectedGroup.payments.map((p, idx) => (
-                          <tr key={p.commissionPaymentId} className="hover:bg-slate-800/40 transition-colors">
+                          <React.Fragment key={p.commissionPaymentId}>
+                          <tr
+                            onClick={() => setExpandedPaymentId(prev => prev === p.commissionPaymentId ? null : p.commissionPaymentId)}
+                            className="hover:bg-slate-800/40 transition-colors cursor-pointer"
+                          >
+                            <td className="px-4 py-3 align-middle text-slate-500">
+                              {expandedPaymentId === p.commissionPaymentId ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            </td>
                             <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
                             <td className="px-4 py-3 align-middle font-semibold text-slate-100">{p.schoolName}</td>
                             <td className="px-4 py-3 align-middle">
@@ -354,6 +437,8 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                               {renderScreenshotCell(p)}
                             </td>
                           </tr>
+                          {renderOrdersPanel(p, 8)}
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>

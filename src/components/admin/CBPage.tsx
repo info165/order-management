@@ -50,6 +50,7 @@ export const CBPage: React.FC<CBPageProps> = ({
     return (
       <TransactionDetailsPage
         currentUser={currentUser}
+        orders={orders}
         onBack={onBack}
         onAddPayment={() => setShowTransactionDetails(false)}
       />
