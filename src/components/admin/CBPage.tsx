@@ -270,6 +270,7 @@ export const CBPage: React.FC<CBPageProps> = ({
                 label: 'Commission Calculation',
                 onClick: (selectedOrderIds) => setCommissionOrderIds(selectedOrderIds)
               }}
+              showCommissionPaidBadge
             />
             </div>
           </>

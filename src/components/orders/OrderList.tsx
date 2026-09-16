@@ -73,6 +73,11 @@ interface OrderListProps {
   // button to the existing bulk-selection bar, without every other OrderList
   // usage in the app needing to know about it - omitted, nothing changes.
   extraBulkAction?: { label: string; onClick: (selectedOrderIds: string[]) => void };
+  // The "CB" commission-paid badge is only relevant on the hidden /cb page's
+  // order list, not the main Orders/Dispatches/Payments/Followups views -
+  // opt-in only, so it stays invisible (and doesn't even subscribe to
+  // commissionPayments) everywhere else.
+  showCommissionPaidBadge?: boolean;
 }
 
 export const OrderList: React.FC<OrderListProps> = ({
@@ -85,7 +90,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   onBatchStatusUpdate,
   onOrdersUpdated,
   initialFilterCategory,
-  extraBulkAction
+  extraBulkAction,
+  showCommissionPaidBadge
 }) => {
   const isAgent = currentUser.role === 'AGENT';
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
@@ -144,19 +150,21 @@ export const OrderList: React.FC<OrderListProps> = ({
   }, []);
 
   // Which orders have a recorded commission payment (from the hidden /cb
-  // page's "Mark as Paid"), so the master list can show it at a glance - a
-  // single commissionPayments record can cover more than one order at once,
-  // hence flattening every record's orderIds into one lookup set rather
-  // than assuming a 1:1 relationship.
+  // page's "Mark as Paid") - only relevant, and only subscribed to, when
+  // this instance opted into showCommissionPaidBadge. A single
+  // commissionPayments record can cover more than one order at once, hence
+  // flattening every record's orderIds into one lookup set rather than
+  // assuming a 1:1 relationship.
   const [commissionPaidOrderIds, setCommissionPaidOrderIds] = useState<Set<string>>(new Set());
   React.useEffect(() => {
+    if (!showCommissionPaidBadge) return;
     const unsubscribe = subscribeToRealtimeCommissionPayments((payments) => {
       const ids = new Set<string>();
       payments.forEach(p => p.orderIds.forEach(oid => ids.add(oid)));
       setCommissionPaidOrderIds(ids);
     });
     return unsubscribe;
-  }, []);
+  }, [showCommissionPaidBadge]);
 
   const handleApplyBulkAgent = async () => {
     if (!bulkSelectedAgentId || selectedOrderIds.length === 0) return;
@@ -843,11 +851,15 @@ export const OrderList: React.FC<OrderListProps> = ({
                 <Check className="w-2.5 h-2.5" strokeWidth={3} />
               </span>
               <span>GeM Portal Invoice Uploaded</span>
-              <span className="text-slate-300">•</span>
-              <span className="flex items-center justify-center h-4 min-w-[1.15rem] px-1 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white text-[9px] font-black tracking-tight shadow-sm ring-1 ring-white/40 shrink-0">
-                CB
-              </span>
-              <span>Commission Paid</span>
+              {showCommissionPaidBadge && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="flex items-center justify-center h-4 min-w-[1.15rem] px-1 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white text-[9px] font-black tracking-tight shadow-sm ring-1 ring-white/40 shrink-0">
+                    CB
+                  </span>
+                  <span>Commission Paid</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -1574,7 +1586,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                                 <Check className="w-2.5 h-2.5" strokeWidth={3} />
                               </span>
                             )}
-                            {commissionPaidOrderIds.has(order.orderId) && (
+                            {showCommissionPaidBadge && commissionPaidOrderIds.has(order.orderId) && (
                               <span
                                 title="Commission Paid"
                                 className="flex items-center justify-center h-4 min-w-[1.15rem] px-1 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white text-[9px] font-black tracking-tight shadow-sm ring-1 ring-white/40 shrink-0"
