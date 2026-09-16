@@ -2329,17 +2329,24 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
     console.warn(`Firestore sync note for school ${schoolId}:`, err);
   }
 
-  // Editing phone/address here (School Registry page) previously never
+  // Editing contact details here (School Registry page) previously never
   // touched any order - so opening an order for this school kept showing
   // the old contact details, and the only way to fix that was to edit the
   // order itself. Push the same change to every order linked to this
   // school (matching the reverse sync already done from the order side in
   // updateOrderSchoolDetails), so both places stay in sync either way.
+  // Originally only covered phone/address - email and pincode had the exact
+  // same gap (an order's own schoolEmail/schoolPincode never got the
+  // school's real value once it was later added/edited in the registry).
   const phoneChanged = updates.contactPhone !== undefined || updates.phone !== undefined;
   const addressChanged = updates.address !== undefined;
-  if (phoneChanged || addressChanged) {
+  const emailChanged = updates.email !== undefined;
+  const pincodeChanged = updates.pinCode !== undefined;
+  if (phoneChanged || addressChanged || emailChanged || pincodeChanged) {
     const newPhone = updates.contactPhone ?? updates.phone ?? '';
     const newAddress = updates.address ?? '';
+    const newEmail = updates.email ?? '';
+    const newPincode = updates.pinCode ?? '';
     // Query Firestore directly for every order actually linked to this
     // school, rather than trusting this browser's local memoryOrders cache -
     // which can be stale or incomplete (e.g. loaded before some order was
@@ -2362,6 +2369,8 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
           ...o,
           schoolContactPhone: phoneChanged ? newPhone : o.schoolContactPhone,
           schoolAddress: addressChanged ? newAddress : o.schoolAddress,
+          schoolEmail: emailChanged ? newEmail : o.schoolEmail,
+          schoolPincode: pincodeChanged ? newPincode : o.schoolPincode,
           updatedAt: now
         };
       }
@@ -2374,6 +2383,8 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
       const linkedOrderFirestoreUpdates: Partial<Order> = {
         ...(phoneChanged ? { schoolContactPhone: newPhone } : {}),
         ...(addressChanged ? { schoolAddress: newAddress } : {}),
+        ...(emailChanged ? { schoolEmail: newEmail } : {}),
+        ...(pincodeChanged ? { schoolPincode: newPincode } : {}),
         updatedAt: now
       };
       await Promise.all(
