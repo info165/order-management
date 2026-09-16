@@ -106,7 +106,7 @@ service cloud.firestore {
       );
       allow create, delete: if isAdminOrOps();
       allow update: if isAdminOrOps() ||
-        (isAccounts() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'amountReceived', 'amountPending', 'lastPaymentDate', 'expectedPaymentDate', 'invoiceNumber', 'invoiceDate', 'status', 'updatedAt', 'updatedBy'])) ||
+        (isAccounts() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'amountReceived', 'amountPending', 'lastPaymentDate', 'expectedPaymentDate', 'invoiceNumber', 'invoiceDate', 'updatedAt', 'updatedBy'])) ||
         (isDispatch() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dispatchStatus', 'deliveryStatus', 'expectedDispatchDate', 'expectedDeliveryDate', 'status', 'actualDeliveryDate', 'courierName', 'docketNumber', 'dispatchDate', 'numberOfBoxes', 'updatedAt', 'updatedBy']));
     }
 
