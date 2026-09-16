@@ -25,6 +25,8 @@ interface SchoolGroup {
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 // Reached only from the CB page's "Transaction Details" link - a history of
 // commissions paid across every school/partner, not scoped to any one
 // school's selection (that's what CommissionCalculationPage is for). Backed
@@ -112,7 +114,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
               </div>
               <div className="min-w-0">
                 <div className="text-[11px] text-slate-500 uppercase tracking-wide">Total Paid</div>
-                <CurrencyFormatter amount={totalPaid} showDecimals className="text-lg font-bold text-slate-100" />
+                <CurrencyFormatter amount={round2(totalPaid)} showDecimals className="text-lg font-bold text-slate-100" />
               </div>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
@@ -200,7 +202,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           </div>
                         </td>
                         <td className="px-4 py-3 align-middle">
-                          <CurrencyFormatter amount={p.commissionAmount} showDecimals className="text-emerald-400 font-bold" />
+                          <CurrencyFormatter amount={round2(p.commissionAmount)} showDecimals className="text-emerald-400 font-bold" />
                         </td>
                         <td className="px-4 py-3 align-middle">
                           <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
@@ -248,7 +250,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-[10px] text-slate-500 uppercase tracking-wide">Total Paid</div>
-                      <CurrencyFormatter amount={selectedGroup.totalPaid} showDecimals className="text-base font-bold text-emerald-400" />
+                      <CurrencyFormatter amount={round2(selectedGroup.totalPaid)} showDecimals className="text-base font-bold text-emerald-400" />
                     </div>
                   </div>
                   <div className="overflow-x-auto">
@@ -268,7 +270,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                             <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
                             <td className="px-4 py-3 align-middle font-semibold text-slate-100">{p.schoolName}</td>
                             <td className="px-4 py-3 align-middle">
-                              <CurrencyFormatter amount={p.commissionAmount} showDecimals className="text-emerald-400 font-bold" />
+                              <CurrencyFormatter amount={round2(p.commissionAmount)} showDecimals className="text-emerald-400 font-bold" />
                             </td>
                             <td className="px-4 py-3 align-middle">
                               <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
