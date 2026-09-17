@@ -15,11 +15,11 @@ import {
   CreditCard,
   PhoneCall,
   FileEdit,
-  GraduationCap,
   Shield,
   Lock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import funscholarLogo from '../../assets/funscholar-logo.png';
 
 const ROLE_DISPLAY_LABELS: Record<string, string> = {
   AGENT: 'PARTNER'
@@ -92,12 +92,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
             title="Funscholar Order Management - Go to Dashboard"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-amber-400 flex items-center justify-center text-slate-950 font-black shadow-xs">
-              <GraduationCap className="w-5 h-5 text-slate-950" />
-            </div>
+            <img src={funscholarLogo} alt="Funscholar" className="h-7 w-auto" />
             <div>
-              <div className="font-extrabold text-sm sm:text-base leading-none tracking-tight text-white flex items-center gap-2">
-                <span>Funscholar Order Management</span>
+              <div className="font-bold text-[10px] sm:text-[11px] leading-none tracking-[0.15em] uppercase text-slate-400">
+                Order Management
               </div>
             </div>
           </button>
