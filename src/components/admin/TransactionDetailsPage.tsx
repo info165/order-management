@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ChevronRight, ImageOff, X, Trash2, Plus, PackageSearch } from 'lucide-react';
-import { CommissionPayment, Order, PaymentStatus, UserProfile } from '../../types';
+import { CommissionPayment, Order, UserProfile } from '../../types';
 import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
@@ -135,25 +135,6 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
         <ImageOff className="w-4 h-4" />
       </span>
     );
-
-  // Whether the SCHOOL has actually paid for the order(s) a commission
-  // payment covers - a completely separate concept from the commission
-  // payment itself (that's money going OUT to the school/agent; this is
-  // money coming IN from the school for the order). Covers every linked
-  // order's own paymentStatus and rolls them up into one badge: all Paid ->
-  // Paid, none Paid/Partially Paid -> Payment Pending, any mix -> Partially
-  // Paid.
-  const getSchoolPaymentStatus = (p: CommissionPayment): PaymentStatus => {
-    const linked = p.orderIds
-      .map(oid => orders.find(o => o.orderId === oid))
-      .filter((o): o is Order => !!o);
-    if (linked.length === 0) return 'PAYMENT_PENDING';
-    if (linked.every(o => o.paymentStatus === 'PAID')) return 'PAID';
-    if (linked.every(o => o.paymentStatus !== 'PAID' && o.paymentStatus !== 'PARTIALLY_PAID')) {
-      return linked[0].paymentStatus;
-    }
-    return 'PARTIALLY_PAID';
-  };
 
   // The orders a payment actually covers, in their real registry-wide SL.
   // NO. order (same numbering the master Orders list shows), not just the
@@ -329,7 +310,6 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       <th className="px-4 py-3">%</th>
                       <th className="px-4 py-3">Mode of Payment</th>
                       <th className="px-4 py-3">Date of Payment</th>
-                      <th className="px-4 py-3">Payment Status</th>
                       <th className="px-4 py-3">Screenshot</th>
                     </tr>
                   </thead>
@@ -372,13 +352,10 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           {formatDate(p.paymentDate)}
                         </td>
                         <td className="px-4 py-3 align-middle">
-                          <StatusBadge status={getSchoolPaymentStatus(p)} type="payment" compact />
-                        </td>
-                        <td className="px-4 py-3 align-middle">
                           {renderScreenshotCell(p)}
                         </td>
                       </tr>
-                      {renderOrdersPanel(p, 9)}
+                      {renderOrdersPanel(p, 8)}
                       </React.Fragment>
                     ))}
                   </tbody>
@@ -431,7 +408,6 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           <th className="px-4 py-2.5">%</th>
                           <th className="px-4 py-2.5">Mode of Payment</th>
                           <th className="px-4 py-2.5">Date of Payment</th>
-                          <th className="px-4 py-2.5">Payment Status</th>
                           <th className="px-4 py-2.5">Screenshot</th>
                         </tr>
                       </thead>
@@ -462,13 +438,10 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                               {formatDate(p.paymentDate)}
                             </td>
                             <td className="px-4 py-3 align-middle">
-                              <StatusBadge status={getSchoolPaymentStatus(p)} type="payment" compact />
-                            </td>
-                            <td className="px-4 py-3 align-middle">
                               {renderScreenshotCell(p)}
                             </td>
                           </tr>
-                          {renderOrdersPanel(p, 9)}
+                          {renderOrdersPanel(p, 8)}
                           </React.Fragment>
                         ))}
                       </tbody>
