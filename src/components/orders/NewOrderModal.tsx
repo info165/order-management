@@ -933,6 +933,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   type="number"
                   required
                   min={1}
+                  step="0.01"
                   value={totalInclusiveOrderValue || ''}
                   onChange={(e) => setTotalInclusiveOrderValue(Number(e.target.value))}
                   placeholder="Enter total gross invoice amount including 18% GST"
