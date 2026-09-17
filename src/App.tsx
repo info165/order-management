@@ -37,6 +37,34 @@ import funscholarLogo from './assets/funscholar-logo.png';
 function MainApp() {
   const { currentUser, isSuperAdmin, isAgent, isDataEntry, isLoggedIn, authLoading } = useAuth();
 
+  // Drives the splash screen's 0-100% progress bar. Firebase's own session
+  // check has no real "progress" to report, so this eases up toward 90%
+  // on its own while authLoading is true (slowing down as it approaches,
+  // so a slow connection never leaves it looking stuck at a false 100%),
+  // then races the rest of the way to 100% once authLoading actually
+  // turns false. splashDone only flips after it visibly reaches 100%, so
+  // the real page never cuts the animation off mid-count.
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [splashDone, setSplashDone] = useState(false);
+  useEffect(() => {
+    if (splashDone) return;
+    const interval = setInterval(() => {
+      setLoadingProgress(prev => {
+        if (!authLoading) {
+          const next = prev + 4;
+          if (next >= 100) {
+            setTimeout(() => setSplashDone(true), 250);
+            return 100;
+          }
+          return next;
+        }
+        if (prev >= 90) return prev;
+        return prev + Math.max(0.5, (90 - prev) * 0.06);
+      });
+    }, 40);
+    return () => clearInterval(interval);
+  }, [authLoading, splashDone]);
+
   // Orders is the default operations workspace
   const [activeSection, setActiveSection] = useState('orders');
 
@@ -280,8 +308,11 @@ function MainApp() {
     }
   };
 
-  // While Firebase authentication is checking/restoring the existing session, do not show the dashboard
-  if (authLoading) {
+  // While Firebase authentication is checking/restoring the existing session
+  // (or the splash's own progress hasn't visibly reached 100% yet), do not
+  // show the dashboard.
+  if (authLoading || !splashDone) {
+    const displayProgress = Math.round(loadingProgress);
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center relative overflow-hidden">
         {/* Soft ambient glow behind the logo - the only departure from flat
@@ -296,10 +327,16 @@ function MainApp() {
             <h2 className="text-lg font-extrabold text-slate-900 tracking-[0.2em] uppercase">Funscholar Orders</h2>
             <p className="text-xs text-slate-400">Verifying authorized session...</p>
           </div>
-          <div className="flex items-center gap-1.5 pt-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-bounce" />
+          <div className="w-56 space-y-2">
+            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600"
+                style={{ width: `${displayProgress}%` }}
+              />
+            </div>
+            <p className="text-center text-[11px] font-bold text-orange-500 tabular-nums tracking-wide">
+              {displayProgress}%
+            </p>
           </div>
         </div>
       </div>
