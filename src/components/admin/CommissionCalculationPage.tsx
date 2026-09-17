@@ -170,8 +170,21 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
       };
       if (existingDraft) {
         // Completing/updating the same draft record - never creates a
-        // second payment for these orders.
-        await updateCommissionPayment(existingDraft.commissionPaymentId, paymentDetailFields, currentUser);
+        // second payment for these orders. If a screenshot was attached on
+        // the original draft and has since been removed here (rather than
+        // just never set), that has to be sent as an explicit null so
+        // updateCommissionPayment deletes the field - leaving it as
+        // undefined would be indistinguishable from "unchanged" and the
+        // old screenshot would keep showing in Transaction Details.
+        const screenshotRemoved = !!existingDraft.screenshotDataUrl && !screenshotDataUrl;
+        await updateCommissionPayment(
+          existingDraft.commissionPaymentId,
+          {
+            ...paymentDetailFields,
+            ...(screenshotRemoved ? { screenshotDataUrl: null, screenshotFileName: null } : {})
+          },
+          currentUser
+        );
       } else {
         await saveCommissionPayment(
           {

@@ -3359,8 +3359,6 @@ export async function updateCommissionPayment(
     | 'commissionPercent'
     | 'paymentMode'
     | 'paymentDate'
-    | 'screenshotDataUrl'
-    | 'screenshotFileName'
     | 'status'
     | 'receivedByName'
     | 'upiId'
@@ -3371,13 +3369,27 @@ export async function updateCommissionPayment(
     | 'neftUtrNumber'
     | 'transactionUtrPfmsRef'
     | 'remarks'
-  >>,
+  >> & {
+    // null (as opposed to undefined/omitted) means "explicitly remove this
+    // field" - e.g. a screenshot that was attached then removed before
+    // saving. syncDocToFirestoreOrThrow's merge-write drops undefined keys
+    // entirely (so it can never clear an existing field, only leave it
+    // untouched), which is exactly why this can't just reuse that helper -
+    // it needs deleteField() instead.
+    screenshotDataUrl?: string | null;
+    screenshotFileName?: string | null;
+  },
   user: UserProfile
 ): Promise<void> {
   if (user.role !== 'SUPER_ADMIN') {
     throw new Error('Only Super Admin can edit a commission payment.');
   }
-  await syncDocToFirestoreOrThrow('commissionPayments', paymentId, updates);
+  const payload: Record<string, any> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined) continue;
+    payload[key] = value === null ? deleteField() : value;
+  }
+  await updateDoc(doc(db, 'commissionPayments', paymentId), payload);
 }
 
 export async function deleteCommissionPaymentScreenshot(paymentId: string, user: UserProfile): Promise<void> {
