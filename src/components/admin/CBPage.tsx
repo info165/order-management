@@ -62,7 +62,7 @@ export const CBPage: React.FC<CBPageProps> = ({
       <div className="p-4 flex items-center justify-between">
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => setShowTransactionDetails(true)}
           className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
