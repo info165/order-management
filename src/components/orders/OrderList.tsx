@@ -25,7 +25,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExportService';
-import { clearAllOrders, getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments } from '../../services/dataService';
+import { clearAllOrders, getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
 
@@ -182,7 +182,9 @@ export const OrderList: React.FC<OrderListProps> = ({
     if (!showCommissionPaidBadge) return;
     const unsubscribe = subscribeToRealtimeCommissionPayments((payments) => {
       const ids = new Set<string>();
-      payments.forEach(p => p.orderIds.forEach(oid => ids.add(oid)));
+      // A DRAFT hasn't actually been paid yet - only a real completed
+      // payment should mark an order with the "CB" badge.
+      payments.filter(isCommissionPaymentPaid).forEach(p => p.orderIds.forEach(oid => ids.add(oid)));
       setCommissionPaidOrderIds(ids);
     });
     return unsubscribe;

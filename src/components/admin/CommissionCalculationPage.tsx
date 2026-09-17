@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw, Save } from 'lucide-react';
 import { Order, UserProfile } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { processFileForUpload } from '../../utils/fileUpload';
@@ -83,20 +83,31 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const [isMarkedPaid, setIsMarkedPaid] = useState(false);
+  const [isSavedAsDraft, setIsSavedAsDraft] = useState(false);
   const [markPaidError, setMarkPaidError] = useState<string | null>(null);
   const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
-  const handleMarkAsPaid = async () => {
-    if (!paymentMode) {
-      setMarkPaidError('Select a Mode of Payment first.');
-      return;
-    }
-    if (!paymentDate) {
-      setMarkPaidError('Enter the Date of Payment first.');
-      return;
+  // Shared by both "Mark as Paid" and "Save as Draft" - a draft skips the
+  // Mode of Payment / Date of Payment requirement (there's genuinely
+  // nothing to enter yet, since payment hasn't happened), and is saved
+  // with status: 'DRAFT' so Total Paid, the order's CB badge, and every
+  // other "money already paid" view knows to exclude it until it's
+  // actually completed later.
+  const handleSubmit = async (status: 'DRAFT' | 'PAID') => {
+    if (status === 'PAID') {
+      if (!paymentMode) {
+        setMarkPaidError('Select a Mode of Payment first.');
+        return;
+      }
+      if (!paymentDate) {
+        setMarkPaidError('Enter the Date of Payment first.');
+        return;
+      }
     }
     setMarkPaidError(null);
-    setIsSavingPayment(true);
+    if (status === 'PAID') setIsSavingPayment(true);
+    else setIsSavingDraft(true);
     try {
       await saveCommissionPayment(
         {
@@ -110,7 +121,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
           calculatedAmount,
           commissionPercent: hasValidPercent ? commissionPercent : 0,
           commissionAmount,
-          paymentMode,
+          paymentMode: paymentMode || undefined,
           receivedByName: paymentMode === 'CASH' ? receivedByName || undefined : undefined,
           upiId: paymentMode === 'UPI' ? upiId || undefined : undefined,
           upiTransactionRef: paymentMode === 'UPI' ? upiTransactionRef || undefined : undefined,
@@ -120,21 +131,26 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
           neftUtrNumber: paymentMode === 'NEFT' ? neftUtrNumber || undefined : undefined,
           transactionUtrPfmsRef: transactionUtrPfmsRef || undefined,
           remarks: paymentRemarks || undefined,
-          paymentDate,
+          paymentDate: paymentDate || undefined,
           screenshotDataUrl: screenshotDataUrl || undefined,
           screenshotFileName: screenshotFileName || undefined,
           createdBy: currentUser.userId,
-          createdByName: currentUser.name
+          createdByName: currentUser.name,
+          status
         },
         currentUser
       );
-      setIsMarkedPaid(true);
+      if (status === 'PAID') setIsMarkedPaid(true);
+      else setIsSavedAsDraft(true);
     } catch (err: any) {
       setMarkPaidError(err.message || 'Could not save this payment.');
     } finally {
       setIsSavingPayment(false);
+      setIsSavingDraft(false);
     }
   };
+  const handleMarkAsPaid = () => handleSubmit('PAID');
+  const handleSaveDraft = () => handleSubmit('DRAFT');
 
   const handleScreenshotSelect = async (file: File) => {
     setIsUploadingScreenshot(true);
@@ -621,23 +637,40 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                 )}
               </div>
 
-              {/* Mark as Paid */}
+              {/* Mark as Paid / Save as Draft */}
               <div className="space-y-2">
                 {isMarkedPaid ? (
                   <div className="flex items-center justify-center gap-2 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-600/40 text-emerald-400 text-xs font-semibold">
                     <CheckCircle2 className="w-4 h-4" />
                     <span>Marked as Paid</span>
                   </div>
+                ) : isSavedAsDraft ? (
+                  <div className="flex items-center justify-center gap-2 py-2.5 rounded-lg bg-slate-700/40 border border-slate-600 text-slate-300 text-xs font-semibold">
+                    <Save className="w-4 h-4" />
+                    <span>Saved as Draft</span>
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleMarkAsPaid}
-                    disabled={isSavingPayment}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-slate-950 font-bold text-sm transition-colors"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{isSavingPayment ? 'Saving…' : 'Mark as Paid'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveDraft}
+                      disabled={isSavingPayment || isSavingDraft}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-60 text-slate-200 font-bold text-sm transition-colors"
+                      title="Save this calculation now, complete Mode/Date of Payment later"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{isSavingDraft ? 'Saving…' : 'Save as Draft'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMarkAsPaid}
+                      disabled={isSavingPayment || isSavingDraft}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-slate-950 font-bold text-sm transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{isSavingPayment ? 'Saving…' : 'Mark as Paid'}</span>
+                    </button>
+                  </div>
                 )}
                 {markPaidError && (
                   <p className="text-[11px] text-rose-400 text-center">{markPaidError}</p>

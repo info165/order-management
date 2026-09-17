@@ -287,7 +287,10 @@ export interface CommissionPayment {
   calculatedAmount: number;
   commissionPercent: number;
   commissionAmount: number;
-  paymentMode: 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
+  // Optional because a DRAFT (see `status` below) is saved before payment
+  // has actually happened, so there's genuinely no mode or date yet -
+  // never defaulted to a placeholder value, which would be misleading.
+  paymentMode?: 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
   receivedByName?: string;
   upiId?: string;
   upiTransactionRef?: string;
@@ -297,12 +300,18 @@ export interface CommissionPayment {
   neftUtrNumber?: string;
   transactionUtrPfmsRef?: string;
   remarks?: string;
-  paymentDate: string;
+  paymentDate?: string;
   screenshotDataUrl?: string;
   screenshotFileName?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+  // Absent (or 'PAID') on every record created before this field existed,
+  // and on every completed "Mark as Paid" - only ever 'DRAFT' for a
+  // calculation saved before payment actually happened. Anything that
+  // counts money already paid (Total Paid, the order's own CB badge) must
+  // treat a DRAFT as not-yet-paid and exclude it.
+  status?: 'DRAFT' | 'PAID';
 }
 
 export interface DispatchRecord {

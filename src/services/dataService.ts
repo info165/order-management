@@ -3320,6 +3320,21 @@ export async function getAuditLogs(): Promise<AuditLog[]> {
 // unlike most of this file there's no local-cache/offline fallback here -
 // it's a small Super-Admin-only feature, not part of the app's main
 // always-available order-management flow.
+
+// Whether a commission payment record represents money actually paid, as
+// opposed to a DRAFT saved before payment happened (Commission
+// Calculation's "Save as Draft"). Every record created before the
+// `status` field existed has no such field at all and is a real
+// completed payment, so a missing field must be treated the same as
+// 'PAID' - never as "not paid", or every payment recorded before this
+// feature existed would suddenly vanish from Total Paid. The single
+// source of truth for this check - anywhere that sums money paid or
+// marks an order as commission-paid must use this, not its own
+// `status === 'PAID'` check, so the two can never quietly diverge.
+export function isCommissionPaymentPaid(p: CommissionPayment): boolean {
+  return p.status !== 'DRAFT';
+}
+
 export async function saveCommissionPayment(
   payment: Omit<CommissionPayment, 'commissionPaymentId' | 'createdAt'>,
   user: UserProfile
@@ -3339,7 +3354,7 @@ export async function saveCommissionPayment(
 
 export async function updateCommissionPayment(
   paymentId: string,
-  updates: Partial<Pick<CommissionPayment, 'commissionAmount' | 'commissionPercent' | 'paymentMode' | 'paymentDate' | 'screenshotDataUrl' | 'screenshotFileName'>>,
+  updates: Partial<Pick<CommissionPayment, 'commissionAmount' | 'commissionPercent' | 'paymentMode' | 'paymentDate' | 'screenshotDataUrl' | 'screenshotFileName' | 'status'>>,
   user: UserProfile
 ): Promise<void> {
   if (user.role !== 'SUPER_ADMIN') {

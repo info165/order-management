@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ChevronRight, ImageOff, X, Trash2, Plus, PackageSearch, Pencil, UploadCloud } from 'lucide-react';
 import { CommissionPayment, Order, UserProfile } from '../../types';
-import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot, updateCommissionPayment } from '../../services/dataService';
+import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot, updateCommissionPayment, isCommissionPaymentPaid } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { StatusBadge } from '../common/StatusBadge';
@@ -30,8 +30,8 @@ interface SchoolGroup {
   totalPaid: number;
 }
 
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+const formatDate = (iso?: string) =>
+  iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -70,8 +70,8 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
     setEditingPayment(p);
     setEditAmount(String(p.commissionAmount));
     setEditPercent(String(p.commissionPercent));
-    setEditMode(p.paymentMode);
-    setEditDate(p.paymentDate);
+    setEditMode(p.paymentMode || 'CASH');
+    setEditDate(p.paymentDate || '');
     setEditScreenshotDataUrl(p.screenshotDataUrl || '');
     setEditScreenshotFileName(p.screenshotFileName || '');
     setEditError(null);
@@ -117,6 +117,11 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
           commissionPercent: parsedPercent,
           paymentMode: editMode,
           paymentDate: editDate,
+          // This form always requires Mode + Date (validated above), which
+          // is exactly what distinguishes a completed payment from a
+          // draft - so saving here also completes a draft into a real
+          // paid record. A no-op if it was already PAID.
+          status: 'PAID',
           // Only sent when a new file was actually picked - leaves an
           // existing screenshot untouched otherwise. Removing one
           // entirely is still the dedicated Delete action on the
@@ -157,26 +162,44 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
     return unsubscribe;
   }, []);
 
-  const totalPaid = payments.reduce((sum, p) => sum + (p.commissionAmount || 0), 0);
+  // A DRAFT is a calculation saved before payment actually happened (see
+  // Commission Calculation's "Save as Draft") - it still shows as a row so
+  // the school/order it's for isn't lost track of, but must never count
+  // toward money actually paid. isCommissionPaymentPaid() is the one place
+  // that decides "paid or not" so every stat below agrees with it.
+  const paidPayments = useMemo(() => payments.filter(isCommissionPaymentPaid), [payments]);
+  const totalPaid = paidPayments.reduce((sum, p) => sum + (p.commissionAmount || 0), 0);
 
+  // Groups every payment (paid or draft) under its school, so a draft still
+  // shows up when browsing that school's history - but each group's own
+  // totalPaid only sums the real ones, same rule as above.
   const schoolGroups: SchoolGroup[] = useMemo(() => {
     const map = new Map<string, SchoolGroup>();
     payments.forEach((p) => {
       const existing = map.get(p.schoolId);
+      const paidAmount = isCommissionPaymentPaid(p) ? (p.commissionAmount || 0) : 0;
       if (existing) {
         existing.payments.push(p);
-        existing.totalPaid += p.commissionAmount || 0;
+        existing.totalPaid += paidAmount;
       } else {
         map.set(p.schoolId, {
           schoolId: p.schoolId,
           schoolName: p.schoolName,
           payments: [p],
-          totalPaid: p.commissionAmount || 0
+          totalPaid: paidAmount
         });
       }
     });
     return Array.from(map.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName));
   }, [payments]);
+
+  // Schools Paid should only count a school once it has at least one real
+  // payment - a school with nothing but a draft hasn't actually been paid
+  // yet, even though it already has an entry in schoolGroups above.
+  const schoolsPaidCount = useMemo(
+    () => new Set(paidPayments.map(p => p.schoolId)).size,
+    [paidPayments]
+  );
 
   // Default to the first school once data arrives, so the tab shows
   // something immediately instead of an empty picker.
@@ -187,6 +210,20 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   }, [schoolGroups, selectedSchoolId]);
 
   const selectedGroup = schoolGroups.find(g => g.schoolId === selectedSchoolId) || null;
+
+  // A draft has no real Mode of Payment yet - shown as "Unpaid" rather than
+  // trying to render a blank/undefined pill, per isCommissionPaymentPaid()
+  // being the single source of truth for what counts as actually paid.
+  const renderModeOfPaymentCell = (p: CommissionPayment) =>
+    isCommissionPaymentPaid(p) ? (
+      <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
+        {(p.paymentMode && PAYMENT_MODE_LABELS[p.paymentMode]) || p.paymentMode || '—'}
+      </span>
+    ) : (
+      <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/40 text-[11px] font-bold text-amber-400 whitespace-nowrap uppercase tracking-wide">
+        Unpaid
+      </span>
+    );
 
   const renderScreenshotCell = (p: CommissionPayment) =>
     p.screenshotDataUrl ? (
@@ -312,12 +349,18 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
             <div>
               <h1 className="text-lg font-bold text-slate-100">Transaction Details of Commissions Paid</h1>
               <p className="text-xs text-slate-500">
-                {loading ? 'Loading…' : `${payments.length} payment${payments.length === 1 ? '' : 's'} recorded`}
+                {loading
+                  ? 'Loading…'
+                  : `${paidPayments.length} payment${paidPayments.length === 1 ? '' : 's'} recorded${
+                      payments.length > paidPayments.length ? ` · ${payments.length - paidPayments.length} draft${payments.length - paidPayments.length === 1 ? '' : 's'} pending` : ''
+                    }`}
               </p>
             </div>
           </div>
 
-          {/* Summary stat cards */}
+          {/* Summary stat cards - Total Paid / Payments Recorded / Schools
+              Paid all count only genuinely completed payments; a draft
+              still shows up in the tables below but never inflates these. */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
               <div className="w-10 h-10 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0">
@@ -334,7 +377,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
               </div>
               <div className="min-w-0">
                 <div className="text-[11px] text-slate-500 uppercase tracking-wide">Payments Recorded</div>
-                <div className="text-lg font-bold text-slate-100">{payments.length}</div>
+                <div className="text-lg font-bold text-slate-100">{paidPayments.length}</div>
               </div>
             </div>
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-3.5">
@@ -343,7 +386,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
               </div>
               <div className="min-w-0">
                 <div className="text-[11px] text-slate-500 uppercase tracking-wide">Schools Paid</div>
-                <div className="text-lg font-bold text-slate-100">{schoolGroups.length}</div>
+                <div className="text-lg font-bold text-slate-100">{schoolsPaidCount}</div>
               </div>
             </div>
           </div>
@@ -430,9 +473,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           {p.commissionPercent}%
                         </td>
                         <td className="px-4 py-3 align-middle">
-                          <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
-                            {PAYMENT_MODE_LABELS[p.paymentMode] || p.paymentMode}
-                          </span>
+                          {renderModeOfPaymentCell(p)}
                         </td>
                         <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
                           {formatDate(p.paymentDate)}
@@ -530,9 +571,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                               {p.commissionPercent}%
                             </td>
                             <td className="px-4 py-3 align-middle">
-                              <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-300 whitespace-nowrap">
-                                {PAYMENT_MODE_LABELS[p.paymentMode] || p.paymentMode}
-                              </span>
+                              {renderModeOfPaymentCell(p)}
                             </td>
                             <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
                               {formatDate(p.paymentDate)}
@@ -617,8 +656,18 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
               <div>
-                <p className="text-sm font-bold text-slate-100">Edit Payment</p>
-                <p className="text-[11px] text-slate-500 truncate">{editingPayment.schoolName}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-slate-100">Edit Payment</p>
+                  {!isCommissionPaymentPaid(editingPayment) && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/40 text-amber-400 text-[9px] font-bold uppercase tracking-wide">
+                      Draft
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 truncate">
+                  {editingPayment.schoolName}
+                  {!isCommissionPaymentPaid(editingPayment) && ' · saving will mark this as Paid'}
+                </p>
               </div>
               <button
                 type="button"
