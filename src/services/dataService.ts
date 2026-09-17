@@ -1292,6 +1292,86 @@ export async function updateOrderSchoolDetails(
 }
 
 // ----------------------------------------------------
+// RELINK AN ORDER TO A DIFFERENT (EXISTING) SCHOOL
+// ----------------------------------------------------
+// Deliberately separate from updateOrderSchoolDetails() above: that function
+// treats any edit as "correct this school's own contact details", and
+// propagates it to the school's master record plus every other order
+// sharing its schoolId - exactly right for fixing a typo, but wrong for
+// moving one mis-linked order onto a different school (it would rename the
+// newly-picked school to match, and/or drag its other orders' names along
+// too). This only ever touches the one order being edited: its schoolId and
+// denormalized copy of that school's details, nothing else.
+export async function relinkOrderToSchool(
+  orderId: string,
+  newSchoolId: string,
+  user: UserProfile
+): Promise<Order> {
+  if (user.role === 'AGENT') {
+    throw new Error('Unauthorized: Field agents cannot relink an order to a different school.');
+  }
+
+  const orderIdx = memoryOrders.findIndex(o => o.orderId === orderId);
+  if (orderIdx === -1) {
+    throw new Error(`Order ${orderId} not found`);
+  }
+  const targetSchool = memorySchools.find(s => s.schoolId === newSchoolId);
+  if (!targetSchool) {
+    throw new Error(`School ${newSchoolId} not found`);
+  }
+
+  const targetOrder = memoryOrders[orderIdx];
+  const now = new Date().toISOString();
+  const previousSchoolLabel = `${targetOrder.schoolName} (${targetOrder.schoolId})`;
+  const newSchoolLabel = `${targetSchool.schoolName} (${targetSchool.schoolId})`;
+
+  const updatedOrder: Order = {
+    ...targetOrder,
+    schoolId: targetSchool.schoolId,
+    schoolName: targetSchool.schoolName,
+    schoolContactPhone: targetSchool.phone || targetSchool.contactPhone || '',
+    schoolAddress: targetSchool.address || '',
+    schoolType: targetSchool.schoolType,
+    state: targetSchool.state,
+    district: targetSchool.district,
+    schoolCode: targetSchool.schoolCode,
+    schoolEmail: targetSchool.email,
+    schoolPincode: targetSchool.pinCode || targetSchool.pincode,
+    updatedAt: now,
+    updatedBy: user.name
+  };
+  memoryOrders[orderIdx] = updatedOrder;
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+
+  await syncDocToFirestoreOrThrow('orders', orderId, {
+    schoolId: updatedOrder.schoolId,
+    schoolName: updatedOrder.schoolName,
+    schoolContactPhone: updatedOrder.schoolContactPhone,
+    schoolAddress: updatedOrder.schoolAddress,
+    schoolType: updatedOrder.schoolType,
+    state: updatedOrder.state,
+    district: updatedOrder.district,
+    schoolCode: updatedOrder.schoolCode,
+    schoolEmail: updatedOrder.schoolEmail,
+    schoolPincode: updatedOrder.schoolPincode,
+    updatedAt: now,
+    updatedBy: user.name
+  });
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'ORDER_SCHOOL_RELINKED',
+    entityType: 'ORDER',
+    entityId: orderId,
+    previousValue: previousSchoolLabel,
+    newValue: newSchoolLabel
+  });
+
+  return updatedOrder;
+}
+
+// ----------------------------------------------------
 // DEDICATED INDIVIDUAL AGENT ASSIGNMENT UPDATE
 // ----------------------------------------------------
 export async function updateOrderAgent(

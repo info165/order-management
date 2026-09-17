@@ -38,7 +38,8 @@ import {
   OrderStatusHistoryItem,
   UserProfile,
   DeliveryRecord,
-  Agent
+  Agent,
+  School
 } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
@@ -60,9 +61,11 @@ import {
   markDelivered,
   updateOrder,
   updateOrderSchoolDetails,
+  relinkOrderToSchool,
   updateOrderAgent,
   getAgents,
-  getSystemSettings
+  getSystemSettings,
+  subscribeToRealtimeSchools
 } from '../../services/dataService';
 
 interface OrderDetailModalProps {
@@ -103,6 +106,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   // School contact details edit state
   const [isEditingSchool, setIsEditingSchool] = useState(false);
+  // Which school is selected in the dropdown - defaults to the order's
+  // current schoolId. Picking a *different* school here means "relink this
+  // order" (see handleSaveSchoolDetails), never "rename the school I typed".
+  const [schoolFormId, setSchoolFormId] = useState(order.schoolId || '');
   const [schoolFormName, setSchoolFormName] = useState(order.schoolName || '');
   const [schoolFormPhone, setSchoolFormPhone] = useState(order.schoolContactPhone || '');
   const [schoolFormAddress, setSchoolFormAddress] = useState(order.schoolAddress || '');
@@ -113,6 +120,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [schoolFormPincode, setSchoolFormPincode] = useState(order.schoolPincode || '');
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [schoolSaveError, setSchoolSaveError] = useState<string | null>(null);
+
+  // Every registered school, for the "School Name" dropdown below - picking
+  // from the real registry (instead of free-typing a name) is what prevents
+  // an order ending up linked to the wrong school by a name that merely
+  // looks right.
+  const [allSchools, setAllSchools] = useState<School[]>([]);
+  useEffect(() => {
+    const unsubscribe = subscribeToRealtimeSchools(setAllSchools);
+    return unsubscribe;
+  }, []);
 
   // Contract & commercial details edit state (order number, PO number, date,
   // category, company, order value) - the fields captured at creation time
@@ -146,6 +163,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   }, []);
 
   useEffect(() => {
+    setSchoolFormId(activeOrder.schoolId || '');
     setSchoolFormName(activeOrder.schoolName || '');
     setSchoolFormPhone(activeOrder.schoolContactPhone || '');
     setSchoolFormAddress(activeOrder.schoolAddress || '');
@@ -164,27 +182,35 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   }, [activeOrder]);
 
   const handleSaveSchoolDetails = async () => {
-    if (!schoolFormName.trim()) {
-      setSchoolSaveError('School Name is required.');
+    if (!schoolFormId) {
+      setSchoolSaveError('Select a school from the list.');
       return;
     }
     setIsSavingSchool(true);
     setSchoolSaveError(null);
     try {
-      const result = await updateOrderSchoolDetails(
-        activeOrder.orderId,
-        {
-          schoolName: schoolFormName.trim(),
-          phone: schoolFormPhone.trim(),
-          address: schoolFormAddress.trim(),
-          schoolType: schoolFormType.trim(),
-          state: schoolFormState.trim(),
-          schoolCode: schoolFormCode.trim(),
-          email: schoolFormEmail.trim(),
-          pincode: schoolFormPincode.trim()
-        },
-        currentUser
-      );
+      // Picking a *different* school in the dropdown means this order was
+      // linked to the wrong one - relink it to the newly selected school
+      // outright, rather than treating whatever's in these fields as a
+      // correction to the OLD school's own record (which is what
+      // updateOrderSchoolDetails does, and would otherwise silently rename
+      // a shared master school record and every other order on it).
+      const result = schoolFormId !== activeOrder.schoolId
+        ? { order: await relinkOrderToSchool(activeOrder.orderId, schoolFormId, currentUser) }
+        : await updateOrderSchoolDetails(
+            activeOrder.orderId,
+            {
+              schoolName: schoolFormName.trim(),
+              phone: schoolFormPhone.trim(),
+              address: schoolFormAddress.trim(),
+              schoolType: schoolFormType.trim(),
+              state: schoolFormState.trim(),
+              schoolCode: schoolFormCode.trim(),
+              email: schoolFormEmail.trim(),
+              pincode: schoolFormPincode.trim()
+            },
+            currentUser
+          );
       setActiveOrder(result.order);
       setIsEditingSchool(false);
       onOrderUpdated(result.order);
@@ -1018,6 +1044,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
+                          setSchoolFormId(activeOrder.schoolId || '');
                           setSchoolFormName(activeOrder.schoolName || '');
                           setSchoolFormPhone(activeOrder.schoolContactPhone || '');
                           setSchoolFormAddress(activeOrder.schoolAddress || '');
@@ -1050,14 +1077,52 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         <label className="text-slate-600 font-semibold block mb-1">
                           School Name <span className="text-rose-500">*</span>
                         </label>
-                        <input
-                          type="text"
-                          value={schoolFormName}
-                          onChange={(e) => setSchoolFormName(e.target.value)}
-                          placeholder="Enter School Name"
+                        <select
+                          value={schoolFormId}
+                          onChange={(e) => {
+                            const newId = e.target.value;
+                            setSchoolFormId(newId);
+                            const picked = allSchools.find(s => s.schoolId === newId);
+                            if (picked) {
+                              // Switching the dropdown to a different school
+                              // fills every field from ITS record - these
+                              // are that school's real details, not a
+                              // starting point to retype the old school's.
+                              setSchoolFormName(picked.schoolName || '');
+                              setSchoolFormPhone(picked.phone || picked.contactPhone || '');
+                              setSchoolFormAddress(picked.address || '');
+                              setSchoolFormType(picked.schoolType || '');
+                              setSchoolFormState(picked.state || '');
+                              setSchoolFormCode(picked.schoolCode || '');
+                              setSchoolFormEmail(picked.email || '');
+                              setSchoolFormPincode(picked.pinCode || picked.pincode || '');
+                            }
+                          }}
                           className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
                           disabled={isSavingSchool}
-                        />
+                        >
+                          {/* Guards against an order whose schoolId doesn't (or no longer)
+                              match anything in the registry - keeps its current name
+                              showing instead of silently jumping to whatever option
+                              happens to be first. */}
+                          {!allSchools.some(s => s.schoolId === schoolFormId) && (
+                            <option value={schoolFormId}>{schoolFormName || '(unknown school)'}</option>
+                          )}
+                          {[...allSchools]
+                            .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+                            .map(s => (
+                              <option key={s.schoolId} value={s.schoolId}>
+                                {s.schoolName}
+                                {s.city || s.state ? ` — ${[s.city, s.state].filter(Boolean).join(', ')}` : ''}
+                                {` (${s.schoolId})`}
+                              </option>
+                            ))}
+                        </select>
+                        {schoolFormId !== activeOrder.schoolId && (
+                          <p className="mt-1 text-[11px] text-amber-700 font-semibold">
+                            This will relink the order to a different school.
+                          </p>
+                        )}
                       </div>
 
                       <div>
