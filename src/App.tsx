@@ -31,7 +31,8 @@ import {
 } from './services/dataService';
 import { exportOrdersToExcel } from './services/importExportService';
 import { getDisplaySerialNo } from './utils/orderDisplay';
-import { ArrowLeft, LayoutGrid, Building2 } from 'lucide-react';
+import { ArrowLeft, LayoutGrid } from 'lucide-react';
+import funscholarLogo from './assets/funscholar-logo.png';
 
 function MainApp() {
   const { currentUser, isSuperAdmin, isAgent, isDataEntry, isLoggedIn, authLoading } = useAuth();
@@ -282,14 +283,20 @@ function MainApp() {
   // While Firebase authentication is checking/restoring the existing session, do not show the dashboard
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-slate-200">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center font-bold text-slate-950 shadow-lg animate-pulse">
-            <Building2 className="w-6 h-6" />
-          </div>
-          <div className="text-center space-y-1">
-            <h2 className="text-base font-bold text-white tracking-tight">GovSchool Order ERP</h2>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Soft ambient glow behind the logo - the only departure from flat
+            white, keeps the premium feel without competing with it. */}
+        <div className="absolute w-[28rem] h-[28rem] rounded-full bg-orange-100/70 blur-3xl pointer-events-none" />
+        <div className="relative flex flex-col items-center space-y-7">
+          <img src={funscholarLogo} alt="Funscholar" className="h-24 w-auto drop-shadow-sm" />
+          <div className="text-center space-y-1.5">
+            <h2 className="text-lg font-extrabold text-slate-900 tracking-[0.2em] uppercase">Funscholar Orders</h2>
             <p className="text-xs text-slate-400">Verifying authorized session...</p>
+          </div>
+          <div className="flex items-center gap-1.5 pt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-bounce [animation-delay:-0.3s]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-bounce [animation-delay:-0.15s]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-bounce" />
           </div>
         </div>
       </div>
