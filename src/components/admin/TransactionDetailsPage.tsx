@@ -166,7 +166,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       <th className="px-3.5 py-2">Category</th>
                       <th className="px-3.5 py-2">Value (₹)</th>
                       <th className="px-3.5 py-2">Status</th>
-                      <th className="px-3.5 py-2">School Payment Status</th>
+                      <th className="px-3.5 py-2 text-center">School Payment Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/70">
@@ -181,7 +181,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                         <td className="px-3.5 py-2">
                           <StatusBadge status={o.status} type="order" compact />
                         </td>
-                        <td className="px-3.5 py-2">
+                        <td className="px-3.5 py-2 text-center">
                           <StatusBadge status={o.paymentStatus} type="payment" compact />
                         </td>
                       </tr>
