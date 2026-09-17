@@ -1502,7 +1502,13 @@ export const OrderList: React.FC<OrderListProps> = ({
                         <td
                           style={freezeCheckboxColumn ? { width: widths.select, left: 0 } : { width: widths.select }}
                           className={`px-2 py-2 text-center align-middle border-r border-slate-100 ${
-                            freezeCheckboxColumn ? `sticky z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] group-hover:bg-amber-50/40 ${isSelected ? 'bg-amber-50/60' : idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'}` : ''
+                            // Fully opaque, uniform grey - no zebra/selection
+                            // tint here, and no fractional-opacity Tailwind
+                            // classes (bg-x/60 etc.) - those let scrolled
+                            // content behind the sticky cell bleed through
+                            // during a horizontal scroll, showing up as a
+                            // ghosting/"mirror" effect.
+                            freezeCheckboxColumn ? 'sticky z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)] bg-slate-100' : ''
                           }`}
                           onClick={(e) => handleToggleSelectOrder(order.orderId, e)}
                         >
