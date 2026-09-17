@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw, Save } from 'lucide-react';
-import { Order, UserProfile } from '../../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw, Save, AlertTriangle } from 'lucide-react';
+import { CommissionPayment, Order, UserProfile } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { processFileForUpload } from '../../utils/fileUpload';
-import { saveCommissionPayment } from '../../services/dataService';
+import { saveCommissionPayment, updateCommissionPayment, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid } from '../../services/dataService';
 
 type PaymentMode = 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
 
@@ -11,6 +11,12 @@ interface CommissionCalculationPageProps {
   orders: Order[];
   currentUser: UserProfile;
   onBack: () => void;
+  // Present when reached by clicking a DRAFT row in Transaction Details -
+  // pre-fills every field from what was already saved, and completing/
+  // re-saving here updates that same record instead of creating another
+  // one (an order can only ever have one draft at a time - see the
+  // conflict check below).
+  existingDraft?: CommissionPayment;
 }
 
 // Reached only from the CB page: select one or more of a school's orders,
@@ -22,7 +28,7 @@ interface CommissionCalculationPageProps {
 // time - see its `taxableValue` comment), so summing it across the selected
 // orders and dividing by 1.18 the same way gives the combined pre-GST
 // amount, per the exact formula requested: (order 1 + order 2) / 1.18.
-export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, currentUser, onBack }) => {
+export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, currentUser, onBack, existingDraft }) => {
   // Who this payment is actually for: the field partner's name if every
   // selected order was placed through the same one, or "Direct Payment to
   // School" if they're all Direct/In-House orders (agentId AGT-DIRECT). A
@@ -45,12 +51,14 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   // Free-text so a partial entry like "5." or "0." while typing a decimal
   // (5.5, 0.5, etc.) isn't fought/reformatted mid-keystroke; parsed on
   // render, with an empty/invalid entry treated as 0% rather than erroring.
-  const [commissionPercentInput, setCommissionPercentInput] = useState('');
+  // Pre-filled from existingDraft when re-opening a saved draft.
+  const [commissionPercentInput, setCommissionPercentInput] = useState(() => existingDraft ? String(existingDraft.commissionPercent) : '');
   // Starts open since there's nothing calculated to show until a % is
   // typed - once confirmed (Enter or the checkmark) it collapses to a
   // static display with its own pencil-to-edit, matching Commission
-  // Amount's pattern below.
-  const [isEditingPercent, setIsEditingPercent] = useState(true);
+  // Amount's pattern below. A re-opened draft already has a value, so it
+  // starts collapsed.
+  const [isEditingPercent, setIsEditingPercent] = useState(!existingDraft);
   const commissionPercent = parseFloat(commissionPercentInput);
   const hasValidPercent = commissionPercentInput.trim() !== '' && !isNaN(commissionPercent);
   const calculatedCommissionAmount = hasValidPercent ? (calculatedAmount * commissionPercent) / 100 : 0;
@@ -58,28 +66,37 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   // Lets the auto-calculated Commission Amount be manually fine-tuned
   // afterward (e.g. a small rounding adjustment) without touching the %
   // itself. null = not overridden, use the calculated value; changing the %
-  // clears any override, since a new % means a fresh calculation.
+  // clears any override, since a new % means a fresh calculation. A
+  // re-opened draft's saved amount only becomes an override here if it
+  // actually differs from what recalculating fresh from its % would give -
+  // otherwise there's nothing to preserve.
   const [isEditingAmount, setIsEditingAmount] = useState(false);
-  const [manualAmountInput, setManualAmountInput] = useState<string | null>(null);
+  const [manualAmountInput, setManualAmountInput] = useState<string | null>(() => {
+    if (!existingDraft) return null;
+    const roundedCalculated = Math.round(calculatedCommissionAmount * 100) / 100;
+    const roundedSaved = Math.round(existingDraft.commissionAmount * 100) / 100;
+    return roundedSaved !== roundedCalculated ? String(existingDraft.commissionAmount) : null;
+  });
   const hasManualOverride = manualAmountInput !== null && manualAmountInput.trim() !== '' && !isNaN(parseFloat(manualAmountInput));
   const commissionAmount = hasManualOverride ? parseFloat(manualAmountInput!) : calculatedCommissionAmount;
 
   const [activeTab, setActiveTab] = useState<'calculation' | 'payment'>('calculation');
 
-  // Enter Payment Details - editable fields, kept local to this page for now
-  const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>('');
-  const [receivedByName, setReceivedByName] = useState('');
-  const [upiId, setUpiId] = useState('');
-  const [upiTransactionRef, setUpiTransactionRef] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [transactionRefNumber, setTransactionRefNumber] = useState('');
-  const [neftUtrNumber, setNeftUtrNumber] = useState('');
-  const [transactionUtrPfmsRef, setTransactionUtrPfmsRef] = useState('');
-  const [paymentRemarks, setPaymentRemarks] = useState('');
-  const [paymentDate, setPaymentDate] = useState('');
-  const [screenshotDataUrl, setScreenshotDataUrl] = useState('');
-  const [screenshotFileName, setScreenshotFileName] = useState('');
+  // Enter Payment Details - editable fields, kept local to this page for
+  // now. Pre-filled from existingDraft when re-opening a saved draft.
+  const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>(() => existingDraft?.paymentMode || '');
+  const [receivedByName, setReceivedByName] = useState(() => existingDraft?.receivedByName || '');
+  const [upiId, setUpiId] = useState(() => existingDraft?.upiId || '');
+  const [upiTransactionRef, setUpiTransactionRef] = useState(() => existingDraft?.upiTransactionRef || '');
+  const [bankName, setBankName] = useState(() => existingDraft?.bankName || '');
+  const [accountNumber, setAccountNumber] = useState(() => existingDraft?.accountNumber || '');
+  const [transactionRefNumber, setTransactionRefNumber] = useState(() => existingDraft?.transactionRefNumber || '');
+  const [neftUtrNumber, setNeftUtrNumber] = useState(() => existingDraft?.neftUtrNumber || '');
+  const [transactionUtrPfmsRef, setTransactionUtrPfmsRef] = useState(() => existingDraft?.transactionUtrPfmsRef || '');
+  const [paymentRemarks, setPaymentRemarks] = useState(() => existingDraft?.remarks || '');
+  const [paymentDate, setPaymentDate] = useState(() => existingDraft?.paymentDate || '');
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState(() => existingDraft?.screenshotDataUrl || '');
+  const [screenshotFileName, setScreenshotFileName] = useState(() => existingDraft?.screenshotFileName || '');
   const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const [isMarkedPaid, setIsMarkedPaid] = useState(false);
@@ -88,6 +105,26 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const [isSavingPayment, setIsSavingPayment] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
+  // Every existing commission payment, used only to detect a conflict below
+  // (re-opening existingDraft itself is never a "conflict" with itself).
+  const [existingPayments, setExistingPayments] = useState<CommissionPayment[]>([]);
+  useEffect(() => {
+    const unsubscribe = subscribeToRealtimeCommissionPayments(setExistingPayments);
+    return unsubscribe;
+  }, []);
+
+  // An order can only ever have one draft outstanding at a time. This is
+  // only ever non-null when starting a FRESH calculation (existingDraft is
+  // undefined) and some order already selected here has an unrelated
+  // draft sitting against it - blocks Save as Draft/Mark as Paid below
+  // rather than silently creating a duplicate.
+  const conflictingDraft = useMemo(() => {
+    if (existingDraft) return null;
+    return existingPayments.find(p =>
+      !isCommissionPaymentPaid(p) && p.orderIds.some(oid => orders.some(o => o.orderId === oid))
+    ) || null;
+  }, [existingPayments, existingDraft, orders]);
+
   // Shared by both "Mark as Paid" and "Save as Draft" - a draft skips the
   // Mode of Payment / Date of Payment requirement (there's genuinely
   // nothing to enter yet, since payment hasn't happened), and is saved
@@ -95,6 +132,10 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   // other "money already paid" view knows to exclude it until it's
   // actually completed later.
   const handleSubmit = async (status: 'DRAFT' | 'PAID') => {
+    if (conflictingDraft) {
+      setMarkPaidError('An order in this selection already has a saved draft. Open and complete that one from Transaction Details instead of creating a new one.');
+      return;
+    }
     if (status === 'PAID') {
       if (!paymentMode) {
         setMarkPaidError('Select a Mode of Payment first.');
@@ -109,37 +150,46 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
     if (status === 'PAID') setIsSavingPayment(true);
     else setIsSavingDraft(true);
     try {
-      await saveCommissionPayment(
-        {
-          schoolId: soleOrder.schoolId,
-          schoolName: soleOrder.schoolName,
-          orderIds: orders.map(o => o.orderId),
-          isDirectPayment,
-          agentId: isDirectPayment ? undefined : soleOrder.agentId,
-          agentName: isDirectPayment ? undefined : soleOrder.agentName,
-          totalOrderValue,
-          calculatedAmount,
-          commissionPercent: hasValidPercent ? commissionPercent : 0,
-          commissionAmount,
-          paymentMode: paymentMode || undefined,
-          receivedByName: paymentMode === 'CASH' ? receivedByName || undefined : undefined,
-          upiId: paymentMode === 'UPI' ? upiId || undefined : undefined,
-          upiTransactionRef: paymentMode === 'UPI' ? upiTransactionRef || undefined : undefined,
-          bankName: paymentMode === 'ONLINE_TRANSFER' || paymentMode === 'NEFT' ? bankName || undefined : undefined,
-          accountNumber: paymentMode === 'ONLINE_TRANSFER' || paymentMode === 'NEFT' ? accountNumber || undefined : undefined,
-          transactionRefNumber: paymentMode === 'ONLINE_TRANSFER' ? transactionRefNumber || undefined : undefined,
-          neftUtrNumber: paymentMode === 'NEFT' ? neftUtrNumber || undefined : undefined,
-          transactionUtrPfmsRef: transactionUtrPfmsRef || undefined,
-          remarks: paymentRemarks || undefined,
-          paymentDate: paymentDate || undefined,
-          screenshotDataUrl: screenshotDataUrl || undefined,
-          screenshotFileName: screenshotFileName || undefined,
-          createdBy: currentUser.userId,
-          createdByName: currentUser.name,
-          status
-        },
-        currentUser
-      );
+      const paymentDetailFields = {
+        commissionPercent: hasValidPercent ? commissionPercent : 0,
+        commissionAmount,
+        paymentMode: paymentMode || undefined,
+        receivedByName: paymentMode === 'CASH' ? receivedByName || undefined : undefined,
+        upiId: paymentMode === 'UPI' ? upiId || undefined : undefined,
+        upiTransactionRef: paymentMode === 'UPI' ? upiTransactionRef || undefined : undefined,
+        bankName: paymentMode === 'ONLINE_TRANSFER' || paymentMode === 'NEFT' ? bankName || undefined : undefined,
+        accountNumber: paymentMode === 'ONLINE_TRANSFER' || paymentMode === 'NEFT' ? accountNumber || undefined : undefined,
+        transactionRefNumber: paymentMode === 'ONLINE_TRANSFER' ? transactionRefNumber || undefined : undefined,
+        neftUtrNumber: paymentMode === 'NEFT' ? neftUtrNumber || undefined : undefined,
+        transactionUtrPfmsRef: transactionUtrPfmsRef || undefined,
+        remarks: paymentRemarks || undefined,
+        paymentDate: paymentDate || undefined,
+        screenshotDataUrl: screenshotDataUrl || undefined,
+        screenshotFileName: screenshotFileName || undefined,
+        status
+      };
+      if (existingDraft) {
+        // Completing/updating the same draft record - never creates a
+        // second payment for these orders.
+        await updateCommissionPayment(existingDraft.commissionPaymentId, paymentDetailFields, currentUser);
+      } else {
+        await saveCommissionPayment(
+          {
+            schoolId: soleOrder.schoolId,
+            schoolName: soleOrder.schoolName,
+            orderIds: orders.map(o => o.orderId),
+            isDirectPayment,
+            agentId: isDirectPayment ? undefined : soleOrder.agentId,
+            agentName: isDirectPayment ? undefined : soleOrder.agentName,
+            totalOrderValue,
+            calculatedAmount,
+            ...paymentDetailFields,
+            createdBy: currentUser.userId,
+            createdByName: currentUser.name
+          },
+          currentUser
+        );
+      }
       if (status === 'PAID') setIsMarkedPaid(true);
       else setIsSavedAsDraft(true);
     } catch (err: any) {
@@ -218,7 +268,14 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
       <div className="flex-1 flex items-start justify-center px-6 pb-6">
         <div className="w-full max-w-6xl space-y-4">
           <div className="text-center space-y-1">
-            <h1 className="text-sm font-semibold text-slate-200">Commission Calculation</h1>
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="text-sm font-semibold text-slate-200">Commission Calculation</h1>
+              {existingDraft && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/40 text-amber-400 text-[9px] font-bold uppercase tracking-wide">
+                  Editing Draft
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500">{orders.length} order{orders.length === 1 ? '' : 's'} selected</p>
             <p className={`text-xs font-semibold ${isDirectPayment ? 'text-sky-400' : 'text-amber-400'}`}>
               {isDirectPayment ? payeeLabel : `Paying: ${payeeLabel}`}
@@ -639,6 +696,15 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
 
               {/* Mark as Paid / Save as Draft */}
               <div className="space-y-2">
+                {conflictingDraft && !isMarkedPaid && !isSavedAsDraft && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-400 text-[11px]">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      One of these orders already has a saved draft (₹{Math.round(conflictingDraft.commissionAmount * 100) / 100} for {conflictingDraft.schoolName}).
+                      An order can only have one draft at a time - open and complete that draft from Transaction Details instead of saving a new one here.
+                    </span>
+                  </div>
+                )}
                 {isMarkedPaid ? (
                   <div className="flex items-center justify-center gap-2 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-600/40 text-emerald-400 text-xs font-semibold">
                     <CheckCircle2 className="w-4 h-4" />
@@ -654,17 +720,17 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                     <button
                       type="button"
                       onClick={handleSaveDraft}
-                      disabled={isSavingPayment || isSavingDraft}
+                      disabled={isSavingPayment || isSavingDraft || !!conflictingDraft}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-60 text-slate-200 font-bold text-sm transition-colors"
                       title="Save this calculation now, complete Mode/Date of Payment later"
                     >
                       <Save className="w-4 h-4" />
-                      <span>{isSavingDraft ? 'Saving…' : 'Save as Draft'}</span>
+                      <span>{isSavingDraft ? 'Saving…' : existingDraft ? 'Update Draft' : 'Save as Draft'}</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleMarkAsPaid}
-                      disabled={isSavingPayment || isSavingDraft}
+                      disabled={isSavingPayment || isSavingDraft || !!conflictingDraft}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-slate-950 font-bold text-sm transition-colors"
                     >
                       <CheckCircle2 className="w-4 h-4" />

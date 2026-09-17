@@ -3354,7 +3354,24 @@ export async function saveCommissionPayment(
 
 export async function updateCommissionPayment(
   paymentId: string,
-  updates: Partial<Pick<CommissionPayment, 'commissionAmount' | 'commissionPercent' | 'paymentMode' | 'paymentDate' | 'screenshotDataUrl' | 'screenshotFileName' | 'status'>>,
+  updates: Partial<Pick<CommissionPayment,
+    | 'commissionAmount'
+    | 'commissionPercent'
+    | 'paymentMode'
+    | 'paymentDate'
+    | 'screenshotDataUrl'
+    | 'screenshotFileName'
+    | 'status'
+    | 'receivedByName'
+    | 'upiId'
+    | 'upiTransactionRef'
+    | 'bankName'
+    | 'accountNumber'
+    | 'transactionRefNumber'
+    | 'neftUtrNumber'
+    | 'transactionUtrPfmsRef'
+    | 'remarks'
+  >>,
   user: UserProfile
 ): Promise<void> {
   if (user.role !== 'SUPER_ADMIN') {

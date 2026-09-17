@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { Order, OrderStatus, UserProfile } from '../../types';
+import { Order, OrderStatus, UserProfile, CommissionPayment } from '../../types';
 import { OrderList } from '../orders/OrderList';
 import { CommissionCalculationPage } from './CommissionCalculationPage';
 import { TransactionDetailsPage } from './TransactionDetailsPage';
@@ -31,6 +31,9 @@ export const CBPage: React.FC<CBPageProps> = ({
   onOpenImport
 }) => {
   const [commissionOrderIds, setCommissionOrderIds] = useState<string[] | null>(null);
+  // Set alongside commissionOrderIds when a draft row is clicked in
+  // Transaction Details, so CommissionCalculationPage can pre-fill from it.
+  const [editingDraftPayment, setEditingDraftPayment] = useState<CommissionPayment | null>(null);
   // Transaction Details is the landing view for /cb - opens straight to the
   // payment history rather than requiring a school pick first. Its own
   // "+ Add Payments" button is what reveals the order list below.
@@ -41,7 +44,11 @@ export const CBPage: React.FC<CBPageProps> = ({
       <CommissionCalculationPage
         orders={orders.filter(o => commissionOrderIds.includes(o.orderId))}
         currentUser={currentUser}
-        onBack={() => setCommissionOrderIds(null)}
+        existingDraft={editingDraftPayment ?? undefined}
+        onBack={() => {
+          setCommissionOrderIds(null);
+          setEditingDraftPayment(null);
+        }}
       />
     );
   }
@@ -53,6 +60,10 @@ export const CBPage: React.FC<CBPageProps> = ({
         orders={orders}
         onBack={onBack}
         onAddPayment={() => setShowTransactionDetails(false)}
+        onOpenDraft={(payment) => {
+          setEditingDraftPayment(payment);
+          setCommissionOrderIds(payment.orderIds);
+        }}
       />
     );
   }

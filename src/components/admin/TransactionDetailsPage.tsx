@@ -14,6 +14,11 @@ interface TransactionDetailsPageProps {
   orders: Order[];
   onBack: () => void;
   onAddPayment: () => void;
+  // A DRAFT row routes into Commission Calculation itself (pre-filled with
+  // everything already saved) rather than the small in-place Edit modal
+  // below, since completing a draft needs the full page (agent/mode/date
+  // etc.), not just the handful of fields that modal edits.
+  onOpenDraft: (payment: CommissionPayment) => void;
 }
 
 const PAYMENT_MODE_LABELS: Record<string, string> = {
@@ -41,7 +46,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // by the same commissionPayments records "Mark as Paid" writes there, live
 // via subscribeToRealtimeCommissionPayments so a payment appears here the
 // moment it's recorded, with no refresh needed.
-export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, orders, onBack, onAddPayment }) => {
+export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ currentUser, orders, onBack, onAddPayment, onOpenDraft }) => {
   const [payments, setPayments] = useState<CommissionPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
@@ -138,6 +143,25 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
     } finally {
       setIsSavingEdit(false);
     }
+  };
+
+  // A draft row has nothing to expand yet (no orders panel worth toggling
+  // over an incomplete payment) - clicking it, or its Edit button, goes
+  // straight to Commission Calculation to finish it instead.
+  const handleRowClick = (p: CommissionPayment) => {
+    if (!isCommissionPaymentPaid(p)) {
+      onOpenDraft(p);
+      return;
+    }
+    setExpandedPaymentId(prev => prev === p.commissionPaymentId ? null : p.commissionPaymentId);
+  };
+
+  const handleEditClick = (p: CommissionPayment) => {
+    if (!isCommissionPaymentPaid(p)) {
+      onOpenDraft(p);
+      return;
+    }
+    handleOpenEdit(p);
   };
 
   const handleDeleteScreenshot = async (paymentId: string) => {
@@ -446,7 +470,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                     {payments.map((p, idx) => (
                       <React.Fragment key={p.commissionPaymentId}>
                       <tr
-                        onClick={() => setExpandedPaymentId(prev => prev === p.commissionPaymentId ? null : p.commissionPaymentId)}
+                        onClick={() => handleRowClick(p)}
                         className="hover:bg-slate-800/40 transition-colors cursor-pointer"
                       >
                         <td className="px-4 py-3 align-middle text-slate-500">
@@ -486,7 +510,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenEdit(p);
+                              handleEditClick(p);
                             }}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
                           >
@@ -556,7 +580,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                         {selectedGroup.payments.map((p, idx) => (
                           <React.Fragment key={p.commissionPaymentId}>
                           <tr
-                            onClick={() => setExpandedPaymentId(prev => prev === p.commissionPaymentId ? null : p.commissionPaymentId)}
+                            onClick={() => handleRowClick(p)}
                             className="hover:bg-slate-800/40 transition-colors cursor-pointer"
                           >
                             <td className="px-4 py-3 align-middle text-slate-500">
@@ -584,7 +608,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleOpenEdit(p);
+                                  handleEditClick(p);
                                 }}
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
                               >
