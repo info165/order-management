@@ -324,7 +324,6 @@ function MainApp() {
         <div className="relative flex flex-col items-center space-y-7">
           <img src={funscholarLogo} alt="Funscholar" className="h-24 w-auto drop-shadow-sm" />
           <div className="text-center space-y-1.5">
-            <h2 className="text-lg font-extrabold text-slate-900 tracking-[0.2em] uppercase">Funscholar Orders</h2>
             <p className="text-xs text-slate-400">Verifying authorized session...</p>
           </div>
           <div className="w-56 space-y-2">
