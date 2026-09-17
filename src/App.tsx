@@ -285,8 +285,11 @@ function MainApp() {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center relative overflow-hidden">
         {/* Soft ambient glow behind the logo - the only departure from flat
-            white, keeps the premium feel without competing with it. */}
-        <div className="absolute w-[28rem] h-[28rem] rounded-full bg-orange-100/70 blur-3xl pointer-events-none" />
+            white, keeps the premium feel without competing with it. Needs
+            an explicit centering transform: an absolutely-positioned box
+            with no inset falls back to its normal-flow position (the top
+            of this flex column), not the middle of the page. */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[28rem] h-[28rem] rounded-full bg-orange-100/70 blur-3xl pointer-events-none" />
         <div className="relative flex flex-col items-center space-y-7">
           <img src={funscholarLogo} alt="Funscholar" className="h-24 w-auto drop-shadow-sm" />
           <div className="text-center space-y-1.5">
