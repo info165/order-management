@@ -92,7 +92,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
             title="Funscholar Order Management - Go to Dashboard"
           >
-            <img src={funscholarLogo} alt="Funscholar" className="h-7 w-auto" />
+            <img src={funscholarLogo} alt="Funscholar" className="h-10 sm:h-11 w-auto" />
             <div>
               <div className="font-bold text-[10px] sm:text-[11px] leading-none tracking-[0.15em] uppercase text-slate-400">
                 Order Management
