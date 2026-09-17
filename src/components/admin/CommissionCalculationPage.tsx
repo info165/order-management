@@ -84,6 +84,22 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   const hasManualOverride = manualAmountInput !== null && manualAmountInput.trim() !== '' && !isNaN(parseFloat(manualAmountInput));
   const commissionAmount = hasManualOverride ? parseFloat(manualAmountInput!) : calculatedCommissionAmount;
 
+  // Closing the Amount editor updates the displayed % to match whatever
+  // was actually typed, so a manual tweak (e.g. 1,016.95 -> 1,016) doesn't
+  // leave a % on screen that no longer corresponds to the real amount
+  // being paid. Only runs once editing is confirmed (not on every
+  // keystroke), same as %'s own edit-then-confirm pattern, so it doesn't
+  // fight typing mid-entry. The manual amount itself is untouched by
+  // this - it stays the exact figure typed, even though re-deriving the
+  // amount from the rounded % it produces wouldn't reproduce it exactly.
+  const commitAmountEdit = () => {
+    setIsEditingAmount(false);
+    if (hasManualOverride && calculatedAmount > 0) {
+      const impliedPercent = Math.round((parseFloat(manualAmountInput!) / calculatedAmount) * 100 * 100) / 100;
+      setCommissionPercentInput(String(impliedPercent));
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<'calculation' | 'payment'>('calculation');
 
   // Enter Payment Details - editable fields, kept local to this page for
@@ -428,22 +444,21 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
                         onChange={(e) => {
                           const next = e.target.value;
                           if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) {
-                            // Amount and % are independently manual now -
-                            // editing one never touches the other, so a
-                            // small rounding tweak to the amount (e.g.
-                            // 847.46 -> 847) can't silently turn a clean
-                            // 10% into an imprecise back-calculated figure.
+                            // Free-typing only - % isn't touched keystroke by
+                            // keystroke (that would fight typing mid-entry).
+                            // It's recalculated once on confirm, in
+                            // commitAmountEdit below.
                             setManualAmountInput(next);
                           }
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') setIsEditingAmount(false);
+                          if (e.key === 'Enter') commitAmountEdit();
                         }}
                         className="w-28 px-2 py-1 rounded-lg bg-slate-800 border border-amber-500 text-emerald-400 text-right font-mono font-bold focus:outline-none"
                       />
                       <button
                         type="button"
-                        onClick={() => setIsEditingAmount(false)}
+                        onClick={commitAmountEdit}
                         className="p-1 rounded-md text-emerald-400 hover:bg-emerald-500/10 transition-colors"
                         title="Done"
                       >
