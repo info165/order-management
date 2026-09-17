@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ChevronRight, ImageOff, X, Trash2, Plus, PackageSearch } from 'lucide-react';
+import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ChevronRight, ImageOff, X, Trash2, Plus, PackageSearch, Pencil, UploadCloud } from 'lucide-react';
 import { CommissionPayment, Order, UserProfile } from '../../types';
-import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot } from '../../services/dataService';
+import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot, updateCommissionPayment } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { StatusBadge } from '../common/StatusBadge';
+import { processFileForUpload } from '../../utils/fileUpload';
+
+type PaymentMode = 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
 
 interface TransactionDetailsPageProps {
   currentUser: UserProfile;
@@ -49,6 +52,88 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   // Which payment row's linked orders are currently expanded - one at a
   // time, toggled by clicking the row itself.
   const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
+
+  // Editing an existing payment's Amount/%/Mode/Date/Screenshot in place -
+  // separate from creating a new one (that's Commission Calculation's job).
+  const [editingPayment, setEditingPayment] = useState<CommissionPayment | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editPercent, setEditPercent] = useState('');
+  const [editMode, setEditMode] = useState<PaymentMode>('CASH');
+  const [editDate, setEditDate] = useState('');
+  const [editScreenshotDataUrl, setEditScreenshotDataUrl] = useState('');
+  const [editScreenshotFileName, setEditScreenshotFileName] = useState('');
+  const [isUploadingEditScreenshot, setIsUploadingEditScreenshot] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const handleOpenEdit = (p: CommissionPayment) => {
+    setEditingPayment(p);
+    setEditAmount(String(p.commissionAmount));
+    setEditPercent(String(p.commissionPercent));
+    setEditMode(p.paymentMode);
+    setEditDate(p.paymentDate);
+    setEditScreenshotDataUrl(p.screenshotDataUrl || '');
+    setEditScreenshotFileName(p.screenshotFileName || '');
+    setEditError(null);
+  };
+
+  const handleEditScreenshotSelect = async (file: File) => {
+    setIsUploadingEditScreenshot(true);
+    setEditError(null);
+    try {
+      const dataUrl = await processFileForUpload(file);
+      setEditScreenshotDataUrl(dataUrl);
+      setEditScreenshotFileName(file.name);
+    } catch (err: any) {
+      setEditError(err.message || 'Could not process this file.');
+    } finally {
+      setIsUploadingEditScreenshot(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPayment) return;
+    const parsedAmount = parseFloat(editAmount);
+    const parsedPercent = parseFloat(editPercent);
+    if (editAmount.trim() === '' || isNaN(parsedAmount)) {
+      setEditError('Enter a valid amount.');
+      return;
+    }
+    if (editPercent.trim() === '' || isNaN(parsedPercent)) {
+      setEditError('Enter a valid %.');
+      return;
+    }
+    if (!editDate) {
+      setEditError('Enter the date of payment.');
+      return;
+    }
+    setEditError(null);
+    setIsSavingEdit(true);
+    try {
+      await updateCommissionPayment(
+        editingPayment.commissionPaymentId,
+        {
+          commissionAmount: parsedAmount,
+          commissionPercent: parsedPercent,
+          paymentMode: editMode,
+          paymentDate: editDate,
+          // Only sent when a new file was actually picked - leaves an
+          // existing screenshot untouched otherwise. Removing one
+          // entirely is still the dedicated Delete action on the
+          // thumbnail/preview, not this form.
+          ...(editScreenshotDataUrl && editScreenshotDataUrl !== editingPayment.screenshotDataUrl
+            ? { screenshotDataUrl: editScreenshotDataUrl, screenshotFileName: editScreenshotFileName }
+            : {})
+        },
+        currentUser
+      );
+      setEditingPayment(null);
+    } catch (err: any) {
+      setEditError(err.message || 'Could not save changes.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   const handleDeleteScreenshot = async (paymentId: string) => {
     if (!window.confirm('Delete this payment screenshot? This cannot be undone.')) return;
@@ -311,6 +396,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       <th className="px-4 py-3">Mode of Payment</th>
                       <th className="px-4 py-3">Date of Payment</th>
                       <th className="px-4 py-3">Screenshot</th>
+                      <th className="px-4 py-3">Edit</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
@@ -354,8 +440,21 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                         <td className="px-4 py-3 align-middle">
                           {renderScreenshotCell(p)}
                         </td>
+                        <td className="px-4 py-3 align-middle">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(p);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
-                      {renderOrdersPanel(p, 8)}
+                      {renderOrdersPanel(p, 9)}
                       </React.Fragment>
                     ))}
                   </tbody>
@@ -409,6 +508,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           <th className="px-4 py-2.5">Mode of Payment</th>
                           <th className="px-4 py-2.5">Date of Payment</th>
                           <th className="px-4 py-2.5">Screenshot</th>
+                          <th className="px-4 py-2.5">Edit</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/80">
@@ -440,8 +540,21 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                             <td className="px-4 py-3 align-middle">
                               {renderScreenshotCell(p)}
                             </td>
+                            <td className="px-4 py-3 align-middle">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEdit(p);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+                            </td>
                           </tr>
-                          {renderOrdersPanel(p, 8)}
+                          {renderOrdersPanel(p, 9)}
                           </React.Fragment>
                         ))}
                       </tbody>
@@ -489,6 +602,138 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
               <p className="px-4 py-2 text-[11px] text-rose-400 border-b border-slate-800">{screenshotError}</p>
             )}
             <img src={previewScreenshot.url} alt="Payment screenshot" className="w-full max-h-[75vh] object-contain bg-slate-950" />
+          </div>
+        </div>
+      )}
+
+      {editingPayment && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => !isSavingEdit && setEditingPayment(null)}
+        >
+          <div
+            className="relative max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <div>
+                <p className="text-sm font-bold text-slate-100">Edit Payment</p>
+                <p className="text-[11px] text-slate-500 truncate">{editingPayment.schoolName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPayment(null)}
+                disabled={isSavingEdit}
+                className="p-1 text-slate-500 hover:text-slate-200 transition-colors disabled:opacity-50"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">Amount (₹)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editAmount}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) setEditAmount(next);
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">%</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editPercent}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === '' || /^\d*\.?\d{0,5}$/.test(next)) setEditPercent(next);
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Mode of Payment</label>
+                <select
+                  value={editMode}
+                  onChange={(e) => setEditMode(e.target.value as PaymentMode)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="ONLINE_TRANSFER">Online Transfer</option>
+                  <option value="NEFT">NEFT</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Date of Payment</label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">Screenshot</label>
+                <div className="flex items-center gap-3">
+                  {editScreenshotDataUrl ? (
+                    <img src={editScreenshotDataUrl} alt="Payment screenshot" className="w-14 h-14 rounded-lg object-cover border border-slate-700" />
+                  ) : (
+                    <span className="flex items-center justify-center w-14 h-14 rounded-lg border border-dashed border-slate-700 text-slate-600 shrink-0">
+                      <ImageOff className="w-5 h-5" />
+                    </span>
+                  )}
+                  <label className="flex-1 cursor-pointer flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-dashed border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors text-[11px]">
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>{editScreenshotDataUrl ? 'Replace' : 'Upload'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (file) handleEditScreenshotSelect(file);
+                      }}
+                    />
+                  </label>
+                </div>
+                {isUploadingEditScreenshot && <p className="text-[11px] text-amber-400 animate-pulse mt-1">Uploading…</p>}
+              </div>
+
+              {editError && <p className="text-[11px] text-rose-400">{editError}</p>}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setEditingPayment(null)}
+                  disabled={isSavingEdit}
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingEdit || isUploadingEditScreenshot}
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
+                >
+                  {isSavingEdit ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

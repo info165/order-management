@@ -3337,6 +3337,17 @@ export async function saveCommissionPayment(
   return record;
 }
 
+export async function updateCommissionPayment(
+  paymentId: string,
+  updates: Partial<Pick<CommissionPayment, 'commissionAmount' | 'commissionPercent' | 'paymentMode' | 'paymentDate' | 'screenshotDataUrl' | 'screenshotFileName'>>,
+  user: UserProfile
+): Promise<void> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can edit a commission payment.');
+  }
+  await syncDocToFirestoreOrThrow('commissionPayments', paymentId, updates);
+}
+
 export async function deleteCommissionPaymentScreenshot(paymentId: string, user: UserProfile): Promise<void> {
   if (user.role !== 'SUPER_ADMIN') {
     throw new Error('Only Super Admin can remove a commission payment screenshot.');
