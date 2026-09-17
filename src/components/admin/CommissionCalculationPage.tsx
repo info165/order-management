@@ -52,7 +52,11 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
   // (5.5, 0.5, etc.) isn't fought/reformatted mid-keystroke; parsed on
   // render, with an empty/invalid entry treated as 0% rather than erroring.
   // Pre-filled from existingDraft when re-opening a saved draft.
-  const [commissionPercentInput, setCommissionPercentInput] = useState(() => existingDraft ? String(existingDraft.commissionPercent) : '');
+  // Rounded to 2 decimals - the raw saved value can carry long float noise
+  // (e.g. from an older linked %/amount calculation), which would make the
+  // input's own 5-decimal-digit typing cap reject every backspace on it
+  // until the whole thing is cleared at once.
+  const [commissionPercentInput, setCommissionPercentInput] = useState(() => existingDraft ? String(Math.round(existingDraft.commissionPercent * 100) / 100) : '');
   // Starts open since there's nothing calculated to show until a % is
   // typed - once confirmed (Enter or the checkmark) it collapses to a
   // static display with its own pencil-to-edit, matching Commission
@@ -75,7 +79,7 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
     if (!existingDraft) return null;
     const roundedCalculated = Math.round(calculatedCommissionAmount * 100) / 100;
     const roundedSaved = Math.round(existingDraft.commissionAmount * 100) / 100;
-    return roundedSaved !== roundedCalculated ? String(existingDraft.commissionAmount) : null;
+    return roundedSaved !== roundedCalculated ? String(roundedSaved) : null;
   });
   const hasManualOverride = manualAmountInput !== null && manualAmountInput.trim() !== '' && !isNaN(parseFloat(manualAmountInput));
   const commissionAmount = hasManualOverride ? parseFloat(manualAmountInput!) : calculatedCommissionAmount;

@@ -73,8 +73,15 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
 
   const handleOpenEdit = (p: CommissionPayment) => {
     setEditingPayment(p);
-    setEditAmount(String(p.commissionAmount));
-    setEditPercent(String(p.commissionPercent));
+    // Rounded to 2 decimals before dropping into the input - some older
+    // records stored the raw unrounded float (e.g. 12500.035953177965 from
+    // a percent-based calculation), and the input's own typing regex below
+    // caps at 5 decimal digits. With more than that already in the field,
+    // every backspace still leaves too many decimals to pass validation,
+    // so React reverts each keystroke and the field looks frozen until
+    // the whole value is selected and cleared at once.
+    setEditAmount(String(round2(p.commissionAmount)));
+    setEditPercent(String(round2(p.commissionPercent)));
     setEditMode(p.paymentMode || 'CASH');
     setEditDate(p.paymentDate || '');
     setEditScreenshotDataUrl(p.screenshotDataUrl || '');
