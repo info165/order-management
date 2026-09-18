@@ -461,59 +461,26 @@ export async function deleteDocFromFirestore(collectionName: string, docId: stri
   }
 }
 
-// Background initialization to seed Firestore once if empty
-let isFirestoreSeeded = false;
-export async function initializeFirestoreSeed() {
-  if (isFirestoreSeeded) return;
-  isFirestoreSeeded = true;
-  try {
-    const ordersSnap = await getDocs(query(collection(db, 'orders'), limit(1)));
-    if (ordersSnap.empty) {
-      console.log('Seeding initial data to Firestore...');
-      await syncAllDataToFirestore();
-      console.log('Firestore initial seed completed.');
-    }
-  } catch (e: any) {
-    // Sandboxed or unauthenticated; local memory layer active
-    console.log('Local persistent storage active (Firestore notice:', e?.message || e, ')');
-  }
-}
-
-// Explicit sync helper to push all active memory datasets to Cloud Firestore
-export async function syncAllDataToFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
-  try {
-    let count = 0;
-    for (const order of memoryOrders) {
-      await syncDocToFirestore('orders', order.orderId, order);
-      count++;
-    }
-    for (const school of memorySchools) {
-      await syncDocToFirestore('schools', school.schoolId, school);
-      count++;
-    }
-    for (const agent of memoryAgents) {
-      await syncDocToFirestore('agents', agent.agentId, agent);
-      count++;
-    }
-    for (const product of memoryProducts) {
-      await syncDocToFirestore('products', product.productId, product);
-      count++;
-    }
-    for (const user of memoryUsers) {
-      await syncDocToFirestore('users', user.userId, user);
-      if (user.email) {
-        await syncDocToFirestore('users', user.email.toLowerCase(), user);
-      }
-      count++;
-    }
-    await syncDocToFirestore('settings', 'global', memorySettings);
-    return { success: true, count };
-  } catch (err: any) {
-    const errMsg = err?.message || String(err);
-    console.error('Firestore sync error:', errMsg);
-    return { success: false, count: 0, error: errMsg };
-  }
-}
+// initializeFirestoreSeed() and syncAllDataToFirestore() USED to live here -
+// a one-time bootstrap that pushed the hardcoded REAL_SHEET_ORDERS/SCHOOLS/
+// etc. seed arrays to Firestore the very first time the app ever ran
+// against an empty database. It decided "empty" by running a `limit(1)`
+// query against `orders` - but that query is subject to Firestore security
+// rules, and an AGENT account's reads are scoped to only orders matching
+// their own agentId. A brand new agent with zero orders assigned therefore
+// saw that query come back empty regardless of how much real data existed,
+// and the seed path then merge-wrote the entire original hardcoded dataset
+// back over every live order, school, agent, product and user document -
+// silently reverting real statuses, dispatch/tracking info, payments and
+// school links to their original import-time values. That is exactly what
+// happened on a new agent's first login on 2026-09-18, and took a full
+// investigation to find and repair.
+//
+// The database has been live and populated for a long time now; there is
+// no legitimate scenario left where re-seeding from the hardcoded arrays
+// should ever run again. Both functions are removed outright (not merely
+// disconnected) so there is nothing left for a future change to
+// accidentally call back in.
 
 // Clear all orders completely from memory and storage (ready for fresh upload)
 export async function clearAllOrders(user: UserProfile): Promise<{ success: boolean; clearedCount: number }> {
