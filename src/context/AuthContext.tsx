@@ -112,39 +112,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setCurrentUser(found);
               localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found));
             }
-          } else {
-            const newFbProfile: UserProfile = {
-              userId: fbUser.uid,
-              name: fbUser.displayName || email.split('@')[0] || 'Authorized Staff',
-              email: fbUser.email,
-              role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
-              isActive: true,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            };
-            if (isMounted) {
-              setCurrentUser(newFbProfile);
-              localStorage.setItem(USER_SESSION_KEY, JSON.stringify(newFbProfile));
-            }
+          } else if (isMounted) {
+            // No matching profile record exists for this signed-in Firebase
+            // account. This used to auto-provision a fabricated ADMIN
+            // profile here - which meant ANY Google account (or any
+            // password-login racing this same listener) that hit this path,
+            // for any reason including a transient Firestore read failure,
+            // silently got full ADMIN access. Fail safe instead: sign out
+            // and leave currentUser as-is (the explicit login()/
+            // finalizeLogin() path already reports this properly with a
+            // real error message - this listener should never invent an
+            // identity on its own).
+            console.warn('No matching profile found for', email, '- signing out.');
+            setCurrentUser(prev => (prev && prev.email.toLowerCase() === email) ? prev : null);
+            localStorage.removeItem(USER_SESSION_KEY);
+            fbSignOut(auth).catch(() => {});
           }
         } catch (e) {
+          // A transient failure (network blip, Firestore quota, etc.) reading
+          // the users collection - NOT evidence this account doesn't exist
+          // or isn't an admin. Never fabricate a role here: keep whatever
+          // currentUser already was (e.g. set correctly moments earlier by
+          // login()'s own finalizeLogin()) and otherwise just leave it
+          // untouched so the UI can show a loading/error state and retry,
+          // rather than silently granting access.
           console.error('Error resolving user during Firebase auth resolution:', e);
-          if (isMounted) {
-            setCurrentUser(prev => {
-              if (prev && prev.email.toLowerCase() === email) return prev;
-              const fallback: UserProfile = {
-                userId: fbUser.uid,
-                name: fbUser.displayName || email.split('@')[0] || 'Authorized Staff',
-                email: fbUser.email,
-                role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
-                isActive: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              };
-              localStorage.setItem(USER_SESSION_KEY, JSON.stringify(fallback));
-              return fallback;
-            });
-          }
+          // Deliberately no setCurrentUser call here - leave whatever state
+          // already exists untouched rather than fabricating a profile.
         }
       } else {
         // Firebase has no active Google user; check if an authenticated session exists from username/password login
@@ -221,17 +215,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const found = list.find(u => u.email.toLowerCase() === email);
         if (found) {
           setCurrentUser(found);
+          try { localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found)); } catch (_) {}
         } else {
-          const newFbProfile: UserProfile = {
-            userId: result.user.uid,
-            name: result.user.displayName || email.split('@')[0],
-            email: result.user.email,
-            role: email === 'info@funscholar.com' ? 'SUPER_ADMIN' : 'ADMIN',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          };
-          setCurrentUser(newFbProfile);
+          // No profile record exists for this Google account - fail safe
+          // rather than auto-provisioning ADMIN access for whoever just
+          // happened to sign in. Access must be explicitly issued by the
+          // Super Admin first (same requirement the password-login path
+          // already enforces).
+          await fbSignOut(auth);
+          throw new Error('Signed in, but no matching profile record was found. Please contact the Super Admin.');
         }
       }
     } catch (err: any) {
