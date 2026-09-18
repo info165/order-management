@@ -131,6 +131,30 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     return unsubscribe;
   }, []);
 
+  // Seeds the whole school edit form for a given order. Deliberately reads
+  // from the LIVE school registry record first (falling back to the
+  // order's own denormalized copy only if that school can't be found) -
+  // an order's own schoolName/phone/address can be stale (that's the exact
+  // bug being guarded against here), so if the dropdown is already showing
+  // the right school selected, everything below it must reflect that
+  // school's real current details, not whatever this one order happened to
+  // have cached. Without this, saving an edit that never touches the
+  // dropdown (e.g. just correcting the address) would silently resubmit
+  // the order's stale name/phone and, on the "same school" save path,
+  // overwrite the shared master school record with them.
+  const seedSchoolForm = (targetOrder: Order) => {
+    const linkedSchool = allSchools.find(s => s.schoolId === targetOrder.schoolId);
+    setSchoolFormId(targetOrder.schoolId || '');
+    setSchoolFormName(linkedSchool?.schoolName ?? targetOrder.schoolName ?? '');
+    setSchoolFormPhone(linkedSchool ? (linkedSchool.phone || linkedSchool.contactPhone || '') : (targetOrder.schoolContactPhone || ''));
+    setSchoolFormAddress(linkedSchool?.address ?? targetOrder.schoolAddress ?? '');
+    setSchoolFormType(linkedSchool?.schoolType ?? targetOrder.schoolType ?? '');
+    setSchoolFormState(linkedSchool?.state ?? targetOrder.state ?? '');
+    setSchoolFormCode(linkedSchool?.schoolCode ?? targetOrder.schoolCode ?? '');
+    setSchoolFormEmail(linkedSchool?.email ?? targetOrder.schoolEmail ?? '');
+    setSchoolFormPincode(linkedSchool ? (linkedSchool.pinCode || linkedSchool.pincode || '') : (targetOrder.schoolPincode || ''));
+  };
+
   // Contract & commercial details edit state (order number, PO number, date,
   // category, company, order value) - the fields captured at creation time
   // that previously had no way to be corrected afterward.
@@ -163,15 +187,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   }, []);
 
   useEffect(() => {
-    setSchoolFormId(activeOrder.schoolId || '');
-    setSchoolFormName(activeOrder.schoolName || '');
-    setSchoolFormPhone(activeOrder.schoolContactPhone || '');
-    setSchoolFormAddress(activeOrder.schoolAddress || '');
-    setSchoolFormType(activeOrder.schoolType || '');
-    setSchoolFormState(activeOrder.state || '');
-    setSchoolFormCode(activeOrder.schoolCode || '');
-    setSchoolFormEmail(activeOrder.schoolEmail || '');
-    setSchoolFormPincode(activeOrder.schoolPincode || '');
+    seedSchoolForm(activeOrder);
     setSelectedAgentId(activeOrder.agentId || 'AGT-DIRECT');
     setContractFormOrderNumber(activeOrder.orderNumber || '');
     setContractFormPoNumber(activeOrder.purchaseOrderNumber || '');
@@ -1044,10 +1060,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          setSchoolFormId(activeOrder.schoolId || '');
-                          setSchoolFormName(activeOrder.schoolName || '');
-                          setSchoolFormPhone(activeOrder.schoolContactPhone || '');
-                          setSchoolFormAddress(activeOrder.schoolAddress || '');
+                          seedSchoolForm(activeOrder);
                           setSchoolSaveError(null);
                           setIsEditingSchool(true);
                         }}
