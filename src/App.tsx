@@ -23,7 +23,6 @@ import {
   getOrders,
   getNotifications,
   markNotificationsAsRead,
-  initializeFirestoreSeed,
   softDeleteOrder,
   updateOrderStatus,
   subscribeToRealtimeOrders,
@@ -127,13 +126,24 @@ function MainApp() {
     }
   }, [currentUser]);
 
-  // Initial seed and automatic real-time Firestore synchronization
+  // Automatic real-time Firestore synchronization.
+  //
+  // initializeFirestoreSeed() USED to also run here on every app load, to
+  // bootstrap Firestore from the hardcoded REAL_SHEET_ORDERS seed the very
+  // first time the app ever ran against an empty database. It decided
+  // "empty" by running a `limit(1)` query against `orders` - but that
+  // query is subject to Firestore security rules, and an AGENT account's
+  // reads are scoped to only orders matching their own agentId. A brand
+  // new agent with zero orders assigned therefore sees that query come
+  // back empty regardless of how much real data exists - and the seed
+  // path then merge-writes the entire original hardcoded dataset back
+  // over every live order, school, agent, product and user document,
+  // silently reverting real statuses/dispatch info/school links to their
+  // original import-time values. That is exactly what just happened on a
+  // new agent's first login. The database has been live and populated for
+  // a long time now - there is no legitimate scenario left where this
+  // should ever run again, so it's removed outright rather than patched.
   useEffect(() => {
-    async function init() {
-      await initializeFirestoreSeed();
-    }
-    init();
-
     if (!currentUser) return;
 
     // Connect to live real-time Firestore orders updates
