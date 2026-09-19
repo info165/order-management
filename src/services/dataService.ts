@@ -1649,7 +1649,17 @@ export async function updateDispatch(
 
   memoryDispatches = [dispatchRecord, ...memoryDispatches];
   saveStorage(STORAGE_KEYS.DISPATCHES, memoryDispatches);
-  syncDocToFirestore('dispatches', dispatchRecord.dispatchId, dispatchRecord);
+  // This write used to be fire-and-forget: if it failed, the order's own
+  // fields below still updated and everything looked saved, but the dispatch
+  // record itself silently never reached the database. Now a failure stops
+  // here with a clear message (markDelivered() already works this way), and
+  // the local copy is dropped so it can't be mistaken for a saved record.
+  const dispatchSaved = await syncDocToFirestore('dispatches', dispatchRecord.dispatchId, dispatchRecord);
+  if (!dispatchSaved) {
+    memoryDispatches = memoryDispatches.filter(d => d.dispatchId !== dispatchRecord.dispatchId);
+    saveStorage(STORAGE_KEYS.DISPATCHES, memoryDispatches);
+    throw new Error('Could not save the dispatch record to the database. Nothing was changed - please check your connection and try again.');
+  }
 
   // Update order's quick status
   const updatedOrder = await updateOrder(

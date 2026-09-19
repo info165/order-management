@@ -46,6 +46,7 @@ import { StatusBadge } from '../common/StatusBadge';
 import { TrackingLink } from '../common/TrackingLink';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 import { processFileForUpload } from '../../utils/fileUpload';
+import { toDateInputValue, todayLocalISO } from '../../utils/dateInput';
 import { PrintStickerModal } from './PrintStickerModal';
 import {
   getPaymentsForOrder,
@@ -322,14 +323,21 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   // Form states for dispatch
   const [courierName, setCourierName] = useState(order.courierName || 'Delhivery');
   const [trackingNumber, setTrackingNumber] = useState(order.docketNumber || '');
-  const [dispatchDate, setDispatchDate] = useState(order.dispatchDate || new Date().toISOString().split('T')[0]);
+  // Older orders store dates like "13-08-2026", which a date box can't show
+  // (it would render blank). Show them properly when they're a single clear
+  // date; anything else (e.g. two dates in one text) is kept exactly as saved.
+  const [dispatchDate, setDispatchDate] = useState(toDateInputValue(order.dispatchDate) || order.dispatchDate || todayLocalISO());
   const [numberOfBoxes, setNumberOfBoxes] = useState(order.numberOfBoxes || '1');
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(order.expectedDeliveryDate || '');
   const [dispatchRemarks, setDispatchRemarks] = useState('');
   const [isSubmittingDispatch, setIsSubmittingDispatch] = useState(false);
 
   // Delivery confirmation form
-  const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().split('T')[0]);
+  // Start from the order's saved delivery date if it already has one, so the
+  // box shows what is actually recorded - not today's date, which looked
+  // like a fresh delivery and got saved over the real one if the button was
+  // pressed again. Undelivered orders still start at today's date.
+  const [deliveryDate, setDeliveryDate] = useState(toDateInputValue(order.actualDeliveryDate) || todayLocalISO());
   const [receiverDesignation, setReceiverDesignation] = useState('Principal / Incharge');
   const [deliveryRemarks, setDeliveryRemarks] = useState('');
   const [isSubmittingDelivery, setIsSubmittingDelivery] = useState(false);
@@ -695,6 +703,18 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   // Handle Mark Delivered
   const handleMarkDelivered = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Every press records a new delivery (a delivery record, a timeline
+    // entry and a partner notification) and overwrites the saved date, so
+    // confirm before doing that to an order that's already delivered.
+    if (activeOrder.status === 'DELIVERED') {
+      const saved = toDateInputValue(activeOrder.actualDeliveryDate) || activeOrder.actualDeliveryDate;
+      const proceed = window.confirm(
+        saved
+          ? `This order is already marked as delivered (delivery date ${saved}).\n\nRecord the delivery again with date ${deliveryDate}?`
+          : `This order is already marked as delivered.\n\nRecord the delivery again with date ${deliveryDate}?`
+      );
+      if (!proceed) return;
+    }
     setIsSubmittingDelivery(true);
     try {
       const updated = await markDelivered(
