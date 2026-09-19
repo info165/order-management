@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { INITIAL_USERS } from '../data/seedData';
-import { getUsers } from '../services/dataService';
+import { getUsers, getOwnUserProfile } from '../services/dataService';
 import { auth, googleProvider, createAuthAccountForUser } from '../firebase/config';
 import { onAuthStateChanged, signOut as fbSignOut, signInWithPopup, signInWithEmailAndPassword, User as FbUser } from 'firebase/auth';
 
@@ -96,6 +96,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser, authLoading]);
 
+  // Work out who a signed-in Firebase account is. Every sign-in path (password,
+  // Google, session restore) uses this, so they can never disagree.
+  //
+  // getUsers() lists the WHOLE users collection, which the security rules only
+  // allow admins to do - for an agent it is always refused and silently falls
+  // back to the local cache (hardcoded seed users + whatever an admin session on
+  // this same browser once loaded), so any agent created after the seed could
+  // only log in on a browser an admin had used first. A user CAN always read
+  // their own users/{uid} doc, and that is the exact doc the rules trust for
+  // their role - so it wins for the core fields (role, agent link, active flag).
+  // The list, when it has a match, only contributes extra display fields.
+  const resolveProfile = async (
+    fbUser: FbUser,
+    email: string
+  ): Promise<{ profile: UserProfile | null; list: UserProfile[]; ownReadFailed: boolean }> => {
+    const list = await getUsers();
+    const fromList = list.find(u => u.email.toLowerCase() === email);
+
+    let own: UserProfile | null = null;
+    let ownReadFailed = false;
+    try {
+      own = await getOwnUserProfile(fbUser.uid, email);
+    } catch (e) {
+      ownReadFailed = true;
+      console.warn('Could not read own user profile:', e);
+    }
+
+    if (own) {
+      const profile: UserProfile = fromList
+        ? { ...fromList, name: own.name, role: own.role, agentId: own.agentId, agentCode: own.agentCode, isActive: own.isActive, firebaseUid: fbUser.uid }
+        : own;
+      return { profile, list, ownReadFailed };
+    }
+    return { profile: fromList || null, list, ownReadFailed };
+  };
+
   // Listen to Firebase auth state and restore session before deciding whether to show app
   useEffect(() => {
     let isMounted = true;
@@ -104,14 +140,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (fbUser && fbUser.email) {
         const email = fbUser.email.toLowerCase();
         try {
-          const list = await getUsers();
+          const { profile: found, list, ownReadFailed } = await resolveProfile(fbUser, email);
           if (isMounted) setAllUsers(list);
-          const found = list.find(u => u.email.toLowerCase() === email);
           if (found) {
             if (isMounted) {
-              setCurrentUser(found);
-              localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found));
+              if (found.isActive) {
+                setCurrentUser(found);
+                localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found));
+              } else {
+                setCurrentUser(null);
+                localStorage.removeItem(USER_SESSION_KEY);
+                fbSignOut(auth).catch(() => {});
+              }
             }
+          } else if (ownReadFailed) {
+            // Couldn't reach the profile at all (network/quota) - that says
+            // nothing about whether the account exists, so don't sign anyone
+            // out or invent an identity; leave the current state as it is.
+            console.warn('Could not verify profile for', email, '- leaving session state unchanged.');
           } else if (isMounted) {
             // No matching profile record exists for this signed-in Firebase
             // account. This used to auto-provision a fabricated ADMIN
@@ -210,12 +256,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user && result.user.email) {
         const email = result.user.email.toLowerCase();
-        const list = await getUsers();
+        const { profile: found, list, ownReadFailed } = await resolveProfile(result.user, email);
         setAllUsers(list);
-        const found = list.find(u => u.email.toLowerCase() === email);
         if (found) {
+          if (!found.isActive) {
+            await fbSignOut(auth);
+            throw new Error('This account is currently deactivated. Please contact Super Admin (info@funscholar.com) to reactivate your credentials.');
+          }
           setCurrentUser(found);
           try { localStorage.setItem(USER_SESSION_KEY, JSON.stringify(found)); } catch (_) {}
+        } else if (ownReadFailed) {
+          await fbSignOut(auth);
+          throw new Error('Could not load your profile right now. Please check your connection and try again.');
         } else {
           // No profile record exists for this Google account - fail safe
           // rather than auto-provisioning ADMIN access for whoever just
@@ -256,12 +308,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Finalize a successful sign-in: fetch the profile (now permitted, since
     // we're authenticated) and set it as the current user.
     const finalizeLogin = async (email: string): Promise<boolean> => {
-      const list = await getUsers();
+      const fbUser = auth.currentUser;
+      if (!fbUser) {
+        throw new Error('Sign-in did not complete. Please try again.');
+      }
+      const { profile: found, list, ownReadFailed } = await resolveProfile(fbUser, email);
       setAllUsers(list);
-      const found = list.find(u => u.email.toLowerCase() === email);
       if (!found) {
         await fbSignOut(auth);
-        throw new Error('Signed in, but no matching profile record was found. Please contact the Super Admin.');
+        throw new Error(
+          ownReadFailed
+            ? 'Could not load your profile right now. Please check your connection and try again.'
+            : 'Signed in, but no matching profile record was found. Please contact the Super Admin.'
+        );
       }
       if (!found.isActive) {
         await fbSignOut(auth);

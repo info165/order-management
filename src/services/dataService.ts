@@ -2580,6 +2580,35 @@ export async function getUsers(): Promise<UserProfile[]> {
   return [...memoryUsers];
 }
 
+// Reads ONLY the signed-in account's own users/{firebaseUid} doc. Unlike
+// getUsers() (a whole-collection list, which the rules only allow admins to
+// do), a user may always read their own doc - and it is the same doc the
+// rules use to decide their role, so it is the authoritative source for who
+// they are. Throws on a read error (so callers can tell "doesn't exist" from
+// "couldn't reach it"); returns null only if the doc genuinely isn't there.
+export async function getOwnUserProfile(firebaseUid: string, fallbackEmail: string): Promise<UserProfile | null> {
+  const snap = await getDoc(doc(db, 'users', firebaseUid));
+  if (!snap.exists()) return null;
+  const d = snap.data() as Partial<UserProfile> | undefined;
+  if (!d || !d.role) return null;
+  const stamp = d.updatedAt || new Date().toISOString();
+  return {
+    userId: d.userId || firebaseUid,
+    name: d.name || fallbackEmail.split('@')[0],
+    email: d.email || fallbackEmail,
+    role: d.role,
+    // An agent's agentId and agentCode are the same value (e.g. AGT-0004);
+    // fall back to the code so an agent is never left without the id that
+    // scopes their orders query.
+    agentId: d.agentId || d.agentCode || undefined,
+    agentCode: d.agentCode || undefined,
+    isActive: d.isActive === true,
+    createdAt: d.createdAt || stamp,
+    updatedAt: stamp,
+    firebaseUid
+  };
+}
+
 export async function updateUserRole(userId: string, newRole: UserRole, user: UserProfile): Promise<void> {
   if (user.role !== 'SUPER_ADMIN') {
     throw new Error('Only Super Admin can update user roles.');
