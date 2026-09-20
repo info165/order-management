@@ -66,12 +66,83 @@ const STORAGE_KEYS = {
   PENDING_OTPS: 'govschool_pending_otps_v3'
 };
 
-// Immediately purge stale mock cache from previous sessions
+// Immediately purge stale mock cache and oversized data URLs from previous sessions
+function stripBloatedUrls(key: string, val: any): any {
+  if (!val) return val;
+  if (key === STORAGE_KEYS.ORDERS && Array.isArray(val)) {
+    const urlFields = [
+      'gemOrderCopyUrl',
+      'cnCopyUrl',
+      'podCopyUrl',
+      'gemInvoiceUrl',
+      'ewayBillUrl',
+      'companyInvoiceUrl'
+    ];
+    return val.map((o: any) => {
+      if (!o) return o;
+      let needsStrip = false;
+      for (const f of urlFields) {
+        if (typeof o[f] === 'string' && o[f].length > 500) {
+          needsStrip = true;
+          break;
+        }
+      }
+      if (!needsStrip) return o;
+      const copy = { ...o };
+      for (const f of urlFields) {
+        if (typeof copy[f] === 'string' && copy[f].length > 500) {
+          copy[f] = '[stored_in_cloud]';
+        }
+      }
+      return copy;
+    });
+  }
+  if (key === STORAGE_KEYS.DOCUMENTS && Array.isArray(val)) {
+    return val.slice(0, 50).map((d: any) => {
+      if (d && typeof d.fileUrl === 'string' && d.fileUrl.length > 500) {
+        return { ...d, fileUrl: '[stored_in_cloud]' };
+      }
+      return d;
+    });
+  }
+  if (key === STORAGE_KEYS.AUDIT_LOGS && Array.isArray(val)) {
+    return val.slice(0, 40);
+  }
+  if (key === STORAGE_KEYS.TIMELINES && Array.isArray(val)) {
+    return val.slice(0, 80);
+  }
+  return val;
+}
+
 try {
   if (typeof window !== 'undefined' && window.localStorage) {
+    // 1. Purge legacy non-v3 keys
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('govschool_') && !key.endsWith('_v3')) {
         localStorage.removeItem(key);
+      }
+    });
+
+    // 2. Clean existing bloated orders cache in browser localStorage
+    const existingOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+    if (existingOrders && (existingOrders.includes('data:') || existingOrders.length > 500_000)) {
+      try {
+        const parsed = JSON.parse(existingOrders);
+        if (Array.isArray(parsed)) {
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(stripBloatedUrls(STORAGE_KEYS.ORDERS, parsed)));
+        } else {
+          localStorage.removeItem(STORAGE_KEYS.ORDERS);
+        }
+      } catch (_) {
+        localStorage.removeItem(STORAGE_KEYS.ORDERS);
+      }
+    }
+
+    // 3. Purge volatile caches if oversized
+    [STORAGE_KEYS.DOCUMENTS, STORAGE_KEYS.AUDIT_LOGS, STORAGE_KEYS.TIMELINES].forEach(k => {
+      const item = localStorage.getItem(k);
+      if (item && (item.includes('data:') || item.length > 200_000)) {
+        localStorage.removeItem(k);
       }
     });
   }
@@ -79,19 +150,48 @@ try {
 
 function loadStorage<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(key);
+      if (raw) return JSON.parse(raw);
+    }
   } catch (e) {
-    console.error('Failed to parse from storage', key, e);
+    console.warn('Notice reading from localStorage for', key, e);
   }
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const sessionRaw = sessionStorage.getItem(key);
+      if (sessionRaw) return JSON.parse(sessionRaw);
+    }
+  } catch (_) {}
   return fallback;
 }
 
 function saveStorage<T>(key: string, val: T): void {
   try {
-    localStorage.setItem(key, JSON.stringify(val));
-  } catch (e) {
-    console.error('Failed to save to storage', key, e);
+    const compactVal = stripBloatedUrls(key, val);
+    localStorage.setItem(key, JSON.stringify(compactVal));
+  } catch (e: any) {
+    // If quota is reached, evict volatile caches first and retry
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
+        localStorage.removeItem(STORAGE_KEYS.AUDIT_LOGS);
+        localStorage.removeItem(STORAGE_KEYS.TIMELINES);
+        const compactVal = stripBloatedUrls(key, val);
+        localStorage.setItem(key, JSON.stringify(compactVal));
+        return;
+      }
+    } catch (_) {
+      // Fallback to sessionStorage if localStorage is exhausted
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(key, JSON.stringify(stripBloatedUrls(key, val)));
+          return;
+        }
+      } catch (_) {}
+    }
+    // Data remains safely preserved in runtime memory and synced to Firestore
+    console.warn('Storage quota limit reached for', key, '- preserved in active memory.');
   }
 }
 
