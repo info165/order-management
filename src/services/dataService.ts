@@ -1694,10 +1694,21 @@ export async function softDeleteOrder(orderId: string, user: UserProfile): Promi
   }
   const idx = memoryOrders.findIndex(o => o.orderId === orderId);
   if (idx !== -1) {
+    const previousUpdatedAt = memoryOrders[idx].updatedAt;
     memoryOrders[idx].isDeleted = true;
     memoryOrders[idx].updatedAt = new Date().toISOString();
     saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-    syncDocToFirestore('orders', orderId, { isDeleted: true });
+    // Wait for the database write and report a failure. This used to be
+    // fire-and-forget, so if the save failed the order vanished from this
+    // screen while still existing in the database - and in a bulk delete
+    // some orders could silently not be deleted at all.
+    const saved = await syncDocToFirestore('orders', orderId, { isDeleted: true });
+    if (!saved) {
+      memoryOrders[idx].isDeleted = false;
+      memoryOrders[idx].updatedAt = previousUpdatedAt;
+      saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
+      throw new Error(`Could not delete order ${orderId} - it was not changed. Please check your connection and try again.`);
+    }
 
     await writeActivityLog({
       userId: user.userId,
