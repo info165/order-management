@@ -5,7 +5,6 @@ import {
   Mail,
   Eye,
   EyeOff,
-  Building2,
   ArrowRight,
   KeyRound,
   CheckCircle2,
@@ -17,6 +16,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import funscholarLogo from '../../assets/funscholar-logo.png';
 import { generatePasswordResetOtp, verifyOtpAndResetPassword } from '../../services/dataService';
 
 interface LoginPageProps {
@@ -170,12 +170,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
       <header className="border-b border-slate-800/80 bg-slate-950/60 px-6 py-4 backdrop-blur-md">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center font-bold text-slate-950 shadow-md">
-              <Building2 className="w-5 h-5" />
-            </div>
+            <img src={funscholarLogo} alt="Funscholar" className="h-10 sm:h-11 w-auto" />
             <div>
               <span className="font-bold text-base text-white tracking-tight block">
-                GovSchool Order ERP
+                Funscholar Order Management
               </span>
               <span className="text-[11px] text-amber-400 font-medium">
                 Institutional Supply & Partner Portal
@@ -628,7 +626,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSuccess }) => {
 
       {/* Security Footer */}
       <footer className="border-t border-slate-800/60 bg-slate-950/80 px-4 py-3 text-center text-xs text-slate-500">
-        GovSchool Institutional Order ERP • Super Admin Authority Governance
+        Funscholar Order Management • Super Admin Authority Governance
       </footer>
     </div>
   );
