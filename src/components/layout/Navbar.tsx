@@ -70,6 +70,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // A partner's home is their own portal (they have no dashboard or 3-dot
+  // menu), so the logo must always lead back there.
+  const homeSection = activeRole === 'AGENT' ? 'agent_portal' : 'dashboard';
+
   const handleMenuSelect = (section: string) => {
     onNavigate(section);
     setShowMoreMenu(false);
@@ -84,13 +88,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Brand Title */}
           <button
             type="button"
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate(homeSection)}
             className={`flex items-center gap-2.5 px-2 py-1 rounded-xl transition-all text-left focus:outline-none cursor-pointer ${
-              activeSection === 'dashboard'
+              activeSection === homeSection
                 ? 'bg-slate-800/80 ring-1 ring-amber-500/50'
                 : 'hover:bg-slate-800/50'
             }`}
-            title="Funscholar Order Management - Go to Dashboard"
+            title={activeRole === 'AGENT' ? 'Funscholar Order Management - Go to My Portal' : 'Funscholar Order Management - Go to Dashboard'}
           >
             <img src={funscholarLogo} alt="Funscholar" className="h-10 sm:h-11 w-auto" />
             <div>
@@ -101,20 +105,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {/* Clean Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1 pl-4 border-l border-slate-800">
-            <button
-              type="button"
-              onClick={() => onNavigate('orders')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                activeSection === 'orders'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs font-bold'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <ShoppingCart className="w-3.5 h-3.5" />
-              <span>Orders Registry</span>
-            </button>
-          </nav>
+          {activeRole !== 'AGENT' && (
+            <nav className="hidden md:flex items-center gap-1 pl-4 border-l border-slate-800">
+              <button
+                type="button"
+                onClick={() => onNavigate('orders')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeSection === 'orders'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs font-bold'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>Orders Registry</span>
+              </button>
+            </nav>
+          )}
         </div>
 
         {/* Center/Right: Secondary Controls */}
@@ -213,202 +219,204 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Three-Dots Menu (Additional Modules) */}
-          <div className="relative" ref={menuRef}>
-            <button
-              type="button"
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
-              className={`p-2 rounded-lg border transition-all ${
-                showMoreMenu
-                  ? 'bg-amber-500 text-slate-950 border-amber-500'
-                  : 'bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border-slate-700'
-              }`}
-              title="More Modules"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-
-            {/* Dropdown for Secondary Tools */}
-            {showMoreMenu && (
-              <div className="absolute right-0 mt-2 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-2 z-50 divide-y divide-slate-800 text-xs">
-                
-                {/* Core Workspaces */}
-                <div className="py-1">
-                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Workspaces
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('orders')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'orders' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <ShoppingCart className="w-4 h-4 text-amber-400" />
-                    <span>Orders Registry</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('dashboard')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'dashboard' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <LayoutDashboard className="w-4 h-4 text-blue-400" />
-                    <span>Executive Dashboard</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('dataentry')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'dataentry' ? 'text-sky-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <FileEdit className="w-4 h-4 text-sky-400" />
-                    <span>Data Entry View</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('agent_portal')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'agent_portal' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <Users className="w-4 h-4 text-amber-400" />
-                    <span>Partner Portal View</span>
-                  </button>
-
-                  {(activeRole === 'SUPER_ADMIN' || activeRole === 'ADMIN') && (
+          {activeRole !== 'AGENT' && (
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                className={`p-2 rounded-lg border transition-all ${
+                  showMoreMenu
+                    ? 'bg-amber-500 text-slate-950 border-amber-500'
+                    : 'bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border-slate-700'
+                }`}
+                title="More Modules"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+  
+              {/* Dropdown for Secondary Tools */}
+              {showMoreMenu && (
+                <div className="absolute right-0 mt-2 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-2 z-50 divide-y divide-slate-800 text-xs">
+                  
+                  {/* Core Workspaces */}
+                  <div className="py-1">
+                    <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Workspaces
+                    </div>
+  
                     <button
                       type="button"
-                      onClick={() => handleMenuSelect('users')}
+                      onClick={() => handleMenuSelect('orders')}
                       className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                        activeSection === 'users' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                        activeSection === 'orders' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
                       }`}
                     >
-                      <Shield className="w-4 h-4 text-purple-400" />
-                      <span>Users (User Management)</span>
+                      <ShoppingCart className="w-4 h-4 text-amber-400" />
+                      <span>Orders Registry</span>
                     </button>
-                  )}
-                </div>
-
-                {/* Operations Pipelines */}
-                <div className="py-1">
-                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Pipelines
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('dashboard')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'dashboard' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <LayoutDashboard className="w-4 h-4 text-blue-400" />
+                      <span>Executive Dashboard</span>
+                    </button>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('dataentry')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'dataentry' ? 'text-sky-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <FileEdit className="w-4 h-4 text-sky-400" />
+                      <span>Data Entry View</span>
+                    </button>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('agent_portal')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'agent_portal' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <Users className="w-4 h-4 text-amber-400" />
+                      <span>Partner Portal View</span>
+                    </button>
+  
+                    {(activeRole === 'SUPER_ADMIN' || activeRole === 'ADMIN') && (
+                      <button
+                        type="button"
+                        onClick={() => handleMenuSelect('users')}
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                          activeSection === 'users' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                        }`}
+                      >
+                        <Shield className="w-4 h-4 text-purple-400" />
+                        <span>Users (User Management)</span>
+                      </button>
+                    )}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('dispatches')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'dispatches' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <Truck className="w-4 h-4 text-purple-400" />
-                    <span>Dispatch & Logistics</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('payments')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'payments' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 text-emerald-400" />
-                    <span>Payments & Treasury</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('followups')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'followups' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <PhoneCall className="w-4 h-4 text-yellow-400" />
-                    <span>Calling & Follow-ups</span>
-                  </button>
-                </div>
-
-                {/* Masters & Reports */}
-                <div className="py-1">
-                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Masters & Reports
+  
+                  {/* Operations Pipelines */}
+                  <div className="py-1">
+                    <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Pipelines
+                    </div>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('dispatches')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'dispatches' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <Truck className="w-4 h-4 text-purple-400" />
+                      <span>Dispatch & Logistics</span>
+                    </button>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('payments')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'payments' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <CreditCard className="w-4 h-4 text-emerald-400" />
+                      <span>Payments & Treasury</span>
+                    </button>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('followups')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'followups' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <PhoneCall className="w-4 h-4 text-yellow-400" />
+                      <span>Calling & Follow-ups</span>
+                    </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('schools')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'schools' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <Building className="w-4 h-4 text-sky-400" />
-                    <span>School Registry</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('products')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'products' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <Package className="w-4 h-4 text-teal-400" />
-                    <span>Equipment & Packages</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect('reports')}
-                    className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
-                      activeSection === 'reports' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
-                    }`}
-                  >
-                    <BarChart3 className="w-4 h-4 text-rose-400" />
-                    <span>Reports & MIS</span>
-                  </button>
-                </div>
-
-                {/* Export Action */}
-                <div className="py-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      onExportData();
-                    }}
-                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-                  >
-                    <Download className="w-4 h-4 text-emerald-400" />
-                    <span>Export Orders to Excel</span>
-                  </button>
-                </div>
-
-                {activeRole === 'SUPER_ADMIN' && (
-                  <div className="py-1 border-t border-slate-800">
+  
+                  {/* Masters & Reports */}
+                  <div className="py-1">
+                    <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Masters & Reports
+                    </div>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('schools')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'schools' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <Building className="w-4 h-4 text-sky-400" />
+                      <span>School Registry</span>
+                    </button>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('products')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'products' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <Package className="w-4 h-4 text-teal-400" />
+                      <span>Equipment & Packages</span>
+                    </button>
+  
+                    <button
+                      type="button"
+                      onClick={() => handleMenuSelect('reports')}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                        activeSection === 'reports' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                      }`}
+                    >
+                      <BarChart3 className="w-4 h-4 text-rose-400" />
+                      <span>Reports & MIS</span>
+                    </button>
+                  </div>
+  
+                  {/* Export Action */}
+                  <div className="py-1">
                     <button
                       type="button"
                       onClick={() => {
                         setShowMoreMenu(false);
-                        onNavigateToCB?.();
+                        onExportData();
                       }}
-                      className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                      className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
                     >
-                      <Lock className="w-4 h-4 text-slate-500" />
-                      <span>CB</span>
+                      <Download className="w-4 h-4 text-emerald-400" />
+                      <span>Export Orders to Excel</span>
                     </button>
                   </div>
-                )}
-
-              </div>
-            )}
-          </div>
+  
+                  {activeRole === 'SUPER_ADMIN' && (
+                    <div className="py-1 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          onNavigateToCB?.();
+                        }}
+                        className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                      >
+                        <Lock className="w-4 h-4 text-slate-500" />
+                        <span>CB</span>
+                      </button>
+                    </div>
+                  )}
+  
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>

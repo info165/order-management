@@ -415,7 +415,7 @@ function MainApp() {
       <main className="flex-1 overflow-y-auto w-full p-2.5 sm:p-4 bg-slate-100">
         <div className="w-full space-y-3">
           {/* Breadcrumb / Return to Orders navigation bar when viewing non-order screens */}
-          {activeSection !== 'orders' && (
+          {activeSection !== 'orders' && !isAgent && (
             <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <button
