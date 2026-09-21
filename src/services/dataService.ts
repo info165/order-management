@@ -18,7 +18,13 @@ import {
   UserRole,
   SystemSettings,
   IssuedCredential,
-  CommissionPayment
+  CommissionPayment,
+  Material,
+  Catalogue,
+  Vendor,
+  PurchaseOrder,
+  StockMovement,
+  MovementReason
 } from '../types';
 import {
   INITIAL_ORDERS,
@@ -28,6 +34,14 @@ import {
   INITIAL_SETTINGS,
   INITIAL_USERS
 } from '../data/seedData';
+import {
+  INITIAL_MATERIALS,
+  INITIAL_CATALOGUES,
+  INITIAL_VENDORS,
+  INITIAL_PURCHASE_ORDERS,
+  INITIAL_STOCK_MOVEMENTS
+} from '../data/inventorySeedData';
+import { matchOrderToCatalogue, flattenBOM } from '../utils/bomCalculator';
 import { db, auth, createAuthAccountForUser } from '../firebase/config';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import {
@@ -63,7 +77,12 @@ const STORAGE_KEYS = {
   SETTINGS: 'govschool_settings_v3',
   USERS: 'govschool_users_v3',
   DELETED_USERS: 'govschool_deleted_users_v3',
-  PENDING_OTPS: 'govschool_pending_otps_v3'
+  PENDING_OTPS: 'govschool_pending_otps_v3',
+  MATERIALS: 'govschool_materials_v3',
+  CATALOGUES: 'govschool_catalogues_v3',
+  VENDORS: 'govschool_vendors_v3',
+  PURCHASE_ORDERS: 'govschool_purchase_orders_v3',
+  STOCK_MOVEMENTS: 'govschool_stock_movements_v3'
 };
 
 // Immediately purge stale mock cache and oversized data URLs from previous sessions
@@ -110,6 +129,17 @@ function stripBloatedUrls(key: string, val: any): any {
   }
   if (key === STORAGE_KEYS.TIMELINES && Array.isArray(val)) {
     return val.slice(0, 80);
+  }
+  if (key === STORAGE_KEYS.MATERIALS && Array.isArray(val)) {
+    return val.map((m: any) => {
+      if (m && typeof m.imageUrl === 'string' && m.imageUrl.length > 500) {
+        return { ...m, imageUrl: '[stored_in_cloud]' };
+      }
+      return m;
+    });
+  }
+  if (key === STORAGE_KEYS.STOCK_MOVEMENTS && Array.isArray(val)) {
+    return val.slice(0, 150);
   }
   return val;
 }
@@ -222,6 +252,86 @@ let memoryAgents: Agent[] = loadStorage(STORAGE_KEYS.AGENTS, INITIAL_AGENTS);
 let memoryProducts: Product[] = loadStorage(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
 let memorySettings: SystemSettings = loadStorage(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
 let deletedUserIds: string[] = loadStorage(STORAGE_KEYS.DELETED_USERS, []);
+
+export function normalizeMaterial(m: any): Material {
+  if (!m) return m;
+  const name = (m.name || m.materialName || 'Unnamed Material').toString().trim();
+  const sku = (m.sku || m.materialSku || `SKU-${m.materialId || Math.floor(1000 + Math.random() * 9000)}`).toString().trim();
+  const unit = (m.unit || 'Nos').toString().trim();
+  return {
+    materialId: m.materialId || `MAT-${Date.now().toString(36).toUpperCase()}`,
+    sku,
+    name,
+    category: m.category?.trim() || 'General',
+    description: m.description || '',
+    unit,
+    imageUrl: m.imageUrl || '',
+    preferredVendorId: m.preferredVendorId || '',
+    preferredVendorName: m.preferredVendorName || '',
+    alternativeVendorIds: Array.isArray(m.alternativeVendorIds) ? m.alternativeVendorIds : [],
+    purchasePrice: Number(m.purchasePrice) || 0,
+    sellingPrice: Number(m.sellingPrice) || 0,
+    openingInventory: Number(m.openingInventory) || 0,
+    currentStock: Number(m.currentStock) || 0,
+    minimumStockLevel: Number(m.minimumStockLevel) || 10,
+    isActive: m.isActive !== undefined ? Boolean(m.isActive) : true,
+    createdAt: m.createdAt || new Date().toISOString(),
+    updatedAt: m.updatedAt || new Date().toISOString()
+  };
+}
+
+export function normalizeStockMovement(m: any): StockMovement {
+  if (!m) return m;
+  const movType = m.movementType || m.type || 'IN';
+  const movReason = m.reason || m.movementReason || 'STOCK_ADJUSTMENT';
+  const time = m.timestamp || m.date || new Date().toISOString();
+  const userName = m.userName || m.user || 'System Auto';
+  const materialName = m.materialName || m.name || 'Component';
+  return {
+    ...m,
+    materialName: materialName,
+    movementType: movType,
+    type: movType,
+    reason: movReason,
+    movementReason: movReason,
+    timestamp: time,
+    date: time,
+    userName: userName,
+    user: userName
+  };
+}
+
+let memoryMaterials: Material[] = (loadStorage(STORAGE_KEYS.MATERIALS, INITIAL_MATERIALS) as any[]).map(normalizeMaterial);
+let memoryCatalogues: Catalogue[] = loadStorage(STORAGE_KEYS.CATALOGUES, INITIAL_CATALOGUES);
+let memoryVendors: Vendor[] = loadStorage(STORAGE_KEYS.VENDORS, INITIAL_VENDORS);
+let memoryPurchaseOrders: PurchaseOrder[] = loadStorage(STORAGE_KEYS.PURCHASE_ORDERS, INITIAL_PURCHASE_ORDERS);
+let memoryStockMovements: StockMovement[] = (loadStorage(STORAGE_KEYS.STOCK_MOVEMENTS, INITIAL_STOCK_MOVEMENTS) as any[]).map(normalizeStockMovement);
+
+if (memoryMaterials.length === 0) {
+  memoryMaterials = [...INITIAL_MATERIALS].map(normalizeMaterial);
+  saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+} else {
+  saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+}
+if (memoryCatalogues.length === 0) {
+  memoryCatalogues = [...INITIAL_CATALOGUES];
+  saveStorage(STORAGE_KEYS.CATALOGUES, memoryCatalogues);
+}
+if (memoryVendors.length === 0) {
+  memoryVendors = [...INITIAL_VENDORS];
+  saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
+}
+if (memoryPurchaseOrders.length === 0) {
+  memoryPurchaseOrders = [...INITIAL_PURCHASE_ORDERS];
+  saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+}
+if (memoryStockMovements.length === 0) {
+  memoryStockMovements = [...INITIAL_STOCK_MOVEMENTS].map(normalizeStockMovement);
+  saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+} else {
+  // Ensure existing storage also receives normalized fields
+  saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+}
 
 let memoryUsers: UserProfile[] = (loadStorage(STORAGE_KEYS.USERS, INITIAL_USERS) as UserProfile[]).filter(
   u => !deletedUserIds.includes(u.userId) && !deletedUserIds.includes(u.email.toLowerCase())
@@ -1685,6 +1795,15 @@ export async function updateOrderStatus(
     }
   }
 
+  // Deduct inventory when order is marked Dispatched
+  if (newStatus === 'DISPATCHED') {
+    try {
+      await deductInventoryForOrder(updatedOrder, user);
+    } catch (err) {
+      console.warn('Failed to deduct inventory on dispatch status change:', err);
+    }
+  }
+
   return updatedOrder;
 }
 
@@ -1824,6 +1943,13 @@ export async function updateDispatch(
     entityId: orderId,
     newValue: `${dispatchInput.courierName} tracking #${dispatchInput.trackingNumber}`
   });
+
+  // Automatically deduct physical inventory and record Stock Movement ledger
+  try {
+    await deductInventoryForOrder(updatedOrder, user);
+  } catch (err) {
+    console.warn('Failed to deduct inventory on dispatch update:', err);
+  }
 
   return updatedOrder;
 }
@@ -3622,4 +3748,836 @@ export function subscribeToRealtimeCommissionPayments(onUpdate: (payments: Commi
     return () => {};
   }
 }
+
+// ============================================================================
+// INVENTORY & PROCUREMENT MANAGEMENT MODULE
+// ============================================================================
+
+// 1. REALTIME SUBSCRIBERS
+export function subscribeToRealtimeMaterials(onUpdate: (materials: Material[]) => void): () => void {
+  onUpdate([...memoryMaterials]);
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'materials'),
+      (snapshot) => {
+        const remote: Material[] = [];
+        snapshot.forEach((docSnap) => {
+          const raw = docSnap.data();
+          if (raw && raw.materialId) {
+            remote.push(normalizeMaterial(raw));
+          }
+        });
+        if (remote.length > 0) {
+          memoryMaterials = remote;
+          saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+        }
+        onUpdate([...memoryMaterials]);
+      },
+      (err) => {
+        console.warn('Materials snapshot notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Materials snapshot error:', err);
+    return () => {};
+  }
+}
+
+export function subscribeToRealtimeCatalogues(onUpdate: (catalogues: Catalogue[]) => void): () => void {
+  onUpdate([...memoryCatalogues]);
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'catalogues'),
+      (snapshot) => {
+        const remote: Catalogue[] = [];
+        snapshot.forEach((docSnap) => {
+          const c = docSnap.data() as Catalogue;
+          if (c && c.catalogueId) remote.push(c);
+        });
+        if (remote.length > 0) {
+          memoryCatalogues = remote;
+          saveStorage(STORAGE_KEYS.CATALOGUES, memoryCatalogues);
+        }
+        onUpdate([...memoryCatalogues]);
+      },
+      (err) => {
+        console.warn('Catalogues snapshot notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Catalogues snapshot error:', err);
+    return () => {};
+  }
+}
+
+export function subscribeToRealtimeVendors(onUpdate: (vendors: Vendor[]) => void): () => void {
+  onUpdate([...memoryVendors]);
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'vendors'),
+      (snapshot) => {
+        const remote: Vendor[] = [];
+        snapshot.forEach((docSnap) => {
+          const v = docSnap.data() as Vendor;
+          if (v && v.vendorId) remote.push(v);
+        });
+        if (remote.length > 0) {
+          memoryVendors = remote;
+          saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
+        }
+        onUpdate([...memoryVendors]);
+      },
+      (err) => {
+        console.warn('Vendors snapshot notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Vendors snapshot error:', err);
+    return () => {};
+  }
+}
+
+export function subscribeToRealtimePurchaseOrders(onUpdate: (pos: PurchaseOrder[]) => void): () => void {
+  onUpdate([...memoryPurchaseOrders]);
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'purchaseOrders'),
+      (snapshot) => {
+        const remote: PurchaseOrder[] = [];
+        snapshot.forEach((docSnap) => {
+          const po = docSnap.data() as PurchaseOrder;
+          if (po && po.poId) remote.push(po);
+        });
+        if (remote.length > 0) {
+          remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          memoryPurchaseOrders = remote;
+          saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+        }
+        onUpdate([...memoryPurchaseOrders]);
+      },
+      (err) => {
+        console.warn('Purchase orders snapshot notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Purchase orders snapshot error:', err);
+    return () => {};
+  }
+}
+
+export function subscribeToRealtimeStockMovements(onUpdate: (movements: StockMovement[]) => void): () => void {
+  onUpdate([...memoryStockMovements]);
+  try {
+    const unsubscribe = onSnapshot(
+      collection(db, 'stockMovements'),
+      (snapshot) => {
+        const remote: StockMovement[] = [];
+        snapshot.forEach((docSnap) => {
+          const raw = docSnap.data();
+          if (raw && raw.movementId) {
+            remote.push(normalizeStockMovement(raw));
+          }
+        });
+        if (remote.length > 0) {
+          remote.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          memoryStockMovements = remote;
+          saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+        }
+        onUpdate([...memoryStockMovements]);
+      },
+      (err) => {
+        console.warn('Stock movements snapshot notice:', err);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Stock movements snapshot error:', err);
+    return () => {};
+  }
+}
+
+// 2. GETTERS
+export async function getMaterials(): Promise<Material[]> {
+  try {
+    const snap = await getDocs(collection(db, 'materials'));
+    const remote: Material[] = [];
+    snap.forEach(d => {
+      const raw = d.data();
+      if (raw && raw.materialId) {
+        remote.push(normalizeMaterial(raw));
+      }
+    });
+    if (remote.length > 0) {
+      memoryMaterials = remote;
+      saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+    }
+  } catch (err) {
+    console.warn('getMaterials remote fetch warning:', err);
+  }
+  return [...memoryMaterials];
+}
+
+export async function getCatalogues(): Promise<Catalogue[]> {
+  try {
+    const snap = await getDocs(collection(db, 'catalogues'));
+    const remote: Catalogue[] = [];
+    snap.forEach(d => {
+      const c = d.data() as Catalogue;
+      if (c && c.catalogueId) remote.push(c);
+    });
+    if (remote.length > 0) {
+      memoryCatalogues = remote;
+      saveStorage(STORAGE_KEYS.CATALOGUES, memoryCatalogues);
+    }
+  } catch (err) {
+    console.warn('getCatalogues remote fetch warning:', err);
+  }
+  return [...memoryCatalogues];
+}
+
+export async function getVendors(): Promise<Vendor[]> {
+  try {
+    const snap = await getDocs(collection(db, 'vendors'));
+    const remote: Vendor[] = [];
+    snap.forEach(d => {
+      const v = d.data() as Vendor;
+      if (v && v.vendorId) remote.push(v);
+    });
+    if (remote.length > 0) {
+      memoryVendors = remote;
+      saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
+    }
+  } catch (err) {
+    console.warn('getVendors remote fetch warning:', err);
+  }
+  return [...memoryVendors];
+}
+
+export async function getPurchaseOrders(): Promise<PurchaseOrder[]> {
+  try {
+    const snap = await getDocs(collection(db, 'purchaseOrders'));
+    const remote: PurchaseOrder[] = [];
+    snap.forEach(d => {
+      const po = d.data() as PurchaseOrder;
+      if (po && po.poId) remote.push(po);
+    });
+    if (remote.length > 0) {
+      remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      memoryPurchaseOrders = remote;
+      saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+    }
+  } catch (err) {
+    console.warn('getPurchaseOrders remote fetch warning:', err);
+  }
+  return [...memoryPurchaseOrders];
+}
+
+export async function getStockMovements(): Promise<StockMovement[]> {
+  try {
+    const snap = await getDocs(collection(db, 'stockMovements'));
+    const remote: StockMovement[] = [];
+    snap.forEach(d => {
+      const raw = d.data();
+      if (raw && raw.movementId) {
+        remote.push(normalizeStockMovement(raw));
+      }
+    });
+    if (remote.length > 0) {
+      remote.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      memoryStockMovements = remote;
+      saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+    }
+  } catch (err) {
+    console.warn('getStockMovements remote fetch warning:', err);
+  }
+  return [...memoryStockMovements];
+}
+
+// 3. MATERIAL OPERATIONS
+export async function saveMaterial(material: Partial<Material>, user?: UserProfile): Promise<Material> {
+  const now = new Date().toISOString();
+  const isNew = !material.materialId;
+  const materialId = material.materialId || `MAT-${Date.now().toString(36).toUpperCase()}`;
+
+  const rawName = (material.name || (material as any).materialName || '').toString().trim();
+  const rawSku = (material.sku || (material as any).materialSku || '').toString().trim();
+
+  const cleanMaterial: Material = {
+    materialId,
+    sku: rawSku || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+    name: rawName || 'Untitled Material',
+    category: material.category?.trim() || 'General',
+    description: material.description || '',
+    unit: material.unit || 'Nos',
+    imageUrl: material.imageUrl || '',
+    preferredVendorId: material.preferredVendorId || '',
+    preferredVendorName: material.preferredVendorName || '',
+    alternativeVendorIds: material.alternativeVendorIds || [],
+    purchasePrice: Number(material.purchasePrice) || 0,
+    sellingPrice: Number(material.sellingPrice) || 0,
+    openingInventory: Number(material.openingInventory) || 0,
+    currentStock: Number(material.currentStock) || 0,
+    minimumStockLevel: Number(material.minimumStockLevel) || 10,
+    isActive: material.isActive !== undefined ? material.isActive : true,
+    createdAt: isNew ? now : (material.createdAt || now),
+    updatedAt: now
+  };
+
+  const idx = memoryMaterials.findIndex(m => m.materialId === materialId);
+  if (idx !== -1) {
+    memoryMaterials[idx] = cleanMaterial;
+  } else {
+    memoryMaterials.unshift(cleanMaterial);
+    // If brand new with opening inventory > 0, log opening stock movement
+    if (cleanMaterial.currentStock > 0) {
+      const initMov: StockMovement = {
+        movementId: `MOV-${Date.now()}`,
+        date: now,
+        timestamp: now,
+        materialId: cleanMaterial.materialId,
+        materialName: cleanMaterial.name,
+        quantity: cleanMaterial.currentStock,
+        type: 'IN',
+        movementType: 'IN',
+        movementReason: 'OPENING_STOCK',
+        reason: 'OPENING_STOCK',
+        reference: 'INITIAL-OPENING-STOCK',
+        user: user?.name || 'Admin',
+        userName: user?.name || 'Admin',
+        notes: `Opening inventory of ${cleanMaterial.currentStock} ${cleanMaterial.unit}`
+      };
+      memoryStockMovements.unshift(initMov);
+      saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+      syncDocToFirestore('stockMovements', initMov.movementId, initMov);
+    }
+  }
+
+  saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+  await syncDocToFirestore('materials', materialId, cleanMaterial);
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: isNew ? 'MATERIAL_CREATED' : 'MATERIAL_UPDATED',
+      entityType: 'INVENTORY',
+      entityId: materialId,
+      newValue: `${cleanMaterial.name} (${cleanMaterial.sku})`
+    });
+  }
+
+  return cleanMaterial;
+}
+
+export async function deleteMaterial(materialId: string, user?: UserProfile): Promise<void> {
+  const target = memoryMaterials.find(m => m.materialId === materialId);
+  memoryMaterials = memoryMaterials.filter(m => m.materialId !== materialId);
+  saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+
+  try {
+    await deleteDoc(doc(db, 'materials', materialId));
+  } catch (err) {
+    console.warn('deleteDoc materials warning:', err);
+  }
+
+  if (user && target) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'MATERIAL_DELETED',
+      entityType: 'INVENTORY',
+      entityId: materialId,
+      previousValue: target.name
+    });
+  }
+}
+
+export async function adjustMaterialStock(params: {
+  materialId: string;
+  quantityChange: number;
+  reason: MovementReason;
+  reference?: string;
+  notes?: string;
+  user?: UserProfile;
+}): Promise<void> {
+  const { materialId, quantityChange, reason, reference, notes, user } = params;
+  if (quantityChange === 0) return;
+
+  const matIdx = memoryMaterials.findIndex(m => m.materialId === materialId);
+  if (matIdx === -1) throw new Error(`Material ${materialId} not found`);
+
+  const mat = memoryMaterials[matIdx];
+  const oldStock = mat.currentStock;
+  const newStock = Math.max(0, oldStock + quantityChange);
+  const now = new Date().toISOString();
+
+  mat.currentStock = newStock;
+  mat.updatedAt = now;
+  memoryMaterials[matIdx] = mat;
+  saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+  syncDocToFirestore('materials', materialId, { currentStock: newStock, updatedAt: now });
+
+  const movement: StockMovement = {
+    movementId: `MOV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+    date: now,
+    timestamp: now,
+    materialId: mat.materialId,
+    materialName: mat.name,
+    quantity: Math.abs(quantityChange),
+    type: quantityChange > 0 ? 'IN' : 'OUT',
+    movementType: quantityChange > 0 ? 'IN' : 'OUT',
+    movementReason: reason,
+    reason: reason,
+    reference: reference || 'MANUAL-ADJUSTMENT',
+    user: user?.name || 'Inventory Manager',
+    userName: user?.name || 'Inventory Manager',
+    notes: notes || `Stock adjusted from ${oldStock} to ${newStock} (${quantityChange > 0 ? '+' : ''}${quantityChange})`
+  };
+
+  memoryStockMovements.unshift(movement);
+  saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+  syncDocToFirestore('stockMovements', movement.movementId, movement);
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'STOCK_ADJUSTED',
+      entityType: 'INVENTORY',
+      entityId: materialId,
+      previousValue: `${oldStock}`,
+      newValue: `${newStock} (${reason})`
+    });
+  }
+}
+
+// 4. CATALOGUE / BOM OPERATIONS
+export async function saveCatalogue(catalogue: Partial<Catalogue>, user?: UserProfile): Promise<Catalogue> {
+  const now = new Date().toISOString();
+  const isNew = !catalogue.catalogueId;
+  const catalogueId = catalogue.catalogueId || `CAT-${Date.now().toString(36).toUpperCase()}`;
+
+  const cleanCatalogue: Catalogue = {
+    catalogueId,
+    catalogueCode: catalogue.catalogueCode?.trim() || `PKG-${Math.floor(100 + Math.random() * 900)}`,
+    name: catalogue.name?.trim() || 'Untitled Package',
+    category: catalogue.category?.trim() || 'Robotics Lab',
+    description: catalogue.description || '',
+    standardPrice: Number(catalogue.standardPrice) || 0,
+    isActive: catalogue.isActive !== undefined ? catalogue.isActive : true,
+    items: catalogue.items || [],
+    createdAt: isNew ? now : (catalogue.createdAt || now),
+    updatedAt: now
+  };
+
+  const idx = memoryCatalogues.findIndex(c => c.catalogueId === catalogueId);
+  if (idx !== -1) {
+    memoryCatalogues[idx] = cleanCatalogue;
+  } else {
+    memoryCatalogues.unshift(cleanCatalogue);
+  }
+
+  saveStorage(STORAGE_KEYS.CATALOGUES, memoryCatalogues);
+  await syncDocToFirestore('catalogues', catalogueId, cleanCatalogue);
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: isNew ? 'CATALOGUE_CREATED' : 'CATALOGUE_UPDATED',
+      entityType: 'CATALOGUE',
+      entityId: catalogueId,
+      newValue: `${cleanCatalogue.name} (${cleanCatalogue.items?.length || 0} BOM items)`
+    });
+  }
+
+  return cleanCatalogue;
+}
+
+export async function deleteCatalogue(catalogueId: string, user?: UserProfile): Promise<void> {
+  const target = memoryCatalogues.find(c => c.catalogueId === catalogueId);
+  memoryCatalogues = memoryCatalogues.filter(c => c.catalogueId !== catalogueId);
+  saveStorage(STORAGE_KEYS.CATALOGUES, memoryCatalogues);
+
+  try {
+    await deleteDoc(doc(db, 'catalogues', catalogueId));
+  } catch (err) {
+    console.warn('deleteDoc catalogues warning:', err);
+  }
+
+  if (user && target) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'CATALOGUE_DELETED',
+      entityType: 'CATALOGUE',
+      entityId: catalogueId,
+      previousValue: target.name
+    });
+  }
+}
+
+// 5. VENDOR OPERATIONS
+export async function saveVendor(vendor: Partial<Vendor>, user?: UserProfile): Promise<Vendor> {
+  const now = new Date().toISOString();
+  const isNew = !vendor.vendorId;
+  const vendorId = vendor.vendorId || `VEN-${Date.now().toString(36).toUpperCase()}`;
+
+  const cleanVendor: Vendor = {
+    vendorId,
+    vendorCode: vendor.vendorCode?.trim() || `VND-${Math.floor(100 + Math.random() * 900)}`,
+    vendorName: vendor.vendorName?.trim() || 'Untitled Vendor',
+    contactPerson: vendor.contactPerson?.trim() || '',
+    phone: vendor.phone?.trim() || '',
+    email: vendor.email?.trim() || '',
+    address: vendor.address?.trim() || '',
+    gstNumber: vendor.gstNumber?.trim().toUpperCase() || '',
+    materialsSupplied: vendor.materialsSupplied || [],
+    paymentTerms: vendor.paymentTerms?.trim() || '30 Days Net',
+    isActive: vendor.isActive !== undefined ? vendor.isActive : true,
+    notes: vendor.notes || '',
+    createdAt: isNew ? now : (vendor.createdAt || now),
+    updatedAt: now
+  };
+
+  const idx = memoryVendors.findIndex(v => v.vendorId === vendorId);
+  if (idx !== -1) {
+    memoryVendors[idx] = cleanVendor;
+  } else {
+    memoryVendors.unshift(cleanVendor);
+  }
+
+  saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
+  await syncDocToFirestore('vendors', vendorId, cleanVendor);
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: isNew ? 'VENDOR_CREATED' : 'VENDOR_UPDATED',
+      entityType: 'VENDOR',
+      entityId: vendorId,
+      newValue: `${cleanVendor.vendorName} (${cleanVendor.contactPerson})`
+    });
+  }
+
+  return cleanVendor;
+}
+
+export async function deleteVendor(vendorId: string, user?: UserProfile): Promise<void> {
+  const target = memoryVendors.find(v => v.vendorId === vendorId);
+  memoryVendors = memoryVendors.filter(v => v.vendorId !== vendorId);
+  saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
+
+  try {
+    await deleteDoc(doc(db, 'vendors', vendorId));
+  } catch (err) {
+    console.warn('deleteDoc vendors warning:', err);
+  }
+
+  if (user && target) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'VENDOR_DELETED',
+      entityType: 'VENDOR',
+      entityId: vendorId,
+      previousValue: target.vendorName
+    });
+  }
+}
+
+// 6. PURCHASE ORDER OPERATIONS
+export async function savePurchaseOrder(po: Partial<PurchaseOrder>, user?: UserProfile): Promise<PurchaseOrder> {
+  const now = new Date().toISOString();
+  const isNew = !po.poId;
+  const poId = po.poId || `PO-${Date.now()}`;
+  const poNumber = po.poNumber?.trim() || `PO/FS/${new Date().getFullYear()}-${(new Date().getFullYear() + 1).toString().slice(2)}/${Math.floor(100 + Math.random() * 900)}`;
+
+  // Recalculate totals
+  const items = (po.items || []).map((it, idx) => {
+    const qty = Number(it.quantity) || 0;
+    const price = Number(it.unitPrice) || 0;
+    const taxRate = Number(it.taxRate) || 18;
+    const base = qty * price;
+    const taxAmt = Math.round((base * taxRate) / 100);
+    return {
+      ...it,
+      itemId: it.itemId || `POI-${idx + 1}`,
+      quantity: qty,
+      unitPrice: price,
+      taxRate,
+      taxAmount: taxAmt,
+      totalAmount: base + taxAmt,
+      receivedQuantity: Number(it.receivedQuantity) || 0
+    };
+  });
+
+  const subTotal = items.reduce((sum, it) => sum + (it.quantity * it.unitPrice), 0);
+  const taxTotal = items.reduce((sum, it) => sum + it.taxAmount, 0);
+  const grandTotal = subTotal + taxTotal;
+
+  const cleanPO: PurchaseOrder = {
+    poId,
+    poNumber,
+    poDate: po.poDate || now.split('T')[0],
+    vendorId: po.vendorId || '',
+    vendorName: po.vendorName || '',
+    status: po.status || 'PO_GENERATED',
+    items,
+    subTotal,
+    taxTotal,
+    grandTotal,
+    linkedSalesOrderIds: po.linkedSalesOrderIds || [],
+    linkedCatalogueIds: po.linkedCatalogueIds || [],
+    notes: po.notes || '',
+    deliveryInfo: po.deliveryInfo || 'Central Warehouse, Funscholar Hub',
+    termsAndConditions: po.termsAndConditions || 'Payment within 30 days after inspection and GRN signoff.',
+    createdBy: po.createdBy || user?.email || 'admin@funscholar.com',
+    createdByName: po.createdByName || user?.name || 'Procurement Lead',
+    sentAt: po.sentAt,
+    createdAt: isNew ? now : (po.createdAt || now),
+    updatedAt: now
+  };
+
+  const idx = memoryPurchaseOrders.findIndex(p => p.poId === poId);
+  if (idx !== -1) {
+    memoryPurchaseOrders[idx] = cleanPO;
+  } else {
+    memoryPurchaseOrders.unshift(cleanPO);
+  }
+
+  saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+  await syncDocToFirestore('purchaseOrders', poId, cleanPO);
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: isNew ? 'PO_CREATED' : 'PO_UPDATED',
+      entityType: 'PURCHASE_ORDER',
+      entityId: poId,
+      newValue: `${cleanPO.poNumber} (${cleanPO.vendorName}) - ₹${cleanPO.grandTotal.toLocaleString('en-IN')}`
+    });
+  }
+
+  return cleanPO;
+}
+
+export async function markPurchaseOrderSent(poId: string, user?: UserProfile): Promise<void> {
+  const poIdx = memoryPurchaseOrders.findIndex(p => p.poId === poId);
+  if (poIdx === -1) throw new Error(`PO ${poId} not found`);
+
+  const now = new Date().toISOString();
+  const po = memoryPurchaseOrders[poIdx];
+  po.status = 'PO_SENT';
+  po.sentAt = now;
+  po.updatedAt = now;
+
+  memoryPurchaseOrders[poIdx] = po;
+  saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+  await syncDocToFirestore('purchaseOrders', poId, { status: 'PO_SENT', sentAt: now, updatedAt: now });
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'PO_SENT_TO_VENDOR',
+      entityType: 'PURCHASE_ORDER',
+      entityId: poId,
+      newValue: `${po.poNumber} sent to ${po.vendorName}`
+    });
+  }
+}
+
+export async function receiveGoodsForPurchaseOrder(params: {
+  poId: string;
+  receipts: Array<{ materialId: string; receivedQty: number }>;
+  grnNumber?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  user?: UserProfile;
+}): Promise<void> {
+  const { poId, receipts, grnNumber, invoiceNumber, notes, user } = params;
+  const poIdx = memoryPurchaseOrders.findIndex(p => p.poId === poId);
+  if (poIdx === -1) throw new Error(`PO ${poId} not found`);
+
+  const po = memoryPurchaseOrders[poIdx];
+  const now = new Date().toISOString();
+  const refCode = grnNumber || invoiceNumber || po.poNumber;
+
+  let allCompleted = true;
+  let anyReceived = false;
+
+  for (const item of po.items) {
+    const rcv = receipts.find(r => r.materialId === item.materialId);
+    const addedQty = rcv ? Math.max(0, Number(rcv.receivedQty) || 0) : 0;
+
+    if (addedQty > 0) {
+      anyReceived = true;
+      item.receivedQuantity = (item.receivedQuantity || 0) + addedQty;
+
+      // Update physical inventory for this material
+      const matIdx = memoryMaterials.findIndex(m => m.materialId === item.materialId);
+      if (matIdx !== -1) {
+        const mat = memoryMaterials[matIdx];
+        const oldStock = mat.currentStock;
+        const newStock = oldStock + addedQty;
+        mat.currentStock = newStock;
+        mat.updatedAt = now;
+        memoryMaterials[matIdx] = mat;
+        syncDocToFirestore('materials', mat.materialId, { currentStock: newStock, updatedAt: now });
+
+        // Record stock movement (ledger)
+        const mov: StockMovement = {
+          movementId: `MOV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+          date: now,
+          timestamp: now,
+          materialId: mat.materialId,
+          materialName: mat.name,
+          quantity: addedQty,
+          type: 'IN',
+          movementType: 'IN',
+          movementReason: 'PURCHASE_RECEIVED',
+          reason: 'PURCHASE_RECEIVED',
+          reference: refCode,
+          purchaseOrderId: po.poId,
+          user: user?.name || 'Goods Receiving Officer',
+          userName: user?.name || 'Goods Receiving Officer',
+          notes: notes || `Goods receipt from PO ${po.poNumber} (${po.vendorName}). Added +${addedQty} ${mat.unit}`
+        };
+        memoryStockMovements.unshift(mov);
+        syncDocToFirestore('stockMovements', mov.movementId, mov);
+      }
+    }
+
+    if ((item.receivedQuantity || 0) < item.quantity) {
+      allCompleted = false;
+    }
+  }
+
+  if (anyReceived) {
+    po.status = allCompleted ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+    po.updatedAt = now;
+    memoryPurchaseOrders[poIdx] = po;
+
+    saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+    saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+    saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+
+    await syncDocToFirestore('purchaseOrders', poId, po);
+
+    if (user) {
+      await writeActivityLog({
+        userId: user.userId,
+        userName: user.name,
+        action: 'GOODS_RECEIVED',
+        entityType: 'PURCHASE_ORDER',
+        entityId: poId,
+        newValue: `${po.poNumber} (${po.status}) via ref ${refCode}`
+      });
+    }
+  }
+}
+
+export async function cancelPurchaseOrder(poId: string, reason?: string, user?: UserProfile): Promise<void> {
+  const poIdx = memoryPurchaseOrders.findIndex(p => p.poId === poId);
+  if (poIdx === -1) throw new Error(`PO ${poId} not found`);
+
+  const po = memoryPurchaseOrders[poIdx];
+  const now = new Date().toISOString();
+  po.status = 'CANCELLED';
+  po.notes = po.notes ? `${po.notes} | Cancelled: ${reason || 'No reason specified'}` : `Cancelled: ${reason || 'No reason specified'}`;
+  po.updatedAt = now;
+
+  memoryPurchaseOrders[poIdx] = po;
+  saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
+  await syncDocToFirestore('purchaseOrders', poId, { status: 'CANCELLED', notes: po.notes, updatedAt: now });
+
+  if (user) {
+    await writeActivityLog({
+      userId: user.userId,
+      userName: user.name,
+      action: 'PO_CANCELLED',
+      entityType: 'PURCHASE_ORDER',
+      entityId: poId,
+      newValue: reason || 'Cancelled by user'
+    });
+  }
+}
+
+// 7. SALES ORDER DISPATCH & PHYSICAL INVENTORY DEDUCTION
+export async function deductInventoryForOrder(order: Order, user: UserProfile): Promise<void> {
+  // Prevent double deduction
+  const alreadyDeducted = memoryStockMovements.some(
+    m => m.movementReason === 'SALES_ORDER_DISPATCHED' && (m.orderId === order.orderId || m.reference === order.orderNumber)
+  );
+  if (alreadyDeducted) {
+    return;
+  }
+
+  const matchedCat = matchOrderToCatalogue(order, memoryCatalogues);
+  const catItems = matchedCat?.items || (matchedCat as any)?.bomItems;
+  if (!matchedCat || !catItems || catItems.length === 0) {
+    return;
+  }
+
+  const orderQty = Math.max(
+    1,
+    Number(order.packageQuantity || order.quantity || (order.items && order.items[0]?.quantity) || 1)
+  );
+  const flattened = flattenBOM(catItems, orderQty);
+  const now = new Date().toISOString();
+  const refCode = order.contractNumber || order.purchaseOrderNumber || order.orderNumber;
+
+  let anyChanged = false;
+
+  for (const [matId, reqItem] of flattened.entries()) {
+    const matIdx = memoryMaterials.findIndex(m => m.materialId === matId);
+    if (matIdx !== -1) {
+      const mat = memoryMaterials[matIdx];
+      const deductQty = reqItem.quantity;
+      const oldStock = mat.currentStock;
+      const newStock = Math.max(0, oldStock - deductQty);
+
+      mat.currentStock = newStock;
+      mat.updatedAt = now;
+      memoryMaterials[matIdx] = mat;
+      anyChanged = true;
+
+      syncDocToFirestore('materials', mat.materialId, { currentStock: newStock, updatedAt: now });
+
+      const mov: StockMovement = {
+        movementId: `MOV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        date: now,
+        timestamp: now,
+        materialId: mat.materialId,
+        materialName: mat.name,
+        quantity: deductQty,
+        type: 'OUT',
+        movementType: 'OUT',
+        movementReason: 'SALES_ORDER_DISPATCHED',
+        reason: 'SALES_ORDER_DISPATCHED',
+        reference: refCode,
+        orderId: order.orderId,
+        user: user.name,
+        userName: user.name,
+        notes: `Deducted on dispatch of order ${order.orderNumber} to ${order.schoolName}`
+      };
+
+      memoryStockMovements.unshift(mov);
+      syncDocToFirestore('stockMovements', mov.movementId, mov);
+    }
+  }
+
+  if (anyChanged) {
+    saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
+    saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
+  }
+}
+
 

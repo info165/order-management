@@ -250,9 +250,105 @@
         "visibleToAgent": { "type": "boolean" }
       },
       "required": ["historyId", "orderId", "newStatus", "changedAt"]
+    },
+    "Material": {
+      "title": "Material",
+      "description": "Raw material and component master",
+      "type": "object",
+      "properties": {
+        "materialId": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "purchasePrice": { "type": "number" },
+        "currentStock": { "type": "number" },
+        "minimumStockLevel": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["materialId", "sku", "name", "category", "unit", "currentStock"]
+    },
+    "Catalogue": {
+      "title": "Catalogue",
+      "description": "Order package with hierarchical Bill of Materials",
+      "type": "object",
+      "properties": {
+        "catalogueId": { "type": "string" },
+        "catalogueCode": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["catalogueId", "catalogueCode", "name", "category", "isActive"]
+    },
+    "Vendor": {
+      "title": "Vendor",
+      "description": "Supplier and vendor master",
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "vendorCode": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "gstNumber": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["vendorId", "vendorName", "contactPerson", "phone", "gstNumber", "isActive"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Vendor purchase order and procurement record",
+      "type": "object",
+      "properties": {
+        "poId": { "type": "string" },
+        "poNumber": { "type": "string" },
+        "poDate": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "vendorName": { "type": "string" },
+        "status": { "type": "string" },
+        "grandTotal": { "type": "number" }
+      },
+      "required": ["poId", "poNumber", "poDate", "vendorId", "vendorName", "status", "grandTotal"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Inventory stock ledger movement record",
+      "type": "object",
+      "properties": {
+        "movementId": { "type": "string" },
+        "date": { "type": "string" },
+        "materialId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "type": { "type": "string" },
+        "movementReason": { "type": "string" },
+        "reference": { "type": "string" }
+      },
+      "required": ["movementId", "date", "materialId", "quantity", "type", "movementReason", "reference"]
     }
   },
   "firestore": {
+    "/materials/{materialId}": {
+      "schema": { "$ref": "#/entities/Material" },
+      "description": "Material and component master registry"
+    },
+    "/catalogues/{catalogueId}": {
+      "schema": { "$ref": "#/entities/Catalogue" },
+      "description": "Package catalogue and hierarchical BOM definitions"
+    },
+    "/vendors/{vendorId}": {
+      "schema": { "$ref": "#/entities/Vendor" },
+      "description": "Vendor and supplier master directory"
+    },
+    "/purchaseOrders/{poId}": {
+      "schema": { "$ref": "#/entities/PurchaseOrder" },
+      "description": "Purchase orders placed with vendors"
+    },
+    "/stockMovements/{movementId}": {
+      "schema": { "$ref": "#/entities/StockMovement" },
+      "description": "Immutable inventory ledger movements"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profiles and RBAC role assignments"

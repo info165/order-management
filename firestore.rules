@@ -96,6 +96,37 @@ service cloud.firestore {
       allow write: if isAdminOrOps();
     }
 
+    // MATERIALS MASTER
+    match /materials/{materialId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOps() || isDispatch();
+    }
+
+    // CATALOGUES / BOM MASTER
+    match /catalogues/{catalogueId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOps();
+    }
+
+    // VENDORS MASTER
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOps() || isAccounts();
+    }
+
+    // PURCHASE ORDERS
+    match /purchaseOrders/{poId} {
+      allow read: if isSignedIn();
+      allow write: if isAdminOrOps() || isAccounts() || isDispatch();
+    }
+
+    // STOCK MOVEMENTS (LEDGER)
+    match /stockMovements/{movementId} {
+      allow read: if isSignedIn();
+      allow create: if isAdminOrOps() || isDispatch();
+      allow update, delete: if isSuperAdmin();
+    }
+
     // ORDERS
     match /orders/{orderId} {
       allow read: if isSignedIn() && (

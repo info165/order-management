@@ -18,6 +18,7 @@ import { AgentPortalView } from './components/agents/AgentPortalView';
 import { LoginPage } from './components/auth/LoginPage';
 import { NotificationDrawer } from './components/notifications/NotificationDrawer';
 import { CBPage } from './components/admin/CBPage';
+import { InventoryMain } from './components/inventory/InventoryMain';
 import { Order, AppNotification, OrderStatus } from './types';
 import {
   getOrders,
@@ -102,6 +103,20 @@ function MainApp() {
       }
     }
   }, [currentUser?.role]);
+
+  // Restrict inventory section strictly to Super Admin and Admin; never accessible to Field Agents
+  useEffect(() => {
+    if (activeSection === 'inventory' && currentUser) {
+      const isPrivilegedAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
+      if (!isPrivilegedAdmin) {
+        if (currentUser.role === 'AGENT') {
+          setActiveSection('agent_portal');
+        } else {
+          setActiveSection('orders');
+        }
+      }
+    }
+  }, [activeSection, currentUser]);
 
   // Modals
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -432,6 +447,8 @@ function MainApp() {
                   <span>
                     {activeSection === 'dashboard'
                       ? 'Executive Analytics Dashboard'
+                      : activeSection === 'inventory'
+                      ? 'Inventory & Procurement Management'
                       : activeSection === 'users'
                       ? 'User Management (Create, Edit, Delete)'
                       : activeSection === 'credentials'
@@ -596,6 +613,14 @@ function MainApp() {
           {/* Data Entry Operator Dedicated View */}
           {activeSection === 'dataentry' && (
             <DataEntryDashboard />
+          )}
+
+          {/* Inventory & Procurement Management - Only accessible to Super Admin and Admin, never Field Agents */}
+          {activeSection === 'inventory' && !isAgent && (isSuperAdmin || currentUser?.role === 'ADMIN') && (
+            <InventoryMain
+              orders={orders}
+              currentUser={currentUser}
+            />
           )}
 
           {/* Regional Field Agent Dedicated View */}

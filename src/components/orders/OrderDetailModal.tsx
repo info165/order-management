@@ -39,7 +39,8 @@ import {
   UserProfile,
   DeliveryRecord,
   Agent,
-  School
+  School,
+  Catalogue
 } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { StatusBadge } from '../common/StatusBadge';
@@ -48,6 +49,8 @@ import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 import { processFileForUpload } from '../../utils/fileUpload';
 import { toDateInputValue, todayLocalISO } from '../../utils/dateInput';
 import { PrintStickerModal } from './PrintStickerModal';
+import { OrderBOMFulfillmentCard } from '../inventory/OrderBOMFulfillmentCard';
+import { matchOrderToCatalogue } from '../../utils/bomCalculator';
 import {
   getPaymentsForOrder,
   addPayment,
@@ -66,7 +69,8 @@ import {
   updateOrderAgent,
   getAgents,
   getSystemSettings,
-  subscribeToRealtimeSchools
+  subscribeToRealtimeSchools,
+  getCatalogues
 } from '../../services/dataService';
 
 interface OrderDetailModalProps {
@@ -165,12 +169,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [contractFormPoNumber, setContractFormPoNumber] = useState(order.purchaseOrderNumber || '');
   const [contractFormOrderDate, setContractFormOrderDate] = useState(order.orderDate || '');
   const [contractFormCategory, setContractFormCategory] = useState(order.category || '');
+  const [contractFormQuantity, setContractFormQuantity] = useState<number>(order.packageQuantity || order.quantity || 1);
   const [contractFormCompany, setContractFormCompany] = useState(order.company || '');
   const [contractFormOrderValue, setContractFormOrderValue] = useState<number>(order.orderValue || 0);
   const [isSavingContract, setIsSavingContract] = useState(false);
   const [contractSaveError, setContractSaveError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
+  const [catalogues, setCatalogues] = useState<Catalogue[]>([]);
 
   // Agent selector edit state
   const [availableAgents, setAvailableAgents] = useState<Agent[]>([]);
@@ -181,6 +187,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   useEffect(() => {
     getAgents().then(setAvailableAgents).catch(console.error);
+    getCatalogues().then(setCatalogues).catch(console.error);
     getSystemSettings().then(s => {
       setCompanies(s.companies || []);
       setCategories(s.categories && s.categories.length > 0 ? s.categories : EQUIPMENT_CATEGORIES);
@@ -194,6 +201,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setContractFormPoNumber(activeOrder.purchaseOrderNumber || '');
     setContractFormOrderDate(activeOrder.orderDate || '');
     setContractFormCategory(activeOrder.category || '');
+    setContractFormQuantity(activeOrder.packageQuantity || activeOrder.quantity || 1);
     setContractFormCompany(activeOrder.company || '');
     setContractFormOrderValue(activeOrder.orderValue || 0);
   }, [activeOrder]);
@@ -251,9 +259,15 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       setContractSaveError('Order value must be greater than zero.');
       return;
     }
+    const pkgQty = Math.max(1, Number(contractFormQuantity) || 1);
     setIsSavingContract(true);
     setContractSaveError(null);
     try {
+      const matchedCat = matchOrderToCatalogue(
+        { ...activeOrder, category: contractFormCategory.trim() },
+        catalogues
+      );
+
       const updated = await updateOrder(
         activeOrder.orderId,
         {
@@ -262,7 +276,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           orderDate: contractFormOrderDate,
           category: contractFormCategory.trim(),
           company: contractFormCompany.trim(),
-          orderValue: contractFormOrderValue
+          orderValue: contractFormOrderValue,
+          packageQuantity: pkgQty,
+          quantity: pkgQty,
+          catalogueId: matchedCat?.catalogueId || activeOrder.catalogueId,
+          catalogueName: matchedCat?.name || activeOrder.catalogueName,
+          items: activeOrder.items && activeOrder.items.length > 0
+            ? activeOrder.items.map((it, idx) => idx === 0 ? { ...it, quantity: pkgQty, category: contractFormCategory.trim() } : it)
+            : [{ itemId: 'item-1', productName: contractFormCategory.trim(), category: contractFormCategory.trim(), quantity: pkgQty, unitPrice: Math.round((contractFormOrderValue / pkgQty) * 100) / 100, totalPrice: contractFormOrderValue }]
         },
         currentUser
       );
@@ -1067,6 +1088,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 );
               })()}
 
+              {/* Catalogue & BOM Material Readiness Card */}
+              <OrderBOMFulfillmentCard order={activeOrder} />
+
               {/* School, Contract, and Agent Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* School & Contact Card */}
@@ -1435,7 +1459,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <div>
                           <label className="text-slate-600 font-semibold block mb-1">
                             Company <span className="text-rose-500">*</span>
@@ -1451,6 +1475,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                               <option key={c} value={c}>{c}</option>
                             ))}
                           </select>
+                        </div>
+                        <div>
+                          <label className="text-slate-600 font-semibold block mb-1">
+                            Package Qty <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={contractFormQuantity || ''}
+                            onChange={(e) => setContractFormQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            disabled={isSavingContract}
+                          />
                         </div>
                         <div>
                           <label className="text-slate-600 font-semibold block mb-1">
@@ -1523,10 +1560,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
                         <span className="text-slate-400 block text-[11px]">Company:</span>
                         <span className="font-semibold text-slate-800">{activeOrder.company || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Package Qty:</span>
+                        <span className="font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                          {activeOrder.packageQuantity || activeOrder.quantity || 1} Unit(s)
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[11px]">Order Value:</span>
@@ -1534,6 +1577,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <CurrencyFormatter amount={activeOrder.orderValue || 0} />
                         </span>
                       </div>
+                    </div>
+
+                    {/* BOM Master Link indicator */}
+                    <div className="pt-1 text-[11px] text-slate-500 flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200">
+                      <span className="flex items-center gap-1.5 font-medium text-slate-700">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>BOM Link: {activeOrder.catalogueName || (matchOrderToCatalogue(activeOrder, catalogues)?.name) || 'Auto-matching BOM'}</span>
+                      </span>
+                      <span className="font-mono text-slate-400 text-[10px]">
+                        {activeOrder.catalogueId ? `ID: ${activeOrder.catalogueId.slice(0, 8)}...` : 'Linked by Name'}
+                      </span>
                     </div>
 
                     {/* Assigned Partner Selection */}

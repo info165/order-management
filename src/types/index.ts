@@ -2,6 +2,9 @@
  * Core TypeScript Definitions for Government School Order Management & Agent Portal
  */
 
+export * from './inventory';
+import { OrderProcurementStatus } from './inventory';
+
 export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'DATA_ENTRY_OPERATOR' | 'ACCOUNTS' | 'DISPATCH' | 'AGENT';
 
 export interface UserProfile {
@@ -138,16 +141,17 @@ export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 export interface OrderItem {
   itemId: string;
-  orderId: string;
+  orderId?: string;
   productId?: string;
   productName: string;
   category: string;
   description?: string;
   quantity: number;
   unitPrice: number;
-  taxRate: number; // in %
-  taxAmount: number;
-  totalAmount: number;
+  taxRate?: number; // in %
+  taxAmount?: number;
+  totalAmount?: number;
+  totalPrice?: number;
 }
 
 export interface Order {
@@ -238,6 +242,15 @@ export interface Order {
 
   // Items
   items?: OrderItem[];
+
+  // Order Quantity / Package Count
+  packageQuantity?: number;
+  quantity?: number;
+
+  // Procurement & BOM link
+  catalogueId?: string;
+  catalogueName?: string;
+  procurementStatus?: OrderProcurementStatus;
 
   // Metadata
   createdBy: string;
@@ -411,7 +424,7 @@ export interface ActivityLog {
   userId: string;
   userName: string;
   action: string;
-  entityType: 'ORDER' | 'PAYMENT' | 'DISPATCH' | 'DOCUMENT' | 'USER' | 'AGENT' | 'SCHOOL';
+  entityType: 'ORDER' | 'PAYMENT' | 'DISPATCH' | 'DOCUMENT' | 'USER' | 'AGENT' | 'SCHOOL' | 'INVENTORY' | 'CATALOGUE' | 'VENDOR' | 'PURCHASE_ORDER';
   entityId: string;
   previousValue?: string;
   newValue?: string;

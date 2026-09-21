@@ -16,7 +16,8 @@ import {
   PhoneCall,
   FileEdit,
   Shield,
-  Lock
+  Lock,
+  Boxes
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import funscholarLogo from '../../assets/funscholar-logo.png';
@@ -73,6 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   // A partner's home is their own portal (they have no dashboard or 3-dot
   // menu), so the logo must always lead back there.
   const homeSection = activeRole === 'AGENT' ? 'agent_portal' : 'dashboard';
+  const isAdmin = activeRole === 'SUPER_ADMIN' || activeRole === 'ADMIN';
 
   const handleMenuSelect = (section: string) => {
     onNavigate(section);
@@ -119,6 +121,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <ShoppingCart className="w-3.5 h-3.5" />
                 <span>Orders Registry</span>
               </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('inventory')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    activeSection === 'inventory'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs font-bold'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Boxes className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Inventory & Procurement</span>
+                </button>
+              )}
             </nav>
           )}
         </div>
@@ -254,6 +271,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <ShoppingCart className="w-4 h-4 text-amber-400" />
                       <span>Orders Registry</span>
                     </button>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleMenuSelect('inventory')}
+                        className={`w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-slate-800 transition-colors ${
+                          activeSection === 'inventory' ? 'text-amber-400 font-bold bg-slate-800/60' : 'text-slate-200'
+                        }`}
+                      >
+                        <Boxes className="w-4 h-4 text-amber-400" />
+                        <span>Inventory & Procurement</span>
+                      </button>
+                    )}
   
                     <button
                       type="button"

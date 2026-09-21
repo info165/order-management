@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle, Trash2 } from 'lucide-react';
-import { Order, School, Agent, Product, UserProfile } from '../../types';
-import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, removeCompany as removeCompanyFromSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings } from '../../services/dataService';
+import { Order, School, Agent, Product, UserProfile, Catalogue } from '../../types';
+import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, removeCompany as removeCompanyFromSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings, getCatalogues } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 
@@ -15,6 +15,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [schools, setSchools] = useState<School[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [catalogues, setCatalogues] = useState<Catalogue[]>([]);
   const [loadingMaster, setLoadingMaster] = useState(true);
 
   // School fields
@@ -41,6 +42,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
 
   // Category & Custom Category Creation
   const [category, setCategory] = useState('');
+  const [packageQuantity, setPackageQuantity] = useState<number>(1);
   const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -74,12 +76,19 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   useEffect(() => {
     async function loadMasterData() {
       try {
-        const [sList, aList, pList, settings] = await Promise.all([getSchools(), getAgents(), getProducts(), getSystemSettings()]);
+        const [sList, aList, pList, settings, cList] = await Promise.all([
+          getSchools(),
+          getAgents(),
+          getProducts(),
+          getSystemSettings(),
+          getCatalogues()
+        ]);
         setSchools(sList);
         setAgents(aList);
         setProducts(pList);
         setCompanies(settings.companies || []);
         setCategories(settings.categories && settings.categories.length > 0 ? settings.categories : EQUIPMENT_CATEGORIES);
+        setCatalogues(cList || []);
       } catch (e) {
         console.error('Error loading master data', e);
       } finally {
@@ -369,6 +378,16 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
         }
       }
 
+      const pkgQty = Math.max(1, Number(packageQuantity) || 1);
+      const catNorm = category.trim().toLowerCase();
+      const matchedCat = catalogues.find(
+        c =>
+          c.name.trim().toLowerCase() === catNorm ||
+          (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
+          (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
+          (c.category && c.category.trim().toLowerCase() === catNorm)
+      );
+
       const created = await createOrder(
         {
           orderNumber: orderNumber.trim(),
@@ -391,6 +410,18 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           agentCommissionPercentage,
           company: company.trim(),
           category,
+          packageQuantity: pkgQty,
+          quantity: pkgQty,
+          catalogueId: matchedCat?.catalogueId,
+          catalogueName: matchedCat?.name,
+          items: [{
+            itemId: `item-1`,
+            productName: category,
+            category,
+            quantity: pkgQty,
+            unitPrice: Math.round((baseOrderValue / pkgQty) * 100) / 100,
+            totalPrice: baseOrderValue
+          }],
           orderValue: totalInclusiveOrderValue,
           taxAmount: gstAmount,
           grossOrderValue: totalInclusiveOrderValue,
@@ -688,9 +719,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               </div>
             </div>
 
-            {/* Category / Equipment Package Dropdown with Direct Creation */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="relative">
+            {/* Category / Equipment Package & Units Ordered */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2 relative">
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-slate-700 font-semibold">
                     Category / Equipment Package <span className="text-rose-500">*</span>
@@ -767,9 +798,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                       Saved categories appear in this dropdown for every future order.
                     </p>
 
-                    {/* Existing categories with a delete button each - covers
-                        both the curated defaults and any added later, since
-                        this always renders from the live "categories" list. */}
+                    {/* Existing categories with a delete button each */}
                     <div className="pt-1.5 border-t border-amber-200 space-y-1 max-h-40 overflow-y-auto">
                       {categories.map((cat) => (
                         <div
@@ -793,6 +822,58 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                 )}
               </div>
 
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Package Quantity (Units) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={packageQuantity || ''}
+                  onChange={(e) => setPackageQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  placeholder="e.g. 145"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold font-mono text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Multiplies BOM components in Inventory
+                </p>
+              </div>
+            </div>
+
+            {/* Live BOM link preview */}
+            {(() => {
+              if (!category.trim()) return null;
+              const catNorm = category.trim().toLowerCase();
+              const matched = catalogues.find(
+                c =>
+                  c.name.trim().toLowerCase() === catNorm ||
+                  (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
+                  (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
+                  (c.category && c.category.trim().toLowerCase() === catNorm)
+              );
+              if (!matched) {
+                return (
+                  <div className="text-[11px] text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+                    ℹ️ Note: No exact BOM linked to "{category}" yet. Requirements will calculate once configured in Catalogue/BOM Master.
+                  </div>
+                );
+              }
+              const matCount = (matched.items || (matched as any).bomItems || []).length;
+              return (
+                <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">⚡ Linked to BOM:</span>
+                    <span>{matched.name} ({matched.code || matched.catalogueCode})</span>
+                  </div>
+                  <span className="font-mono text-[11px] bg-emerald-100 px-2 py-0.5 rounded font-semibold text-emerald-900">
+                    {matCount} BOM materials &times; {packageQuantity || 1} units
+                  </span>
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
                   Assigned Regional Partner <span className="text-rose-500">*</span>

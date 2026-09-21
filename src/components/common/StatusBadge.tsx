@@ -9,7 +9,7 @@ interface StatusBadgeProps {
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order', className = '', compact = false }) => {
-  let label = status.replace(/_/g, ' ');
+  let label = (status || '').replace(/_/g, ' ');
   if (compact) {
     if (status === 'PAYMENT_PENDING') label = 'PAYMENT DUE';
     else if (status === 'READY_FOR_DISPATCH') label = 'READY';

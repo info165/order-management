@@ -27,6 +27,7 @@ import { exportOrdersToExcel } from '../../services/importExportService';
 import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
+import { OrderProcurementBadge } from '../inventory/OrderProcurementBadge';
 
 // At-a-glance document status for the Dispatch & Courier column: a single
 // tick for the Consignment Note (CN) upload, a double tick (WhatsApp-style
@@ -1639,7 +1640,12 @@ export const OrderList: React.FC<OrderListProps> = ({
                         style={{ width: widths.status }}
                         className="px-2.5 py-2 align-middle border-r border-slate-100 whitespace-nowrap"
                       >
-                        <StatusBadge status={order.status} type="order" compact />
+                        <div className="flex flex-col gap-1 items-start">
+                          <StatusBadge status={order.status} type="order" compact />
+                          {!isAgent && isAdmin && order.procurementStatus && (
+                            <OrderProcurementBadge status={order.procurementStatus} size="sm" />
+                          )}
+                        </div>
                       </td>
 
                       {/* DISPATCH & COURIER */}
