@@ -622,9 +622,8 @@ export const OrderList: React.FC<OrderListProps> = ({
     () => orders.filter(o => selectedOrderIds.includes(o.orderId)),
     [orders, selectedOrderIds]
   );
-  // More than one order needs the word DELETE typed to confirm; a single
-  // order only needs the button.
-  const deleteNeedsTyping = selectedOrdersForDelete.length > 1;
+  // Every deletion, one order or many, needs the word DELETE typed to confirm.
+  const deleteNeedsTyping = selectedOrdersForDelete.length > 0;
   const deleteConfirmed = !deleteNeedsTyping || deleteConfirmText.trim() === 'DELETE';
 
   const openDeleteModal = () => {
