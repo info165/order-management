@@ -96,11 +96,13 @@ export function buildDeliveredMessage(order: Order, options: { forEmail?: boolea
   const school = clean(order.schoolName);
   const courier = clean(order.courierName);
   const docket = clean(order.docketNumber);
+  const deliveredOn = clean(order.actualDeliveryDate);
 
   const sentence =
     'This is to inform you that your order ' +
     (contract ? `against *GeM Contract No. ${contract}* ` : '') +
     'has been delivered' +
+    (deliveredOn ? ` on *${displayDate(deliveredOn)}*` : '') +
     (school ? ` to *${school}*` : '') +
     (courier ? ` through *${courier}*` : '') +
     '.';
@@ -113,21 +115,22 @@ export function buildDeliveredMessage(order: Order, options: { forEmail?: boolea
   if (!options.forEmail) {
     blocks.push('In case the consignment has not been received, please contact us on this number for further assistance.');
   }
-  blocks.push('Thank you for your cooperation.');
   return blocks.join('\n\n');
 }
 
 // "Goods delivered - please update the payment status" reminder.
 export function buildPaymentPendingMessage(order: Order): string {
   const contract = contractOf(order);
+  const deliveredOn = clean(order.actualDeliveryDate);
   const blocks: string[] = [
     'Dear Sir/Madam,',
     'This is to inform you that the goods' +
       (contract ? ` against *GeM Contract No. ${contract}*` : '') +
-      ' have been successfully delivered.',
+      ' have been successfully delivered' +
+      (deliveredOn ? ` on *${displayDate(deliveredOn)}*` : '') +
+      '.',
     'Kindly update us regarding the payment status at your earliest convenience.',
-    'Once the payment has been processed, we request you to kindly share a screenshot of the payment confirmation for our records.',
-    'Thank you for your cooperation.'
+    'Once the payment has been processed, we request you to kindly share a screenshot of the payment confirmation for our records.'
   ];
   return blocks.join('\n\n');
 }
