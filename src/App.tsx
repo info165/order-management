@@ -412,7 +412,7 @@ function MainApp() {
       />
 
       {/* Main Full-Screen Workspace (No left sidebar taking space) */}
-      <main className="flex-1 overflow-y-auto w-full p-2.5 sm:p-4 bg-slate-100">
+      <main className="flex-1 overflow-y-auto w-full px-2.5 sm:px-4 pt-0.5 pb-2.5 sm:pb-4 bg-slate-100">
         <div className="w-full space-y-3">
           {/* Breadcrumb / Return to Orders navigation bar when viewing non-order screens */}
           {activeSection !== 'orders' && !isAgent && (

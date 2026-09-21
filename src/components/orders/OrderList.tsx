@@ -2,8 +2,6 @@ import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   Search,
   Filter,
-  Download,
-  FileSpreadsheet,
   Plus,
   Trash2,
   RotateCcw,
@@ -25,8 +23,8 @@ import { TrackingLink } from '../common/TrackingLink';
 import { WhatsAppButton } from '../common/WhatsAppButton';
 import { EmailButton } from '../common/EmailButton';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
-import { exportOrdersToExcel, exportOrdersToCSV } from '../../services/importExportService';
-import { clearAllOrders, getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder } from '../../services/dataService';
+import { exportOrdersToExcel } from '../../services/importExportService';
+import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { useColumnResize } from './useColumnResize';
 
@@ -119,7 +117,7 @@ export const OrderList: React.FC<OrderListProps> = ({
   const isAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN';
 
   // Column Resizing Hook
-  const { widths, resizingCol, startResize, resetWidths } = useColumnResize();
+  const { widths, resizingCol, startResize } = useColumnResize();
 
   // Active open popover tracking
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
@@ -157,7 +155,6 @@ export const OrderList: React.FC<OrderListProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [batchTargetStatus, setBatchTargetStatus] = useState<OrderStatus>('READY_FOR_DISPATCH');
-  const [isResetting, setIsResetting] = useState(false);
 
   const canManageOrders = !isAgent && (isAdmin || currentUser.role === 'DATA_ENTRY_OPERATOR' || currentUser.role === 'ACCOUNTS' || currentUser.role === 'DISPATCH');
   // Matches the database's actual create permission (firestore.rules' isAdminOrOps()):
@@ -693,29 +690,6 @@ export const OrderList: React.FC<OrderListProps> = ({
     exportOrdersToExcel(exportData, `GovSchool_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const handleExportCSV = () => {
-    const exportData = selectedOrderIds.length > 0
-      ? orders.filter(o => selectedOrderIds.includes(o.orderId))
-      : sortedOrders;
-    exportOrdersToCSV(exportData, `GovSchool_Orders_${new Date().toISOString().split('T')[0]}.csv`);
-  };
-
-  const handleClearAllData = async () => {
-    const ok = window.confirm('Are you sure you want to CLEAR all past order records? The dashboard will be emptied so you can upload your Excel sheet.');
-    if (!ok) return;
-    setIsResetting(true);
-    try {
-      await clearAllOrders(currentUser);
-      if (onOrdersUpdated) {
-        onOrdersUpdated();
-      }
-    } catch (err: any) {
-      alert('Error clearing orders: ' + err.message);
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   // Helper to render sort icon in column header
   const renderSortIndicator = (key: string) => {
     if (sortConfig?.key !== key) {
@@ -752,64 +726,8 @@ export const OrderList: React.FC<OrderListProps> = ({
               {sortedOrders.length} of {orders.length} Orders
             </span>
 
-            {/* Export Buttons */}
-            <div className="inline-flex rounded-lg shadow-2xs border border-slate-300 overflow-hidden text-xs shrink-0">
-              <button
-                type="button"
-                onClick={handleExportExcel}
-                className="bg-white hover:bg-slate-50 text-slate-700 font-semibold px-2.5 py-1.5 flex items-center gap-1.5 border-r border-slate-200 transition-colors"
-                title="Export currently displayed rows to Excel"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Export Excel</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="bg-white hover:bg-slate-50 text-slate-700 font-medium px-2 py-1.5 transition-colors"
-                title="Export as CSV"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-500" />
-              </button>
-            </div>
-
-            {/* Reset Column Widths */}
-            <button
-              type="button"
-              onClick={resetWidths}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors shrink-0"
-              title="Reset column widths to default layout"
-            >
-              <Columns className="w-3.5 h-3.5 text-slate-400" />
-              <span>Reset Widths</span>
-            </button>
-
             {canCreateOrders && (
               <>
-                {isAdmin && (
-                  <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleClearAllData}
-                      disabled={isResetting}
-                      className="bg-white hover:bg-rose-50 text-rose-700 font-medium px-2.5 py-1.5 flex items-center gap-1 transition-colors"
-                      title="Clear orders to upload a fresh spreadsheet"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-                      <span>Clear</span>
-                    </button>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={onOpenImport}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-lg border border-emerald-300 transition-colors shrink-0 shadow-2xs"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span>Upload Excel</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={onOpenNewOrder}
