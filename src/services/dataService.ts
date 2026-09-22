@@ -4461,11 +4461,29 @@ export async function cancelPurchaseOrder(poId: string, reason?: string, user?: 
 
 // 7. SALES ORDER DISPATCH & PHYSICAL INVENTORY DEDUCTION
 export async function deductInventoryForOrder(order: Order, user: UserProfile): Promise<void> {
-  // Prevent double deduction
-  const alreadyDeducted = memoryStockMovements.some(
-    m => m.movementReason === 'SALES_ORDER_DISPATCHED' && (m.orderId === order.orderId || m.reference === order.orderNumber)
-  );
-  if (alreadyDeducted) {
+  // Prevent double deduction. This is checked against the live database, not
+  // the local in-memory cache: this function is reachable from two
+  // independent screens (the Status tab's status dropdown, and the Dispatch
+  // tab's courier/tracking form), and the in-memory cache is only ever
+  // filled in by opening the Inventory tab in that browser. A browser that
+  // hasn't opened Inventory would see an empty cache and wrongly conclude
+  // nothing had been deducted yet, deducting stock a second time for one
+  // real shipment if both screens were used for the same dispatch.
+  try {
+    const existing = await getDocs(
+      query(
+        collection(db, 'stockMovements'),
+        where('orderId', '==', order.orderId),
+        where('movementReason', '==', 'SALES_ORDER_DISPATCHED')
+      )
+    );
+    if (!existing.empty) {
+      return;
+    }
+  } catch (err) {
+    // Can't confirm whether this order was already deducted - safer to skip
+    // this run than to risk deducting stock twice.
+    console.warn('Could not verify prior inventory deduction for this order, skipping to be safe:', err);
     return;
   }
 
