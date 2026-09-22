@@ -26,8 +26,7 @@ import {
   markNotificationsAsRead,
   softDeleteOrder,
   updateOrderStatus,
-  subscribeToRealtimeOrders,
-  migrateAllUsersToFirebaseAuth
+  subscribeToRealtimeOrders
 } from './services/dataService';
 import { exportOrdersToExcel } from './services/importExportService';
 import { getDisplaySerialNo } from './utils/orderDisplay';
@@ -229,26 +228,15 @@ function MainApp() {
   const allNotifications: AppNotification[] = [...overduePaymentAlerts, ...notifications];
   const hasUnacknowledgedCriticalAlert = overduePaymentAlerts.some((a) => !a.isRead);
 
-  // One-time backfill: give every pre-existing staff account (created before
-  // real Firebase Auth sessions existed) a real account + a users/{uid} role
-  // doc, so Firestore's security rules can actually resolve their permissions.
-  // Only the Super Admin can run this, and it's safe to run more than once.
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    const FLAG_KEY = 'govschool_users_migrated_v1';
-    try {
-      if (localStorage.getItem(FLAG_KEY) === 'done') return;
-    } catch (_) {}
-
-    migrateAllUsersToFirebaseAuth(currentUser!)
-      .then((res) => {
-        console.log('User Firebase Auth migration:', res);
-        try {
-          localStorage.setItem(FLAG_KEY, 'done');
-        } catch (_) {}
-      })
-      .catch((err) => console.warn('User migration notice:', err));
-  }, [isSuperAdmin, currentUser]);
+  // migrateAllUsersToFirebaseAuth() USED to run here automatically for the
+  // Super Admin on every fresh browser, to give any of the 8 hardcoded
+  // starter accounts a real Firebase login + users/{uid} role doc if they
+  // didn't already have one. It's no longer needed: every real account has
+  // its login by now, and the same thing already happens safely, one
+  // account at a time, the moment anyone without a login enters the correct
+  // password (see the lazy-migration path in AuthContext's signIn). Removed
+  // outright, in the same spirit as the seed bootstrap above, rather than
+  // leaving an automatic startup path that writes hardcoded account data.
 
   // Order selection handler
   const handleSelectOrder = (order: Order) => {

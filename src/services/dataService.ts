@@ -2803,9 +2803,9 @@ export async function getUsers(): Promise<UserProfile[]> {
   // the admin's own browser, since nothing had ever fetched the real user list).
   //
   // The users collection also holds UID-keyed permission-mirror docs (see
-  // issueUserCredentials/migrateAllUsersToFirebaseAuth) alongside the canonical
-  // internal-ID profile docs - only the latter are real "accounts" for this list,
-  // identifiable because their Firestore document ID matches their own userId
+  // issueUserCredentials, and the lazy-migration path in AuthContext's signIn)
+  // alongside the canonical internal-ID profile docs - only the latter are real
+  // "accounts" for this list, identifiable because their Firestore document ID matches their own userId
   // field (a mirror doc's ID is the Firebase UID, which differs from its userId).
   try {
     const snap = await getDocs(collection(db, 'users'));
@@ -3104,67 +3104,16 @@ export async function resetUserPassword(
   return { emailResetSent };
 }
 
-// One-time backfill for accounts that existed before real Firebase Auth
-// sessions were wired up (the original seed/demo staff accounts). Creates a
-// real Firebase Auth account for each (using their already-issued password)
-// and mirrors their role at users/{firebaseUid}, which is what the Firestore
-// security rules actually check. Safe to call more than once - accounts that
-// already have a Firebase identity are skipped, not duplicated or broken.
-export async function migrateAllUsersToFirebaseAuth(
-  adminUser: UserProfile
-): Promise<{ migrated: number; alreadyPresent: number; failed: string[] }> {
-  if (adminUser.role !== 'SUPER_ADMIN') {
-    throw new Error('SECURITY POLICY: Only the Super Admin can run the account migration.');
-  }
-
-  let migrated = 0;
-  let alreadyPresent = 0;
-  const failed: string[] = [];
-
-  for (const u of [...memoryUsers]) {
-    if (u.firebaseUid) {
-      alreadyPresent++;
-      continue;
-    }
-    if (!u.password) {
-      failed.push(`${u.email}: no password on file to migrate with`);
-      continue;
-    }
-    try {
-      const firebaseUid = await createAuthAccountForUser(u.email, u.password);
-      const idx = memoryUsers.findIndex(mu => mu.userId === u.userId);
-      if (idx !== -1) {
-        memoryUsers[idx].firebaseUid = firebaseUid;
-        memoryUsers[idx].updatedAt = new Date().toISOString();
-      }
-      syncDocToFirestore('users', u.userId, { firebaseUid });
-      await setDoc(doc(db, 'users', firebaseUid), {
-        userId: u.userId,
-        name: u.name,
-        email: u.email,
-        role: u.role,
-        agentId: u.agentId || null,
-        agentCode: u.agentCode || null,
-        isActive: u.isActive,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      migrated++;
-    } catch (e: any) {
-      if (e?.code === 'auth/email-already-in-use') {
-        // A Firebase account already exists for this email (e.g. created via the
-        // login-time lazy-migration path) but we don't know its UID without the
-        // Admin SDK, so we can't safely write users/{uid} from here. Not a failure -
-        // that account already works for sign-in, just without a synced role doc yet.
-        alreadyPresent++;
-      } else {
-        failed.push(`${u.email}: ${e?.message || e}`);
-      }
-    }
-  }
-
-  saveStorage(STORAGE_KEYS.USERS, memoryUsers);
-  return { migrated, alreadyPresent, failed };
-}
+// migrateAllUsersToFirebaseAuth() USED to live here - a one-time backfill
+// that, on every fresh Super Admin browser, walked the 8 hardcoded starter
+// accounts and created a real Firebase Auth login + users/{firebaseUid} role
+// doc for any of them that didn't already have one. It's no longer needed:
+// every real account already has its login, and the same thing already
+// happens safely, one account at a time, the moment anyone without a login
+// enters the correct password (see the lazy-migration path in AuthContext's
+// signIn, which calls createAuthAccountForUser() directly). Removed outright
+// rather than left as an automatic startup path that writes hardcoded
+// account data - the same reasoning as the seed bootstrap removed earlier.
 
 export async function deleteUser(userId: string, adminUser: UserProfile): Promise<void> {
   if (adminUser.role !== 'SUPER_ADMIN') {
@@ -3204,9 +3153,9 @@ export async function deleteUser(userId: string, adminUser: UserProfile): Promis
   // Delete from Firestore
   deleteDocFromFirestore('users', userId);
 
-  // Also remove the UID-keyed role mirror doc (see issueUserCredentials /
-  // migrateAllUsersToFirebaseAuth). Without this, the account's Firestore
-  // security-rule permissions would keep working even after "deletion" here,
+  // Also remove the UID-keyed role mirror doc (see issueUserCredentials).
+  // Without this, the account's Firestore security-rule permissions would
+  // keep working even after "deletion" here,
   // since hasUserDoc()/currentUserDoc() look it up by their real Firebase UID,
   // not this record's internal userId.
   if (target.firebaseUid) {
