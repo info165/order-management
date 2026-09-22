@@ -49,6 +49,8 @@ export interface Catalogue {
   totalBomCost?: number;
   items: BOMItem[];         // Hierarchical Bill of Materials
   bomItems?: BOMItem[];     // Alias for items
+  isCustomCatalogue?: boolean; // Marked as bespoke / custom catalogue
+  customDetails?: string;   // Specific custom requirements, component adjustments or instructions
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

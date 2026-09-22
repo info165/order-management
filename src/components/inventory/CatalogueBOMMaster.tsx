@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Catalogue, Material, BOMItem, UserProfile } from '../../types';
 import { saveCatalogue, deleteCatalogue } from '../../services/dataService';
 import { flattenBOM } from '../../utils/bomCalculator';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import {
   Layers,
   Plus,
@@ -48,9 +49,15 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
   const [category, setCategory] = useState('STEM Lab Package');
   const [description, setDescription] = useState('');
   const [salesOrderPkgKeywords, setSalesOrderPkgKeywords] = useState('');
+  const [isCustomCatalogue, setIsCustomCatalogue] = useState(false);
+  const [customDetails, setCustomDetails] = useState('');
   const [bomItems, setBomItems] = useState<BOMItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<Catalogue | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const selectedCatalogue = catalogues.find(c => c.catalogueId === selectedCatalogueId) || catalogues[0];
 
@@ -76,6 +83,8 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
     setCategory('STEM Lab Package');
     setDescription('');
     setSalesOrderPkgKeywords('');
+    setIsCustomCatalogue(false);
+    setCustomDetails('');
     setBomItems([]);
     setError(null);
     setIsModalOpen(true);
@@ -83,12 +92,14 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
 
   const handleOpenEdit = (cat: Catalogue) => {
     setEditingCatalogue(cat);
-    setCode(cat.code);
+    setCode(cat.code || cat.catalogueCode || '');
     setName(cat.name);
     setCategory(cat.category || 'STEM Lab Package');
     setDescription(cat.description || '');
     setSalesOrderPkgKeywords((cat.salesOrderPkgKeywords || []).join(', '));
-    setBomItems(JSON.parse(JSON.stringify(cat.bomItems || [])));
+    setIsCustomCatalogue(cat.isCustomCatalogue || false);
+    setCustomDetails(cat.customDetails || '');
+    setBomItems(JSON.parse(JSON.stringify(cat.bomItems || cat.items || [])));
     setError(null);
     setIsModalOpen(true);
   };
@@ -222,6 +233,8 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
           category,
           description: description.trim(),
           salesOrderPkgKeywords: keywords,
+          isCustomCatalogue,
+          customDetails: isCustomCatalogue ? customDetails.trim() : undefined,
           items: bomItems,
           bomItems,
           totalBomCost: computedCost,
@@ -240,18 +253,21 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
     }
   };
 
-  const handleDelete = async (catalogueId: string, catName: string) => {
-    if (window.confirm(`Are you sure you want to delete Catalogue "${catName}"?`)) {
-      try {
-        await deleteCatalogue(catalogueId, currentUser);
-        if (selectedCatalogueId === catalogueId) {
-          const remaining = catalogues.filter(c => c.catalogueId !== catalogueId);
-          setSelectedCatalogueId(remaining[0]?.catalogueId || null);
-        }
-        onRefresh();
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete catalogue.');
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteCatalogue(deleteTarget.catalogueId, currentUser);
+      if (selectedCatalogueId === deleteTarget.catalogueId) {
+        const remaining = catalogues.filter(c => c.catalogueId !== deleteTarget.catalogueId);
+        setSelectedCatalogueId(remaining[0]?.catalogueId || null);
       }
+      setDeleteTarget(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete catalogue.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -460,8 +476,15 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
                     }`}
                   >
                     <div className="min-w-0">
-                      <div className="font-bold text-slate-900 dark:text-white text-xs truncate">
-                        {c.name}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                          {c.name}
+                        </span>
+                        {c.isCustomCatalogue && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                            Custom Spec
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                         {c.code} &bull; {c.category}
@@ -494,17 +517,32 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
               {/* Header */}
               <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                       {selectedCatalogue.name}
                     </h3>
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
                       {selectedCatalogue.code}
                     </span>
+                    {selectedCatalogue.isCustomCatalogue && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40">
+                        ★ Custom Catalogue
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     {selectedCatalogue.description || 'No package description provided.'}
                   </p>
+
+                  {selectedCatalogue.isCustomCatalogue && selectedCatalogue.customDetails && (
+                    <div className="mt-2.5 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-900 dark:text-amber-200">
+                      <span className="font-bold block text-[11px] text-amber-800 dark:text-amber-300 mb-0.5">
+                        Custom Specifications & Configuration Notes:
+                      </span>
+                      <span>{selectedCatalogue.customDetails}</span>
+                    </div>
+                  )}
+
                   {selectedCatalogue.salesOrderPkgKeywords &&
                     selectedCatalogue.salesOrderPkgKeywords.length > 0 && (
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -535,9 +573,7 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
 
                   <button
                     type="button"
-                    onClick={() =>
-                      handleDelete(selectedCatalogue.catalogueId, selectedCatalogue.name)
-                    }
+                    onClick={() => setDeleteTarget(selectedCatalogue)}
                     className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
                     title="Delete Catalogue"
                   >
@@ -690,6 +726,39 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
                 </div>
               </div>
 
+              {/* Custom Catalogue & Bespoke Configuration Section */}
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isCustomCatalogue}
+                    onChange={e => setIsCustomCatalogue(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500"
+                  />
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    Mark as Custom Catalogue / Bespoke Configuration
+                  </span>
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 pl-6">
+                  Check this if this catalogue represents a tailored package variation with custom components.
+                </p>
+
+                {isCustomCatalogue && (
+                  <div className="pt-1 pl-6 space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Custom Details & Engineering Notes:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customDetails}
+                      onChange={e => setCustomDetails(e.target.value)}
+                      placeholder="e.g. Higher torque motors, custom laser cut brackets, additional sensors included..."
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* BOM Materials Section */}
               <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex items-center justify-between">
@@ -756,6 +825,18 @@ export const CatalogueBOMMaster: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Catalogue / BOM"
+        recordName={deleteTarget?.name}
+        recordType="Catalogue"
+        warningDetails="Deleting this catalogue will remove its Bill of Materials formula and cost tracking. Any historical Sales Orders referencing this kit will remain completely intact in the Sales Order registry."
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Vendor, Material, PurchaseOrder, UserProfile } from '../../types';
 import { saveVendor, deleteVendor } from '../../services/dataService';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import {
   Building2,
   Plus,
@@ -61,6 +62,10 @@ export const VendorMaster: React.FC<Props> = ({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleOpenNew = () => {
     setEditingVendor(null);
@@ -144,14 +149,17 @@ export const VendorMaster: React.FC<Props> = ({
     }
   };
 
-  const handleDelete = async (vendorId: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete vendor "${name}"?`)) {
-      try {
-        await deleteVendor(vendorId, currentUser);
-        onRefresh();
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete vendor.');
-      }
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteVendor(deleteTarget.vendorId, currentUser);
+      setDeleteTarget(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete vendor.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -282,7 +290,7 @@ export const VendorMaster: React.FC<Props> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDelete(v.vendorId, v.vendorName)}
+                        onClick={() => setDeleteTarget(v)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                         title="Delete Vendor"
                       >
@@ -591,6 +599,18 @@ export const VendorMaster: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Vendor Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Vendor"
+        recordName={deleteTarget?.vendorName}
+        recordType="Vendor"
+        warningDetails="Deleting this vendor removes their profile and supplier relationship. Historical Purchase Orders, inventory materials, and sales orders remain untouched."
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

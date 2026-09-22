@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { PurchaseOrder, Vendor, Material, Order, UserProfile, POItem, POStatus } from '../../types';
-import { savePurchaseOrder } from '../../services/dataService';
+import { savePurchaseOrder, deletePurchaseOrder } from '../../services/dataService';
 import { ReceiveGoodsModal } from './ReceiveGoodsModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import {
   FileText,
   Plus,
@@ -74,6 +75,24 @@ export const PurchaseOrderManager: React.FC<Props> = ({
   const [items, setItems] = useState<POItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<PurchaseOrder | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deletePurchaseOrder(deleteTarget.poId, currentUser);
+      setDeleteTarget(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete purchase order.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleOpenNew = () => {
     setEditingPO(null);
@@ -492,6 +511,16 @@ export const PurchaseOrderManager: React.FC<Props> = ({
                               <Send className="w-4 h-4" />
                             </button>
                           )}
+
+                          {/* Delete PO */}
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(po)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            title="Delete Purchase Order"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -912,6 +941,18 @@ export const PurchaseOrderManager: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Purchase Order Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Purchase Order"
+        recordName={deleteTarget ? `${deleteTarget.poNumber} (${deleteTarget.vendorName})` : undefined}
+        recordType="Purchase Order"
+        warningDetails="Deleting this Purchase Order removes it from active procurement tracking. Live Sales Orders and Order Registry entries remain completely unaffected."
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

@@ -43,6 +43,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   // Category & Custom Category Creation
   const [category, setCategory] = useState('');
   const [packageQuantity, setPackageQuantity] = useState<number>(1);
+  const [selectedCatalogueId, setSelectedCatalogueId] = useState('');
+  const [isCustomOrder, setIsCustomOrder] = useState(false);
+  const [customOrderDetails, setCustomOrderDetails] = useState('');
   const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -237,8 +240,42 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
     }
   };
 
+  const handleCatalogueSelect = (catId: string) => {
+    setSelectedCatalogueId(catId);
+    const cat = catalogues.find(c => c.catalogueId === catId);
+    if (cat) {
+      setCategory(cat.name);
+      if (cat.isCustomCatalogue) {
+        setIsCustomOrder(true);
+        if (cat.customDetails) {
+          setCustomOrderDetails(cat.customDetails);
+        }
+      }
+      // Also sync category in available categories list if not present
+      if (!categories.includes(cat.name)) {
+        setCategories(prev => [...prev, cat.name]);
+      }
+    }
+  };
+
   const handleCategorySelect = (cat: string) => {
     setCategory(cat);
+    const catNorm = cat.trim().toLowerCase();
+    const matched = catalogues.find(
+      c =>
+        c.name.trim().toLowerCase() === catNorm ||
+        (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
+        (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase())))
+    );
+    if (matched) {
+      setSelectedCatalogueId(matched.catalogueId);
+      if (matched.isCustomCatalogue) {
+        setIsCustomOrder(true);
+        if (matched.customDetails && !customOrderDetails) {
+          setCustomOrderDetails(matched.customDetails);
+        }
+      }
+    }
     const prod = products.find(p => p.name === cat || p.category === cat);
     if (prod && prod.standardPrice) {
       setTotalInclusiveOrderValue(prod.standardPrice);
@@ -379,14 +416,20 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
       }
 
       const pkgQty = Math.max(1, Number(packageQuantity) || 1);
+      const selectedCatObj = selectedCatalogueId
+        ? catalogues.find(c => c.catalogueId === selectedCatalogueId)
+        : null;
       const catNorm = category.trim().toLowerCase();
-      const matchedCat = catalogues.find(
+      const matchedCat = selectedCatObj || catalogues.find(
         c =>
           c.name.trim().toLowerCase() === catNorm ||
           (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
           (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
           (c.category && c.category.trim().toLowerCase() === catNorm)
       );
+
+      const finalCatId = selectedCatalogueId || matchedCat?.catalogueId;
+      const finalCatName = selectedCatObj?.name || matchedCat?.name || category.trim();
 
       const created = await createOrder(
         {
@@ -412,8 +455,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           category,
           packageQuantity: pkgQty,
           quantity: pkgQty,
-          catalogueId: matchedCat?.catalogueId,
-          catalogueName: matchedCat?.name,
+          catalogueId: finalCatId,
+          catalogueName: finalCatName,
+          isCustomOrder,
+          customOrderDetails: isCustomOrder ? customOrderDetails.trim() : undefined,
           items: [{
             itemId: `item-1`,
             productName: category,
@@ -720,158 +765,220 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
             </div>
 
             {/* Category / Equipment Package & Units Ordered */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2 relative">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-slate-700 font-semibold">
-                    Category / Equipment Package <span className="text-rose-500">*</span>
-                  </label>
-                  {currentUser.role === 'SUPER_ADMIN' && !showAddCategory && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAddCategory(true)}
-                      className="text-[11px] text-amber-700 font-semibold hover:underline flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Add Category</span>
-                    </button>
+            <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              {/* Catalogue Dropdown Option matching order names */}
+              <div>
+                <label className="block text-slate-700 font-semibold text-xs mb-1">
+                  Catalogue / BOM Master Link <span className="text-amber-600 font-normal">(Select matching catalogue to link BOM materials)</span>
+                </label>
+                <select
+                  value={selectedCatalogueId || ''}
+                  onChange={(e) => handleCatalogueSelect(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-amber-50/50 font-semibold text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                >
+                  <option value="">-- Choose Matching Catalogue / BOM Package --</option>
+                  {catalogues.map((cat) => {
+                    const matCount = (cat.items || cat.bomItems || []).length;
+                    return (
+                      <option key={cat.catalogueId} value={cat.catalogueId}>
+                        {cat.name} ({cat.code || cat.catalogueCode || 'CAT'}) - {matCount} BOM Materials {cat.isCustomCatalogue ? '[Custom Spec]' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Selecting a catalogue maps this order directly to its Bill of Materials for automated inventory calculation.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 relative">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-700 font-semibold text-xs">
+                      Package / Order Name <span className="text-rose-500">*</span>
+                    </label>
+                    {currentUser.role === 'SUPER_ADMIN' && !showAddCategory && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCategory(true)}
+                        className="text-[11px] text-amber-700 font-semibold hover:underline flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Package Name</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    required
+                    value={category}
+                    onChange={(e) => handleCategorySelect(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  >
+                    <option value="" disabled>Select a package...</option>
+                    {allAvailableCategories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+
+                  {/* Inline Add Category Form */}
+                  {showAddCategory && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="New category name"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCategory();
+                            }
+                          }}
+                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCategory}
+                          disabled={isAddingCategory || !newCategoryName.trim()}
+                          className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs shrink-0"
+                        >
+                          {isAddingCategory ? '...' : 'Add'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddCategory(false);
+                            setNewCategoryName('');
+                            setAddCategoryError(null);
+                          }}
+                          className="px-2 py-1.5 text-slate-500 hover:text-slate-800 text-xs shrink-0"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {addCategoryError && (
+                        <p className="text-[11px] text-rose-600 font-medium">{addCategoryError}</p>
+                      )}
+                      <p className="text-[10px] text-amber-700">
+                        Saved categories appear in this dropdown for every future order.
+                      </p>
+
+                      {/* Existing categories with a delete button each */}
+                      <div className="pt-1.5 border-t border-amber-200 space-y-1 max-h-40 overflow-y-auto">
+                        {categories.map((cat) => (
+                          <div
+                            key={cat}
+                            className="flex items-center justify-between gap-2 px-2 py-1 bg-white rounded border border-amber-100 text-xs"
+                          >
+                            <span className="truncate text-slate-800">{cat}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCategory(cat)}
+                              disabled={removingCategory === cat}
+                              title={`Delete "${cat}"`}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-50 shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {/* Strict select - only one of the saved categories can be
-                    chosen, no free typing. New options only ever get added
-                    via "Add Category" above (persisted to the database). */}
-                <select
-                  required
-                  value={category}
-                  onChange={(e) => handleCategorySelect(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                >
-                  <option value="" disabled>Select a package...</option>
-                  {allAvailableCategories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                <div>
+                  <label className="block text-slate-700 font-semibold text-xs mb-1">
+                    Package Quantity (Units) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={packageQuantity || ''}
+                    onChange={(e) => setPackageQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    placeholder="e.g. 145"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold font-mono text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Multiplies BOM components in Inventory
+                  </p>
+                </div>
+              </div>
 
-                {/* Inline Add Category Form */}
-                {showAddCategory && (
-                  <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        autoFocus
-                        placeholder="New category name"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddCategory();
-                          }
-                        }}
-                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddCategory}
-                        disabled={isAddingCategory || !newCategoryName.trim()}
-                        className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs shrink-0"
-                      >
-                        {isAddingCategory ? '...' : 'Add'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAddCategory(false);
-                          setNewCategoryName('');
-                          setAddCategoryError(null);
-                        }}
-                        className="px-2 py-1.5 text-slate-500 hover:text-slate-800 text-xs shrink-0"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {addCategoryError && (
-                      <p className="text-[11px] text-rose-600 font-medium">{addCategoryError}</p>
-                    )}
-                    <p className="text-[10px] text-amber-700">
-                      Saved categories appear in this dropdown for every future order.
-                    </p>
+              {/* Custom Order Flag & Details */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isCustomOrder}
+                    onChange={(e) => setIsCustomOrder(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="font-bold text-xs text-slate-900">
+                    Mark as Custom Order (Uses catalogue name, but has custom variations / bespoke specifications)
+                  </span>
+                </label>
 
-                    {/* Existing categories with a delete button each */}
-                    <div className="pt-1.5 border-t border-amber-200 space-y-1 max-h-40 overflow-y-auto">
-                      {categories.map((cat) => (
-                        <div
-                          key={cat}
-                          className="flex items-center justify-between gap-2 px-2 py-1 bg-white rounded border border-amber-100 text-xs"
-                        >
-                          <span className="truncate text-slate-800">{cat}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCategory(cat)}
-                            disabled={removingCategory === cat}
-                            title={`Delete "${cat}"`}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors disabled:opacity-50 shrink-0"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                {isCustomOrder && (
+                  <div className="pt-1 space-y-1 pl-6.5">
+                    <label className="block text-[11px] font-semibold text-amber-900">
+                      Custom Details & Material Variations for this Order:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customOrderDetails}
+                      onChange={(e) => setCustomOrderDetails(e.target.value)}
+                      placeholder="Enter custom specifications, extra components, or custom requirements for this order..."
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-amber-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
                   </div>
                 )}
               </div>
 
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  Package Quantity (Units) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  value={packageQuantity || ''}
-                  onChange={(e) => setPackageQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  placeholder="e.g. 145"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold font-mono text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Multiplies BOM components in Inventory
-                </p>
-              </div>
-            </div>
-
-            {/* Live BOM link preview */}
-            {(() => {
-              if (!category.trim()) return null;
-              const catNorm = category.trim().toLowerCase();
-              const matched = catalogues.find(
-                c =>
-                  c.name.trim().toLowerCase() === catNorm ||
-                  (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
-                  (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
-                  (c.category && c.category.trim().toLowerCase() === catNorm)
-              );
-              if (!matched) {
+              {/* Live BOM link preview */}
+              {(() => {
+                if (!category.trim() && !selectedCatalogueId) return null;
+                const catObj = selectedCatalogueId
+                  ? catalogues.find(c => c.catalogueId === selectedCatalogueId)
+                  : null;
+                const catNorm = category.trim().toLowerCase();
+                const matched = catObj || catalogues.find(
+                  c =>
+                    c.name.trim().toLowerCase() === catNorm ||
+                    (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
+                    (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
+                    (c.category && c.category.trim().toLowerCase() === catNorm)
+                );
+                if (!matched) {
+                  return (
+                    <div className="text-[11px] text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+                      ℹ️ Note: No exact BOM linked to "{category}" yet. Requirements will calculate once configured in Catalogue/BOM Master.
+                    </div>
+                  );
+                }
+                const matCount = (matched.items || (matched as any).bomItems || []).length;
                 return (
-                  <div className="text-[11px] text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
-                    ℹ️ Note: No exact BOM linked to "{category}" yet. Requirements will calculate once configured in Catalogue/BOM Master.
+                  <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">⚡ Linked to BOM:</span>
+                      <span>{matched.name} ({matched.code || matched.catalogueCode})</span>
+                      {isCustomOrder && (
+                        <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded font-semibold border border-amber-300">
+                          Custom Order
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-mono text-[11px] bg-emerald-100 px-2 py-0.5 rounded font-semibold text-emerald-900">
+                      {matCount} BOM materials &times; {packageQuantity || 1} units
+                    </span>
                   </div>
                 );
-              }
-              const matCount = (matched.items || (matched as any).bomItems || []).length;
-              return (
-                <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold">⚡ Linked to BOM:</span>
-                    <span>{matched.name} ({matched.code || matched.catalogueCode})</span>
-                  </div>
-                  <span className="font-mono text-[11px] bg-emerald-100 px-2 py-0.5 rounded font-semibold text-emerald-900">
-                    {matCount} BOM materials &times; {packageQuantity || 1} units
-                  </span>
-                </div>
-              );
-            })()}
+              })()}
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

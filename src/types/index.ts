@@ -251,6 +251,8 @@ export interface Order {
   catalogueId?: string;
   catalogueName?: string;
   procurementStatus?: OrderProcurementStatus;
+  isCustomOrder?: boolean; // Custom order flag even if catalogue name is used
+  customOrderDetails?: string; // Bespoke customer modifications, component notes, custom specs
 
   // Metadata
   createdBy: string;

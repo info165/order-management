@@ -239,7 +239,11 @@ export const InventoryMain: React.FC<Props> = ({ orders, currentUser }) => {
           )}
 
           {activeTab === 'movements' && (
-            <StockMovementLedger movements={stockMovements} />
+            <StockMovementLedger
+              movements={stockMovements}
+              currentUser={currentUser}
+              onRefresh={loadData}
+            />
           )}
         </>
       )}

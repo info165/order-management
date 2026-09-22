@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { StockMovement, MovementType, MovementReason } from '../../types';
+import { StockMovement, MovementType, MovementReason, UserProfile } from '../../types';
+import { deleteStockMovement, clearAllStockMovements } from '../../services/dataService';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -10,17 +12,53 @@ import {
   FileSpreadsheet,
   FileText,
   User,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 
 interface Props {
   movements: StockMovement[];
+  currentUser?: UserProfile;
+  onRefresh?: () => void;
 }
 
-export const StockMovementLedger: React.FC<Props> = ({ movements }) => {
+export const StockMovementLedger: React.FC<Props> = ({ movements, currentUser, onRefresh }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | MovementType>('ALL');
   const [reasonFilter, setReasonFilter] = useState<string>('ALL');
+
+  // Deletion modals state
+  const [deleteTarget, setDeleteTarget] = useState<StockMovement | null>(null);
+  const [isClearAllOpen, setIsClearAllOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteStockMovement(deleteTarget.movementId, currentUser);
+      setDeleteTarget(null);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete stock movement record.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleConfirmClearAll = async () => {
+    setIsDeleting(true);
+    try {
+      await clearAllStockMovements(currentUser);
+      setIsClearAllOpen(false);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert(err.message || 'Failed to clear stock movement ledger.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const filteredMovements = movements.filter(m => {
     const q = searchQuery.toLowerCase();
@@ -105,14 +143,28 @@ export const StockMovementLedger: React.FC<Props> = ({ movements }) => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCSV}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-semibold rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer shrink-0"
-        >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-          <span>Export Ledger to CSV</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {movements.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsClearAllOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-xl border border-rose-200 dark:border-rose-800 transition-all cursor-pointer shrink-0"
+              title="Clear all stock movement records"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Clear Ledger</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-semibold rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer shrink-0"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span>Export Ledger to CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -198,12 +250,13 @@ export const StockMovementLedger: React.FC<Props> = ({ movements }) => {
                 <th className="py-3 px-4">Reason & Context</th>
                 <th className="py-3 px-4">Reference Document</th>
                 <th className="py-3 px-4">Logged By</th>
+                <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredMovements.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     No stock movement records found matching current filters.
                   </td>
                 </tr>
@@ -286,6 +339,17 @@ export const StockMovementLedger: React.FC<Props> = ({ movements }) => {
                           <span>{m.userName || m.user || 'System Auto'}</span>
                         </div>
                       </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(m)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          title="Delete Stock Entry"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -294,6 +358,31 @@ export const StockMovementLedger: React.FC<Props> = ({ movements }) => {
           </table>
         </div>
       </div>
+
+      {/* Delete Single Entry Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete Stock Ledger Entry"
+        recordName={deleteTarget ? `${deleteTarget.materialName} (${deleteTarget.movementType || deleteTarget.type}: ${deleteTarget.quantity})` : undefined}
+        recordType="Stock Entry"
+        warningDetails="Deleting this stock audit entry will permanently remove it from the ledger history. Live Sales Orders and Order Registry entries remain untouched."
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Clear All Ledger Entries Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={isClearAllOpen}
+        title="Clear Entire Stock Movement Ledger"
+        recordName={`All ${movements.length} Stock Ledger Entries`}
+        recordType="Ledger Records"
+        warningDetails="Are you sure you want to delete ALL inventory stock movement records? All material definitions, catalogue BOMs, and Sales Orders will remain 100% intact."
+        confirmText="Yes, Clear All"
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmClearAll}
+        onCancel={() => setIsClearAllOpen(false)}
+      />
     </div>
   );
 };
