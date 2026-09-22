@@ -43,7 +43,10 @@ import {
   DUMMY_MATERIAL_IDS,
   DUMMY_CATALOGUE_IDS,
   DUMMY_VENDOR_IDS,
-  DUMMY_PO_IDS
+  DUMMY_PO_IDS,
+  DUMMY_MATERIAL_SKUS,
+  DUMMY_MATERIAL_NAME_KEYWORDS,
+  DUMMY_VENDOR_NAMES
 } from '../data/inventorySeedData';
 import { matchOrderToCatalogue, flattenBOM } from '../utils/bomCalculator';
 import { db, auth, createAuthAccountForUser } from '../firebase/config';
@@ -263,6 +266,7 @@ export function normalizeMaterial(m: any): Material {
   const sku = (m.sku || m.materialSku || `SKU-${m.materialId || Math.floor(1000 + Math.random() * 9000)}`).toString().trim();
   const unit = (m.unit || 'Nos').toString().trim();
   return {
+    firestoreDocId: m.firestoreDocId || m.id,
     materialId: m.materialId || `MAT-${Date.now().toString(36).toUpperCase()}`,
     sku,
     name,
@@ -293,6 +297,7 @@ export function normalizeStockMovement(m: any): StockMovement {
   const materialName = m.materialName || m.name || 'Component';
   return {
     ...m,
+    firestoreDocId: m.firestoreDocId || m.id,
     materialName: materialName,
     movementType: movType,
     type: movType,
@@ -308,38 +313,76 @@ export function normalizeStockMovement(m: any): StockMovement {
 export function isDummyInventoryRecord(type: 'material' | 'catalogue' | 'vendor' | 'po' | 'movement', item: any): boolean {
   if (!item) return false;
   if (type === 'material') {
+    const matId = (item.materialId || '').toUpperCase();
+    const sku = (item.sku || '').toUpperCase();
+    const name = (item.name || item.materialName || '').toLowerCase();
     return (
-      DUMMY_MATERIAL_IDS.includes(item.materialId) ||
-      item.sku === 'SKU-MTR-12V' ||
-      item.sku === 'SKU-SEN-US' ||
-      (typeof item.name === 'string' && item.name.includes('BO Motor 12V 300RPM'))
+      DUMMY_MATERIAL_IDS.includes(matId) ||
+      DUMMY_MATERIAL_SKUS.includes(sku) ||
+      sku.startsWith('SKU-MTR-') ||
+      sku.startsWith('SKU-SEN-') ||
+      sku.startsWith('SKU-CTR-') ||
+      sku.startsWith('SKU-BAT-') ||
+      sku.startsWith('SKU-CON-') ||
+      sku.startsWith('SKU-STR-') ||
+      sku.startsWith('SKU-CAB-') ||
+      DUMMY_MATERIAL_NAME_KEYWORDS.some(kw => name.includes(kw))
     );
   }
   if (type === 'catalogue') {
+    const catId = (item.catalogueId || '').toUpperCase();
+    const code = (item.catalogueCode || item.code || '').toUpperCase();
+    const name = (item.name || '').toLowerCase();
     return (
-      DUMMY_CATALOGUE_IDS.includes(item.catalogueId) ||
-      item.catalogueCode === 'ROBO-KIT-A' ||
-      item.catalogueCode === 'ATL-PKG-01' ||
-      item.catalogueCode === 'COMP-SKILL-01'
+      DUMMY_CATALOGUE_IDS.includes(catId) ||
+      code === 'ROBO-KIT-A' ||
+      code === 'ATL-PKG-01' ||
+      code === 'COMP-SKILL-01' ||
+      name.includes('robotics & ai kit') ||
+      name.includes('atl package') ||
+      name.includes('composite skill lab')
     );
   }
   if (type === 'vendor') {
+    const vId = (item.vendorId || '').toUpperCase();
+    const code = (item.vendorCode || '').toUpperCase();
+    const name = (item.vendorName || '').toLowerCase();
     return (
-      DUMMY_VENDOR_IDS.includes(item.vendorId) ||
-      item.vendorCode === 'VND-ROBO-01' ||
-      item.vendorCode === 'VND-ELEC-02' ||
-      item.vendorCode === 'VND-POLY-03'
+      DUMMY_VENDOR_IDS.includes(vId) ||
+      code === 'VND-ROBO-01' ||
+      code === 'VND-ELEC-02' ||
+      code === 'VND-POLY-03' ||
+      DUMMY_VENDOR_NAMES.some(kw => name.includes(kw))
     );
   }
   if (type === 'po') {
-    return DUMMY_PO_IDS.includes(item.poId) || item.poNumber === 'PO/FS/26-27/001';
+    const poId = (item.poId || '').toUpperCase();
+    const poNumber = (item.poNumber || '').toUpperCase();
+    return (
+      DUMMY_PO_IDS.includes(poId) ||
+      poNumber === 'PO/FS/26-27/001' ||
+      poNumber.includes('PO/FS/26-27/001')
+    );
   }
   if (type === 'movement') {
+    const matId = (item.materialId || '').toUpperCase();
+    const sku = (item.sku || '').toUpperCase();
+    const matName = (item.materialName || '').toLowerCase();
+    const ref = (item.reference || '').toUpperCase();
     return (
-      DUMMY_MATERIAL_IDS.includes(item.materialId) ||
+      DUMMY_MATERIAL_IDS.includes(matId) ||
       DUMMY_PO_IDS.includes(item.purchaseOrderId) ||
-      item.reference === 'INITIAL-OPENING-STOCK' ||
-      item.reference === 'OPENING-STOCK-ENTRY'
+      DUMMY_MATERIAL_SKUS.includes(sku) ||
+      sku.startsWith('SKU-MTR-') ||
+      sku.startsWith('SKU-SEN-') ||
+      sku.startsWith('SKU-CTR-') ||
+      sku.startsWith('SKU-BAT-') ||
+      sku.startsWith('SKU-CON-') ||
+      sku.startsWith('SKU-STR-') ||
+      sku.startsWith('SKU-CAB-') ||
+      ref === 'INITIAL-OPENING-STOCK' ||
+      ref === 'OPENING-STOCK-ENTRY' ||
+      DUMMY_MATERIAL_NAME_KEYWORDS.some(kw => matName.includes(kw))
     );
   }
   return false;
@@ -371,25 +414,11 @@ saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
 
 // Background asynchronous cleanup of dummy demonstration docs from Firestore ONLY.
 // CRITICAL: The sales order collection and all sales records are NEVER touched!
-if (typeof window !== 'undefined' && localStorage.getItem('fs_dummy_inventory_purged_v2') !== 'true') {
-  setTimeout(async () => {
-    try {
-      for (const id of DUMMY_MATERIAL_IDS) {
-        deleteDoc(doc(db, 'materials', id)).catch(() => {});
-      }
-      for (const id of DUMMY_CATALOGUE_IDS) {
-        deleteDoc(doc(db, 'catalogues', id)).catch(() => {});
-      }
-      for (const id of DUMMY_VENDOR_IDS) {
-        deleteDoc(doc(db, 'vendors', id)).catch(() => {});
-      }
-      for (const id of DUMMY_PO_IDS) {
-        deleteDoc(doc(db, 'purchaseOrders', id)).catch(() => {});
-      }
-      localStorage.setItem('fs_dummy_inventory_purged_v2', 'true');
-    } catch (e) {
-      console.warn('Initial dummy purge notice:', e);
-    }
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    purgeDummyInventoryTestData().catch(err => {
+      console.warn('Startup dummy purge note:', err);
+    });
   }, 1000);
 }
 
@@ -3771,9 +3800,18 @@ export function subscribeToRealtimeMaterials(onUpdate: (materials: Material[]) =
       (snapshot) => {
         const remote: Material[] = [];
         snapshot.forEach((docSnap) => {
-          const raw = docSnap.data();
-          if (raw && raw.materialId && !isDummyInventoryRecord('material', raw)) {
-            remote.push(normalizeMaterial(raw));
+          const raw = docSnap.data() as any;
+          const candidate: any = {
+            ...raw,
+            firestoreDocId: docSnap.id,
+            materialId: raw?.materialId || docSnap.id
+          };
+          if (isDummyInventoryRecord('material', candidate)) {
+            deleteDoc(docSnap.ref).catch(() => {});
+            return;
+          }
+          if (candidate.name || candidate.sku) {
+            remote.push(normalizeMaterial(candidate));
           }
         });
         memoryMaterials = remote;
@@ -3800,8 +3838,17 @@ export function subscribeToRealtimeCatalogues(onUpdate: (catalogues: Catalogue[]
         const remote: Catalogue[] = [];
         snapshot.forEach((docSnap) => {
           const c = docSnap.data() as Catalogue;
-          if (c && c.catalogueId && !isDummyInventoryRecord('catalogue', c)) {
-            remote.push(c);
+          const candidate = {
+            ...c,
+            firestoreDocId: docSnap.id,
+            catalogueId: c?.catalogueId || docSnap.id
+          };
+          if (isDummyInventoryRecord('catalogue', candidate)) {
+            deleteDoc(docSnap.ref).catch(() => {});
+            return;
+          }
+          if (candidate.name || candidate.catalogueCode || candidate.code) {
+            remote.push(candidate);
           }
         });
         memoryCatalogues = remote;
@@ -3828,8 +3875,17 @@ export function subscribeToRealtimeVendors(onUpdate: (vendors: Vendor[]) => void
         const remote: Vendor[] = [];
         snapshot.forEach((docSnap) => {
           const v = docSnap.data() as Vendor;
-          if (v && v.vendorId && !isDummyInventoryRecord('vendor', v)) {
-            remote.push(v);
+          const candidate = {
+            ...v,
+            firestoreDocId: docSnap.id,
+            vendorId: v?.vendorId || docSnap.id
+          };
+          if (isDummyInventoryRecord('vendor', candidate)) {
+            deleteDoc(docSnap.ref).catch(() => {});
+            return;
+          }
+          if (candidate.vendorName || candidate.vendorCode) {
+            remote.push(candidate);
           }
         });
         memoryVendors = remote;
@@ -3856,8 +3912,17 @@ export function subscribeToRealtimePurchaseOrders(onUpdate: (pos: PurchaseOrder[
         const remote: PurchaseOrder[] = [];
         snapshot.forEach((docSnap) => {
           const po = docSnap.data() as PurchaseOrder;
-          if (po && po.poId && !isDummyInventoryRecord('po', po)) {
-            remote.push(po);
+          const candidate = {
+            ...po,
+            firestoreDocId: docSnap.id,
+            poId: po?.poId || docSnap.id
+          };
+          if (isDummyInventoryRecord('po', candidate)) {
+            deleteDoc(docSnap.ref).catch(() => {});
+            return;
+          }
+          if (candidate.poNumber || candidate.vendorName) {
+            remote.push(candidate);
           }
         });
         remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -3884,9 +3949,18 @@ export function subscribeToRealtimeStockMovements(onUpdate: (movements: StockMov
       (snapshot) => {
         const remote: StockMovement[] = [];
         snapshot.forEach((docSnap) => {
-          const raw = docSnap.data();
-          if (raw && raw.movementId && !isDummyInventoryRecord('movement', raw)) {
-            remote.push(normalizeStockMovement(raw));
+          const raw = docSnap.data() as any;
+          const candidate: any = {
+            ...raw,
+            firestoreDocId: docSnap.id,
+            movementId: raw?.movementId || docSnap.id
+          };
+          if (isDummyInventoryRecord('movement', candidate)) {
+            deleteDoc(docSnap.ref).catch(() => {});
+            return;
+          }
+          if (candidate.materialName || candidate.materialId) {
+            remote.push(normalizeStockMovement(candidate));
           }
         });
         remote.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -3911,9 +3985,18 @@ export async function getMaterials(): Promise<Material[]> {
     const snap = await getDocs(collection(db, 'materials'));
     const remote: Material[] = [];
     snap.forEach(d => {
-      const raw = d.data();
-      if (raw && raw.materialId && !isDummyInventoryRecord('material', raw)) {
-        remote.push(normalizeMaterial(raw));
+      const raw = d.data() as any;
+      const candidate: any = {
+        ...raw,
+        firestoreDocId: d.id,
+        materialId: raw?.materialId || d.id
+      };
+      if (isDummyInventoryRecord('material', candidate)) {
+        deleteDoc(d.ref).catch(() => {});
+        return;
+      }
+      if (candidate.name || candidate.sku) {
+        remote.push(normalizeMaterial(candidate));
       }
     });
     memoryMaterials = remote;
@@ -3930,8 +4013,17 @@ export async function getCatalogues(): Promise<Catalogue[]> {
     const remote: Catalogue[] = [];
     snap.forEach(d => {
       const c = d.data() as Catalogue;
-      if (c && c.catalogueId && !isDummyInventoryRecord('catalogue', c)) {
-        remote.push(c);
+      const candidate = {
+        ...c,
+        firestoreDocId: d.id,
+        catalogueId: c?.catalogueId || d.id
+      };
+      if (isDummyInventoryRecord('catalogue', candidate)) {
+        deleteDoc(d.ref).catch(() => {});
+        return;
+      }
+      if (candidate.name || candidate.catalogueCode || candidate.code) {
+        remote.push(candidate);
       }
     });
     memoryCatalogues = remote;
@@ -3948,8 +4040,17 @@ export async function getVendors(): Promise<Vendor[]> {
     const remote: Vendor[] = [];
     snap.forEach(d => {
       const v = d.data() as Vendor;
-      if (v && v.vendorId && !isDummyInventoryRecord('vendor', v)) {
-        remote.push(v);
+      const candidate = {
+        ...v,
+        firestoreDocId: d.id,
+        vendorId: v?.vendorId || d.id
+      };
+      if (isDummyInventoryRecord('vendor', candidate)) {
+        deleteDoc(d.ref).catch(() => {});
+        return;
+      }
+      if (candidate.vendorName || candidate.vendorCode) {
+        remote.push(candidate);
       }
     });
     memoryVendors = remote;
@@ -3966,8 +4067,17 @@ export async function getPurchaseOrders(): Promise<PurchaseOrder[]> {
     const remote: PurchaseOrder[] = [];
     snap.forEach(d => {
       const po = d.data() as PurchaseOrder;
-      if (po && po.poId && !isDummyInventoryRecord('po', po)) {
-        remote.push(po);
+      const candidate = {
+        ...po,
+        firestoreDocId: d.id,
+        poId: po?.poId || d.id
+      };
+      if (isDummyInventoryRecord('po', candidate)) {
+        deleteDoc(d.ref).catch(() => {});
+        return;
+      }
+      if (candidate.poNumber || candidate.vendorName) {
+        remote.push(candidate);
       }
     });
     remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -3984,9 +4094,18 @@ export async function getStockMovements(): Promise<StockMovement[]> {
     const snap = await getDocs(collection(db, 'stockMovements'));
     const remote: StockMovement[] = [];
     snap.forEach(d => {
-      const raw = d.data();
-      if (raw && raw.movementId && !isDummyInventoryRecord('movement', raw)) {
-        remote.push(normalizeStockMovement(raw));
+      const raw = d.data() as any;
+      const candidate: any = {
+        ...raw,
+        firestoreDocId: d.id,
+        movementId: raw?.movementId || d.id
+      };
+      if (isDummyInventoryRecord('movement', candidate)) {
+        deleteDoc(d.ref).catch(() => {});
+        return;
+      }
+      if (candidate.materialName || candidate.materialId) {
+        remote.push(normalizeStockMovement(candidate));
       }
     });
     remote.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -4075,14 +4194,41 @@ export async function saveMaterial(material: Partial<Material>, user?: UserProfi
 }
 
 export async function deleteMaterial(materialId: string, user?: UserProfile): Promise<void> {
-  const target = memoryMaterials.find(m => m.materialId === materialId);
-  memoryMaterials = memoryMaterials.filter(m => m.materialId !== materialId);
+  const target = memoryMaterials.find(m => m.materialId === materialId || m.firestoreDocId === materialId);
+  memoryMaterials = memoryMaterials.filter(m => m.materialId !== materialId && m.firestoreDocId !== materialId);
   saveStorage(STORAGE_KEYS.MATERIALS, memoryMaterials);
 
+  const docIdToDelete = target?.firestoreDocId || target?.materialId || materialId;
   try {
-    await deleteDoc(doc(db, 'materials', materialId));
+    await deleteDoc(doc(db, 'materials', docIdToDelete));
   } catch (err) {
     console.warn('deleteDoc materials warning:', err);
+  }
+
+  if (target?.materialId && target.materialId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'materials', target.materialId));
+    } catch (_) {}
+  }
+  if (materialId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'materials', materialId));
+    } catch (_) {}
+  }
+
+  try {
+    const qSnap = await getDocs(query(collection(db, 'materials'), where('materialId', '==', materialId)));
+    for (const d of qSnap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+    if (target?.sku) {
+      const skuSnap = await getDocs(query(collection(db, 'materials'), where('sku', '==', target.sku)));
+      for (const d of skuSnap.docs) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('deleteMaterial query cleanup note:', err);
   }
 
   if (user && target) {
@@ -4238,15 +4384,23 @@ export async function clearStockInventory(user?: UserProfile): Promise<void> {
 
   // Sync to firestore in background
   for (const m of memoryMaterials) {
-    syncDocToFirestore('materials', m.materialId, {
+    const docId = m.firestoreDocId || m.materialId;
+    syncDocToFirestore('materials', docId, {
       openingInventory: 0,
       currentStock: 0,
       updatedAt: now
     });
+    if (m.materialId !== docId) {
+      syncDocToFirestore('materials', m.materialId, {
+        openingInventory: 0,
+        currentStock: 0,
+        updatedAt: now
+      });
+    }
   }
 
-  memoryStockMovements = [];
-  saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, []);
+  // Clear all stock movements in memory, storage, and Firestore
+  await clearAllStockMovements(user);
 
   if (user) {
     await writeActivityLog({
@@ -4309,14 +4463,41 @@ export async function saveCatalogue(catalogue: Partial<Catalogue>, user?: UserPr
 }
 
 export async function deleteCatalogue(catalogueId: string, user?: UserProfile): Promise<void> {
-  const target = memoryCatalogues.find(c => c.catalogueId === catalogueId);
-  memoryCatalogues = memoryCatalogues.filter(c => c.catalogueId !== catalogueId);
+  const target = memoryCatalogues.find(c => c.catalogueId === catalogueId || c.firestoreDocId === catalogueId);
+  memoryCatalogues = memoryCatalogues.filter(c => c.catalogueId !== catalogueId && c.firestoreDocId !== catalogueId);
   saveStorage(STORAGE_KEYS.CATALOGUES, memoryCatalogues);
 
+  const docIdToDelete = target?.firestoreDocId || target?.catalogueId || catalogueId;
   try {
-    await deleteDoc(doc(db, 'catalogues', catalogueId));
+    await deleteDoc(doc(db, 'catalogues', docIdToDelete));
   } catch (err) {
     console.warn('deleteDoc catalogues warning:', err);
+  }
+
+  if (target?.catalogueId && target.catalogueId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'catalogues', target.catalogueId));
+    } catch (_) {}
+  }
+  if (catalogueId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'catalogues', catalogueId));
+    } catch (_) {}
+  }
+
+  try {
+    const qSnap = await getDocs(query(collection(db, 'catalogues'), where('catalogueId', '==', catalogueId)));
+    for (const d of qSnap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+    if (target?.catalogueCode) {
+      const codeSnap = await getDocs(query(collection(db, 'catalogues'), where('catalogueCode', '==', target.catalogueCode)));
+      for (const d of codeSnap.docs) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('deleteCatalogue query cleanup note:', err);
   }
 
   if (user && target) {
@@ -4379,14 +4560,41 @@ export async function saveVendor(vendor: Partial<Vendor>, user?: UserProfile): P
 }
 
 export async function deleteVendor(vendorId: string, user?: UserProfile): Promise<void> {
-  const target = memoryVendors.find(v => v.vendorId === vendorId);
-  memoryVendors = memoryVendors.filter(v => v.vendorId !== vendorId);
+  const target = memoryVendors.find(v => v.vendorId === vendorId || v.firestoreDocId === vendorId);
+  memoryVendors = memoryVendors.filter(v => v.vendorId !== vendorId && v.firestoreDocId !== vendorId);
   saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
 
+  const docIdToDelete = target?.firestoreDocId || target?.vendorId || vendorId;
   try {
-    await deleteDoc(doc(db, 'vendors', vendorId));
+    await deleteDoc(doc(db, 'vendors', docIdToDelete));
   } catch (err) {
     console.warn('deleteDoc vendors warning:', err);
+  }
+
+  if (target?.vendorId && target.vendorId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'vendors', target.vendorId));
+    } catch (_) {}
+  }
+  if (vendorId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'vendors', vendorId));
+    } catch (_) {}
+  }
+
+  try {
+    const qSnap = await getDocs(query(collection(db, 'vendors'), where('vendorId', '==', vendorId)));
+    for (const d of qSnap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+    if (target?.vendorCode) {
+      const codeSnap = await getDocs(query(collection(db, 'vendors'), where('vendorCode', '==', target.vendorCode)));
+      for (const d of codeSnap.docs) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('deleteVendor query cleanup note:', err);
   }
 
   if (user && target) {
@@ -4714,14 +4922,41 @@ export async function deductInventoryForOrder(order: Order, user: UserProfile): 
 // Sales Orders, customer schools, contract IDs, and order values remain 100% intact and preserved.
 
 export async function deletePurchaseOrder(poId: string, user?: UserProfile): Promise<void> {
-  const target = memoryPurchaseOrders.find(p => p.poId === poId);
-  memoryPurchaseOrders = memoryPurchaseOrders.filter(p => p.poId !== poId);
+  const target = memoryPurchaseOrders.find(p => p.poId === poId || p.firestoreDocId === poId);
+  memoryPurchaseOrders = memoryPurchaseOrders.filter(p => p.poId !== poId && p.firestoreDocId !== poId);
   saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
 
+  const docIdToDelete = target?.firestoreDocId || target?.poId || poId;
   try {
-    await deleteDoc(doc(db, 'purchaseOrders', poId));
+    await deleteDoc(doc(db, 'purchaseOrders', docIdToDelete));
   } catch (err) {
     console.warn('deleteDoc purchaseOrders warning:', err);
+  }
+
+  if (target?.poId && target.poId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'purchaseOrders', target.poId));
+    } catch (_) {}
+  }
+  if (poId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'purchaseOrders', poId));
+    } catch (_) {}
+  }
+
+  try {
+    const qSnap = await getDocs(query(collection(db, 'purchaseOrders'), where('poId', '==', poId)));
+    for (const d of qSnap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+    if (target?.poNumber) {
+      const numSnap = await getDocs(query(collection(db, 'purchaseOrders'), where('poNumber', '==', target.poNumber)));
+      for (const d of numSnap.docs) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('deletePurchaseOrder query cleanup note:', err);
   }
 
   if (user && target) {
@@ -4737,14 +4972,35 @@ export async function deletePurchaseOrder(poId: string, user?: UserProfile): Pro
 }
 
 export async function deleteStockMovement(movementId: string, user?: UserProfile): Promise<void> {
-  const target = memoryStockMovements.find(m => m.movementId === movementId);
-  memoryStockMovements = memoryStockMovements.filter(m => m.movementId !== movementId);
+  const target = memoryStockMovements.find(m => m.movementId === movementId || m.firestoreDocId === movementId);
+  memoryStockMovements = memoryStockMovements.filter(m => m.movementId !== movementId && m.firestoreDocId !== movementId);
   saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
 
+  const docIdToDelete = target?.firestoreDocId || target?.movementId || movementId;
   try {
-    await deleteDoc(doc(db, 'stockMovements', movementId));
+    await deleteDoc(doc(db, 'stockMovements', docIdToDelete));
   } catch (err) {
     console.warn('deleteDoc stockMovements warning:', err);
+  }
+
+  if (target?.movementId && target.movementId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'stockMovements', target.movementId));
+    } catch (_) {}
+  }
+  if (movementId !== docIdToDelete) {
+    try {
+      await deleteDoc(doc(db, 'stockMovements', movementId));
+    } catch (_) {}
+  }
+
+  try {
+    const qSnap = await getDocs(query(collection(db, 'stockMovements'), where('movementId', '==', movementId)));
+    for (const d of qSnap.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('deleteStockMovement query cleanup note:', err);
   }
 
   if (user && target) {
@@ -4766,15 +5022,7 @@ export async function clearAllStockMovements(user?: UserProfile): Promise<void> 
 
   try {
     const snap = await getDocs(collection(db, 'stockMovements'));
-    const batch = writeBatch(db);
-    let c = 0;
-    snap.forEach(d => {
-      batch.delete(d.ref);
-      c++;
-    });
-    if (c > 0) {
-      await batch.commit();
-    }
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref).catch(() => {})));
   } catch (err) {
     console.warn('clearAllStockMovements firestore warning:', err);
   }
@@ -4829,6 +5077,57 @@ export async function purgeDummyInventoryTestData(user?: UserProfile): Promise<{
   for (const id of DUMMY_PO_IDS) {
     deleteDoc(doc(db, 'purchaseOrders', id)).catch(() => {});
   }
+
+  // Active scan of collections to purge any dummy documents with auto-generated IDs
+  try {
+    const matSnap = await getDocs(collection(db, 'materials'));
+    for (const d of matSnap.docs) {
+      const data = d.data();
+      if (isDummyInventoryRecord('material', { ...data, firestoreDocId: d.id, materialId: data?.materialId || d.id })) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const catSnap = await getDocs(collection(db, 'catalogues'));
+    for (const d of catSnap.docs) {
+      const data = d.data();
+      if (isDummyInventoryRecord('catalogue', { ...data, firestoreDocId: d.id, catalogueId: data?.catalogueId || d.id })) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const vndSnap = await getDocs(collection(db, 'vendors'));
+    for (const d of vndSnap.docs) {
+      const data = d.data();
+      if (isDummyInventoryRecord('vendor', { ...data, firestoreDocId: d.id, vendorId: data?.vendorId || d.id })) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const poSnap = await getDocs(collection(db, 'purchaseOrders'));
+    for (const d of poSnap.docs) {
+      const data = d.data();
+      if (isDummyInventoryRecord('po', { ...data, firestoreDocId: d.id, poId: data?.poId || d.id })) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const movSnap = await getDocs(collection(db, 'stockMovements'));
+    for (const d of movSnap.docs) {
+      const data = d.data();
+      if (isDummyInventoryRecord('movement', { ...data, firestoreDocId: d.id, movementId: data?.movementId || d.id })) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
+  } catch (_) {}
 
   if (user) {
     await writeActivityLog({

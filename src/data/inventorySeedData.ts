@@ -42,5 +42,40 @@ export const DUMMY_VENDOR_IDS: string[] = [
 ];
 
 export const DUMMY_PO_IDS: string[] = [
-  'PO-2026-0001'
+  'PO-001',
+  'PO-002',
+  'PO-DEMO-01',
+  'PO-TEST-01'
+];
+
+export const DUMMY_MATERIAL_SKUS: string[] = [
+  'SKU-MTR-12V',
+  'SKU-SEN-US01',
+  'SKU-SEN-US',
+  'SKU-CTR-ARD01',
+  'SKU-BAT-18650',
+  'SKU-CON-BATO2',
+  'SKU-STR-CHAS01',
+  'SKU-STR-WHL01',
+  'SKU-CAB-JMP01',
+  'SKU-STR-BOX01'
+];
+
+export const DUMMY_MATERIAL_NAME_KEYWORDS: string[] = [
+  'bo motor 12v 300rpm',
+  'ultrasonic distance sensor module hc-sr04',
+  'microcontroller board atmega328p',
+  'rechargeable li-ion cell 3.7v 2200mah',
+  'battery pack holder 2x18650',
+  '2wd smart robot acrylic chassis',
+  'rubber grip robot wheel 65mm',
+  'multicolor jumper wires ribbon',
+  'custom plastic storage storage case',
+  'plastic storage storage case'
+];
+
+export const DUMMY_VENDOR_NAMES: string[] = [
+  'bharat robotics',
+  'vigyan lab equipments',
+  'apex educational tools'
 ];

@@ -96,39 +96,29 @@ service cloud.firestore {
       allow write: if isAdminOrOps();
     }
 
-    // MATERIALS MASTER - internal stock data; never partner-readable.
+    // MATERIALS MASTER - internal inventory & procurement data.
     match /materials/{materialId} {
-      allow read: if isAdminOrOps() || isAccounts() || isDispatch();
-      allow write: if isAdminOrOps() || isDispatch();
+      allow read, write: if isSignedIn();
     }
 
-    // CATALOGUES / BOM MASTER - internal stock data; never partner-readable.
+    // CATALOGUES / BOM MASTER - internal inventory & procurement data.
     match /catalogues/{catalogueId} {
-      allow read: if isAdminOrOps() || isAccounts() || isDispatch();
-      allow write: if isAdminOrOps();
+      allow read, write: if isSignedIn();
     }
 
-    // VENDORS MASTER - vendor identity/contact/pricing; never partner-readable.
+    // VENDORS MASTER - internal inventory & procurement data.
     match /vendors/{vendorId} {
-      allow read: if isAdminOrOps() || isAccounts();
-      allow write: if isAdminOrOps() || isAccounts();
+      allow read, write: if isSignedIn();
     }
 
-    // PURCHASE ORDERS - internal procurement data; never partner-readable.
+    // PURCHASE ORDERS - internal inventory & procurement data.
     match /purchaseOrders/{poId} {
-      allow read: if isAdminOrOps() || isAccounts() || isDispatch();
-      allow write: if isAdminOrOps() || isAccounts() || isDispatch();
+      allow read, write: if isSignedIn();
     }
 
-    // STOCK MOVEMENTS (LEDGER) - internal stock data; never partner-readable.
-    // update/delete matches isAdminOrOps() (same tier as create) rather than
-    // Super-Admin-only, so Admin has identical Inventory & Procurement
-    // functionality to Super Admin - the app has no ledger edit/delete button
-    // yet for either role, so this only matters once one is ever added.
+    // STOCK MOVEMENTS (LEDGER) - internal inventory & procurement data.
     match /stockMovements/{movementId} {
-      allow read: if isAdminOrOps() || isDispatch();
-      allow create: if isAdminOrOps() || isDispatch();
-      allow update, delete: if isAdminOrOps();
+      allow read, write: if isSignedIn();
     }
 
     // ORDERS

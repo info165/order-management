@@ -3,6 +3,7 @@
  */
 
 export interface Material {
+  firestoreDocId?: string;  // Explicit Firestore doc ID for delete and sync reliability
   materialId: string;       // e.g. "MAT-001"
   sku: string;              // e.g. "SKU-MTR-01"
   name: string;             // e.g. "High-Torque DC Geared Motor 12V"
@@ -38,6 +39,7 @@ export interface BOMItem {
 }
 
 export interface Catalogue {
+  firestoreDocId?: string;
   catalogueId: string;      // e.g. "CAT-ATL-01"
   catalogueCode?: string;   // e.g. "ATL-PKG-A"
   code?: string;            // Alias for catalogueCode
@@ -57,6 +59,7 @@ export interface Catalogue {
 }
 
 export interface Vendor {
+  firestoreDocId?: string;
   vendorId: string;         // e.g. "VEN-001"
   vendorCode: string;       // e.g. "VND-TECH-01"
   vendorName: string;
@@ -103,6 +106,7 @@ export interface PurchaseOrderItem {
 export type POItem = PurchaseOrderItem;
 
 export interface PurchaseOrder {
+  firestoreDocId?: string;
   poId: string;             // e.g. "PO-2026-0001"
   poNumber: string;         // Display number e.g. "PO/FS/26-27/001"
   poDate: string;           // YYYY-MM-DD
@@ -147,6 +151,7 @@ export type MovementReason =
   | 'TRANSFER';
 
 export interface StockMovement {
+  firestoreDocId?: string;
   movementId: string;
   date?: string;             // ISO datetime
   timestamp?: string;        // ISO datetime
