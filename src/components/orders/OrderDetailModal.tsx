@@ -89,6 +89,14 @@ interface OrderDetailModalProps {
 
 type TabType = 'overview' | 'status' | 'gemStatus' | 'dispatch' | 'payments' | 'documents';
 
+// The order's real quantity for orders created before Package Quantity
+// existed: falls back to the first item's own quantity rather than 1, so an
+// order like a 5-unit Robotics Kit doesn't show (and silently save) "1"
+// the first time its Contract form is opened. Matches the same fallback
+// chain deductInventoryForOrder() already uses in dataService.ts.
+const existingPackageQty = (o: Order): number =>
+  o.packageQuantity || o.quantity || (o.items && o.items[0]?.quantity) || 1;
+
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
   displaySerialNo,
@@ -169,7 +177,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [contractFormPoNumber, setContractFormPoNumber] = useState(order.purchaseOrderNumber || '');
   const [contractFormOrderDate, setContractFormOrderDate] = useState(order.orderDate || '');
   const [contractFormCategory, setContractFormCategory] = useState(order.category || '');
-  const [contractFormQuantity, setContractFormQuantity] = useState<number>(order.packageQuantity || order.quantity || 1);
+  const [contractFormQuantity, setContractFormQuantity] = useState<number>(existingPackageQty(order));
   const [contractFormCompany, setContractFormCompany] = useState(order.company || '');
   const [contractFormOrderValue, setContractFormOrderValue] = useState<number>(order.orderValue || 0);
   const [isSavingContract, setIsSavingContract] = useState(false);
@@ -187,7 +195,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   useEffect(() => {
     getAgents().then(setAvailableAgents).catch(console.error);
-    getCatalogues().then(setCatalogues).catch(console.error);
+    // Catalogues are internal BOM/stock data - a partner account has no read
+    // access to them (and no UI here that would use them), so skip the call.
+    if (!isAgent) {
+      getCatalogues().then(setCatalogues).catch(console.error);
+    }
     getSystemSettings().then(s => {
       setCompanies(s.companies || []);
       setCategories(s.categories && s.categories.length > 0 ? s.categories : EQUIPMENT_CATEGORIES);
@@ -201,7 +213,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setContractFormPoNumber(activeOrder.purchaseOrderNumber || '');
     setContractFormOrderDate(activeOrder.orderDate || '');
     setContractFormCategory(activeOrder.category || '');
-    setContractFormQuantity(activeOrder.packageQuantity || activeOrder.quantity || 1);
+    setContractFormQuantity(existingPackageQty(activeOrder));
     setContractFormCompany(activeOrder.company || '');
     setContractFormOrderValue(activeOrder.orderValue || 0);
   }, [activeOrder]);
@@ -1088,8 +1100,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 );
               })()}
 
-              {/* Catalogue & BOM Material Readiness Card */}
-              <OrderBOMFulfillmentCard order={activeOrder} />
+              {/* Catalogue & BOM Material Readiness Card - internal stock/BOM
+                  detail, not something a partner needs on their own order */}
+              {!isAgent && <OrderBOMFulfillmentCard order={activeOrder} />}
 
               {/* School, Contract, and Agent Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1568,7 +1581,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <div>
                         <span className="text-slate-400 block text-[11px]">Package Qty:</span>
                         <span className="font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
-                          {activeOrder.packageQuantity || activeOrder.quantity || 1} Unit(s)
+                          {existingPackageQty(activeOrder)} Unit(s)
                         </span>
                       </div>
                       <div>

@@ -23,6 +23,7 @@ import { TrackingLink } from '../common/TrackingLink';
 import { WhatsAppButton } from '../common/WhatsAppButton';
 import { EmailButton } from '../common/EmailButton';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
+import { toDateInputValue } from '../../utils/dateInput';
 import { exportOrdersToExcel } from '../../services/importExportService';
 import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
@@ -688,6 +689,15 @@ export const OrderList: React.FC<OrderListProps> = ({
       ? orders.filter(o => selectedOrderIds.includes(o.orderId))
       : sortedOrders;
     exportOrdersToExcel(exportData, `GovSchool_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  // Day-first display for a dispatch date, tolerant of the mixed formats
+  // orders were imported with (matches the WhatsApp/email message wording).
+  const displayDispatchDate = (raw?: string | null): string => {
+    const iso = toDateInputValue(raw);
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}-${m}-${y}`;
   };
 
   // Helper to render sort icon in column header
@@ -1642,6 +1652,11 @@ export const OrderList: React.FC<OrderListProps> = ({
                       >
                         <div className="flex flex-col gap-1 items-start">
                           <StatusBadge status={order.status} type="order" compact />
+                          {order.status === 'DISPATCHED' && displayDispatchDate(order.dispatchDate) && (
+                            <div className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                              {displayDispatchDate(order.dispatchDate)}
+                            </div>
+                          )}
                           {!isAgent && isAdmin && order.procurementStatus && (
                             <OrderProcurementBadge status={order.procurementStatus} size="sm" />
                           )}

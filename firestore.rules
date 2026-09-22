@@ -96,35 +96,39 @@ service cloud.firestore {
       allow write: if isAdminOrOps();
     }
 
-    // MATERIALS MASTER
+    // MATERIALS MASTER - internal stock data; never partner-readable.
     match /materials/{materialId} {
-      allow read: if isSignedIn();
+      allow read: if isAdminOrOps() || isAccounts() || isDispatch();
       allow write: if isAdminOrOps() || isDispatch();
     }
 
-    // CATALOGUES / BOM MASTER
+    // CATALOGUES / BOM MASTER - internal stock data; never partner-readable.
     match /catalogues/{catalogueId} {
-      allow read: if isSignedIn();
+      allow read: if isAdminOrOps() || isAccounts() || isDispatch();
       allow write: if isAdminOrOps();
     }
 
-    // VENDORS MASTER
+    // VENDORS MASTER - vendor identity/contact/pricing; never partner-readable.
     match /vendors/{vendorId} {
-      allow read: if isSignedIn();
+      allow read: if isAdminOrOps() || isAccounts();
       allow write: if isAdminOrOps() || isAccounts();
     }
 
-    // PURCHASE ORDERS
+    // PURCHASE ORDERS - internal procurement data; never partner-readable.
     match /purchaseOrders/{poId} {
-      allow read: if isSignedIn();
+      allow read: if isAdminOrOps() || isAccounts() || isDispatch();
       allow write: if isAdminOrOps() || isAccounts() || isDispatch();
     }
 
-    // STOCK MOVEMENTS (LEDGER)
+    // STOCK MOVEMENTS (LEDGER) - internal stock data; never partner-readable.
+    // update/delete matches isAdminOrOps() (same tier as create) rather than
+    // Super-Admin-only, so Admin has identical Inventory & Procurement
+    // functionality to Super Admin - the app has no ledger edit/delete button
+    // yet for either role, so this only matters once one is ever added.
     match /stockMovements/{movementId} {
-      allow read: if isSignedIn();
+      allow read: if isAdminOrOps() || isDispatch();
       allow create: if isAdminOrOps() || isDispatch();
-      allow update, delete: if isSuperAdmin();
+      allow update, delete: if isAdminOrOps();
     }
 
     // ORDERS
