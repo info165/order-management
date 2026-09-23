@@ -44,9 +44,7 @@ import {
   DUMMY_CATALOGUE_IDS,
   DUMMY_VENDOR_IDS,
   DUMMY_PO_IDS,
-  DUMMY_MATERIAL_SKUS,
-  DUMMY_MATERIAL_NAME_KEYWORDS,
-  DUMMY_VENDOR_NAMES
+  DUMMY_MATERIAL_SKUS
 } from '../data/inventorySeedData';
 import { matchOrderToCatalogue, flattenBOM } from '../utils/bomCalculator';
 import { db, auth, createAuthAccountForUser } from '../firebase/config';
@@ -310,79 +308,56 @@ export function normalizeStockMovement(m: any): StockMovement {
   };
 }
 
+// Exact-value matching only, deliberately - no SKU-prefix or name-contains
+// matching. A prefix like "starts with SKU-MTR-" or a name fragment like
+// "bo motor 12v 300rpm" is exactly the kind of thing a REAL material could
+// also have (that's a completely ordinary way to code or name a real motor),
+// so matching on it would delete real inventory data, not just the known
+// demo records. Matching on an EXACT id/sku/code/reference is safe because a
+// real record would need to coincidentally have the identical value as one
+// of this fixed, hand-picked list - not just something similar.
 export function isDummyInventoryRecord(type: 'material' | 'catalogue' | 'vendor' | 'po' | 'movement', item: any): boolean {
   if (!item) return false;
   if (type === 'material') {
     const matId = (item.materialId || '').toUpperCase();
     const sku = (item.sku || '').toUpperCase();
-    const name = (item.name || item.materialName || '').toLowerCase();
-    return (
-      DUMMY_MATERIAL_IDS.includes(matId) ||
-      DUMMY_MATERIAL_SKUS.includes(sku) ||
-      sku.startsWith('SKU-MTR-') ||
-      sku.startsWith('SKU-SEN-') ||
-      sku.startsWith('SKU-CTR-') ||
-      sku.startsWith('SKU-BAT-') ||
-      sku.startsWith('SKU-CON-') ||
-      sku.startsWith('SKU-STR-') ||
-      sku.startsWith('SKU-CAB-') ||
-      DUMMY_MATERIAL_NAME_KEYWORDS.some(kw => name.includes(kw))
-    );
+    return DUMMY_MATERIAL_IDS.includes(matId) || DUMMY_MATERIAL_SKUS.includes(sku);
   }
   if (type === 'catalogue') {
     const catId = (item.catalogueId || '').toUpperCase();
     const code = (item.catalogueCode || item.code || '').toUpperCase();
-    const name = (item.name || '').toLowerCase();
     return (
       DUMMY_CATALOGUE_IDS.includes(catId) ||
       code === 'ROBO-KIT-A' ||
       code === 'ATL-PKG-01' ||
-      code === 'COMP-SKILL-01' ||
-      name.includes('robotics & ai kit') ||
-      name.includes('atl package') ||
-      name.includes('composite skill lab')
+      code === 'COMP-SKILL-01'
     );
   }
   if (type === 'vendor') {
     const vId = (item.vendorId || '').toUpperCase();
     const code = (item.vendorCode || '').toUpperCase();
-    const name = (item.vendorName || '').toLowerCase();
     return (
       DUMMY_VENDOR_IDS.includes(vId) ||
       code === 'VND-ROBO-01' ||
       code === 'VND-ELEC-02' ||
-      code === 'VND-POLY-03' ||
-      DUMMY_VENDOR_NAMES.some(kw => name.includes(kw))
+      code === 'VND-POLY-03'
     );
   }
   if (type === 'po') {
     const poId = (item.poId || '').toUpperCase();
     const poNumber = (item.poNumber || '').toUpperCase();
-    return (
-      DUMMY_PO_IDS.includes(poId) ||
-      poNumber === 'PO/FS/26-27/001' ||
-      poNumber.includes('PO/FS/26-27/001')
-    );
+    return DUMMY_PO_IDS.includes(poId) || poNumber === 'PO/FS/26-27/001';
   }
   if (type === 'movement') {
     const matId = (item.materialId || '').toUpperCase();
     const sku = (item.sku || '').toUpperCase();
-    const matName = (item.materialName || '').toLowerCase();
     const ref = (item.reference || '').toUpperCase();
     return (
       DUMMY_MATERIAL_IDS.includes(matId) ||
       DUMMY_PO_IDS.includes(item.purchaseOrderId) ||
       DUMMY_MATERIAL_SKUS.includes(sku) ||
-      sku.startsWith('SKU-MTR-') ||
-      sku.startsWith('SKU-SEN-') ||
-      sku.startsWith('SKU-CTR-') ||
-      sku.startsWith('SKU-BAT-') ||
-      sku.startsWith('SKU-CON-') ||
-      sku.startsWith('SKU-STR-') ||
-      sku.startsWith('SKU-CAB-') ||
       ref === 'INITIAL-OPENING-STOCK' ||
-      ref === 'OPENING-STOCK-ENTRY' ||
-      DUMMY_MATERIAL_NAME_KEYWORDS.some(kw => matName.includes(kw))
+      ref === 'OPENING-STOCK-ENTRY'
     );
   }
   return false;
@@ -414,11 +389,22 @@ saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
 
 // Background asynchronous cleanup of dummy demonstration docs from Firestore ONLY.
 // CRITICAL: The sales order collection and all sales records are NEVER touched!
-if (typeof window !== 'undefined') {
+// Runs once per browser, not on every load: it deletes anything matching
+// isDummyInventoryRecord()'s heuristics, and repeating that on every visit
+// would keep deleting real inventory data that happens to match those
+// patterns (e.g. a real material named or coded similarly to a demo one)
+// for as long as this app is ever used.
+if (typeof window !== 'undefined' && localStorage.getItem('fs_dummy_inventory_purged_v3') !== 'true') {
   setTimeout(() => {
-    purgeDummyInventoryTestData().catch(err => {
-      console.warn('Startup dummy purge note:', err);
-    });
+    purgeDummyInventoryTestData()
+      .then(() => {
+        try {
+          localStorage.setItem('fs_dummy_inventory_purged_v3', 'true');
+        } catch (_) {}
+      })
+      .catch(err => {
+        console.warn('Startup dummy purge note:', err);
+      });
   }, 1000);
 }
 

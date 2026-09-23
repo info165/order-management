@@ -691,9 +691,10 @@ export const OrderList: React.FC<OrderListProps> = ({
     exportOrdersToExcel(exportData, `GovSchool_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // Day-first display for a dispatch date, tolerant of the mixed formats
-  // orders were imported with (matches the WhatsApp/email message wording).
-  const displayDispatchDate = (raw?: string | null): string => {
+  // Day-first display for a status-table date (dispatch, delivery, ...),
+  // tolerant of the mixed formats orders were imported with (matches the
+  // WhatsApp/email message wording).
+  const displayStatusDate = (raw?: string | null): string => {
     const iso = toDateInputValue(raw);
     if (!iso) return '';
     const [y, m, d] = iso.split('-');
@@ -1652,9 +1653,14 @@ export const OrderList: React.FC<OrderListProps> = ({
                       >
                         <div className="flex flex-col gap-1 items-start">
                           <StatusBadge status={order.status} type="order" compact />
-                          {order.status === 'DISPATCHED' && displayDispatchDate(order.dispatchDate) && (
+                          {order.status === 'DISPATCHED' && displayStatusDate(order.dispatchDate) && (
                             <div className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-                              {displayDispatchDate(order.dispatchDate)}
+                              {displayStatusDate(order.dispatchDate)}
+                            </div>
+                          )}
+                          {order.status === 'DELIVERED' && displayStatusDate(order.actualDeliveryDate) && (
+                            <div className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              {displayStatusDate(order.actualDeliveryDate)}
                             </div>
                           )}
                           {!isAgent && isAdmin && order.procurementStatus && (

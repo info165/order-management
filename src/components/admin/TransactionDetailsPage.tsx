@@ -51,6 +51,11 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'all' | 'schoolwise'> ('all');
   const [selectedSchoolId, setSelectedSchoolId] = useState('');
+  // Filters the All Transactions table only, by partner - '' means show
+  // everyone, the sentinel below means "Direct Payment to School" rows only
+  // (never a real agent name, so it can't collide with one).
+  const [agentFilter, setAgentFilter] = useState('');
+  const DIRECT_PAYMENT_FILTER = '__DIRECT_PAYMENT__';
   const [previewScreenshot, setPreviewScreenshot] = useState<{ url: string; fileName?: string; paymentId: string } | null>(null);
   const [deletingScreenshotId, setDeletingScreenshotId] = useState<string | null>(null);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
@@ -232,6 +237,28 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
     [paidPayments]
   );
 
+  // Every distinct partner that actually appears in the payment history,
+  // for the All Transactions filter dropdown - alphabetical, with "Direct
+  // Payment to School" pinned to the top since it isn't a real name to sort.
+  const agentFilterOptions = useMemo(() => {
+    const names = new Set<string>();
+    let hasDirect = false;
+    payments.forEach(p => {
+      if (p.isDirectPayment) hasDirect = true;
+      else if (p.agentName) names.add(p.agentName);
+    });
+    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
+    return hasDirect ? [DIRECT_PAYMENT_FILTER, ...sorted] : sorted;
+  }, [payments]);
+
+  // Only the All Transactions table is filtered - School-wise Payment
+  // History already narrows to one school at a time by its own picker.
+  const filteredPayments = useMemo(() => {
+    if (!agentFilter) return payments;
+    if (agentFilter === DIRECT_PAYMENT_FILTER) return payments.filter(p => p.isDirectPayment);
+    return payments.filter(p => !p.isDirectPayment && p.agentName === agentFilter);
+  }, [payments, agentFilter]);
+
   // Default to the first school once data arrives, so the tab shows
   // something immediately instead of an empty picker.
   useEffect(() => {
@@ -311,30 +338,30 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
               <p className="px-3.5 py-3 text-[11px] text-slate-500">No matching orders found (they may have been deleted since).</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-[11px] border-collapse">
+                <table className="table-fixed text-left text-[11px] border-collapse">
                   <thead>
                     <tr className="bg-slate-800/50 text-slate-500 uppercase tracking-wide">
                       <th className="px-3.5 py-2 w-14">SL. NO.</th>
-                      <th className="px-3.5 py-2">Contract #</th>
-                      <th className="px-3.5 py-2">Category</th>
-                      <th className="px-3.5 py-2">Value (₹)</th>
-                      <th className="px-3.5 py-2">Status</th>
-                      <th className="px-3.5 py-2 text-center">School Payment Status</th>
+                      <th className="px-3.5 py-2 w-48">Contract #</th>
+                      <th className="px-3.5 py-2 w-48">Category</th>
+                      <th className="px-3.5 py-2 w-24">Value (₹)</th>
+                      <th className="px-3.5 py-2 w-28">Status</th>
+                      <th className="px-3.5 py-2 w-40 text-center">School Payment Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/70">
                     {linkedOrders.map(o => (
                       <tr key={o.orderId}>
                         <td className="px-3.5 py-2 font-mono font-bold text-amber-400">{getDisplaySerialNo(o, orders) ?? '—'}</td>
-                        <td className="px-3.5 py-2 text-slate-300 font-mono">{o.contractNumber || o.purchaseOrderNumber || o.orderNumber}</td>
-                        <td className="px-3.5 py-2 text-slate-300">{o.category}</td>
-                        <td className="px-3.5 py-2">
+                        <td className="px-3.5 py-2 text-slate-300 font-mono truncate" title={o.contractNumber || o.purchaseOrderNumber || o.orderNumber}>{o.contractNumber || o.purchaseOrderNumber || o.orderNumber}</td>
+                        <td className="px-3.5 py-2 text-slate-300 truncate" title={o.category}>{o.category}</td>
+                        <td className="px-3.5 py-2 whitespace-nowrap">
                           <CurrencyFormatter amount={o.orderValue} className="text-slate-200 font-semibold" />
                         </td>
-                        <td className="px-3.5 py-2">
+                        <td className="px-3.5 py-2 whitespace-nowrap">
                           <StatusBadge status={o.status} type="order" compact />
                         </td>
-                        <td className="px-3.5 py-2 text-center">
+                        <td className="px-3.5 py-2 text-center whitespace-nowrap">
                           <StatusBadge status={o.paymentStatus} type="payment" compact />
                         </td>
                       </tr>
@@ -371,7 +398,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
       </div>
 
       <div className="flex-1 flex items-start justify-center px-6 py-8">
-        <div className="w-full max-w-5xl space-y-6">
+        <div className="w-full max-w-7xl space-y-6">
           {/* Hero header */}
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
@@ -423,27 +450,47 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md">
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                activeTab === 'all' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>All Transactions</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('schoolwise')}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                activeTab === 'schoolwise' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>School-wise Payment History</span>
-            </button>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md">
+              <button
+                type="button"
+                onClick={() => setActiveTab('all')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  activeTab === 'all' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>All Transactions</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('schoolwise')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  activeTab === 'schoolwise' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                <span>School-wise Payment History</span>
+              </button>
+            </div>
+
+            {activeTab === 'all' && agentFilterOptions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Partner:</span>
+                <select
+                  value={agentFilter}
+                  onChange={(e) => setAgentFilter(e.target.value)}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                >
+                  <option value="">All Partners</option>
+                  {agentFilterOptions.map(name => (
+                    <option key={name} value={name}>
+                      {name === DIRECT_PAYMENT_FILTER ? 'Direct Payment to School' : name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {loading ? (
@@ -455,34 +502,46 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
               <Receipt className="w-6 h-6 text-slate-600 mx-auto" />
               <p className="text-xs text-slate-500">No commission payments recorded yet.</p>
             </div>
+          ) : activeTab === 'all' && filteredPayments.length === 0 ? (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-10 text-center space-y-2">
+              <Receipt className="w-6 h-6 text-slate-600 mx-auto" />
+              <p className="text-xs text-slate-500">
+                No payments found for {agentFilter === DIRECT_PAYMENT_FILTER ? '"Direct Payment to School"' : `"${agentFilter}"`}.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAgentFilter('')}
+                className="text-[11px] font-semibold text-amber-400 hover:text-amber-300"
+              >
+                Clear filter
+              </button>
+            </div>
           ) : activeTab === 'all' ? (
             /* ALL TRANSACTIONS - every school in one whole table */
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl shadow-black/20">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full table-fixed text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-800/60 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
-                      <th className="px-4 py-3 w-8"></th>
                       <th className="px-4 py-3 w-12">#</th>
-                      <th className="px-4 py-3">School Name</th>
-                      <th className="px-4 py-3">Amount</th>
-                      <th className="px-4 py-3">%</th>
-                      <th className="px-4 py-3">Mode of Payment</th>
-                      <th className="px-4 py-3">Date of Payment</th>
-                      <th className="px-4 py-3">Screenshot</th>
-                      <th className="px-4 py-3">Edit</th>
+                      <th className="px-4 py-3 w-[26rem]">School Name</th>
+                      <th className="px-4 py-3 w-52">Partner</th>
+                      <th className="px-4 py-3 w-28">Amount</th>
+                      <th className="px-4 py-3 w-16">%</th>
+                      <th className="px-4 py-3 w-32 text-right">Mode of Payment</th>
+                      <th className="px-4 py-3 w-32">Date of Payment</th>
+                      <th className="px-4 py-3 w-20">Screenshot</th>
+                      <th className="px-4 py-3 w-24">Edit</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
-                    {payments.map((p, idx) => (
+                    {filteredPayments.map((p, idx) => (
                       <React.Fragment key={p.commissionPaymentId}>
                       <tr
                         onClick={() => handleRowClick(p)}
+                        title={isCommissionPaymentPaid(p) ? 'Click to view the orders covered by this payment' : undefined}
                         className="hover:bg-slate-800/40 transition-colors cursor-pointer"
                       >
-                        <td className="px-4 py-3 align-middle text-slate-500">
-                          {expandedPaymentId === p.commissionPaymentId ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                        </td>
                         <td className="px-4 py-3 font-mono text-slate-500 align-middle">{idx + 1}</td>
                         <td className="px-4 py-3 align-middle">
                           <div className="flex items-center gap-3">
@@ -490,12 +549,20 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                               {p.schoolName.trim().charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-semibold text-slate-100 truncate">{p.schoolName}</div>
-                              <div className="text-[11px] text-slate-500 truncate">
-                                {p.isDirectPayment ? 'Direct Payment to School' : p.agentName}
-                              </div>
+                              <div className="font-semibold text-slate-100">{p.schoolName}</div>
                             </div>
                           </div>
+                        </td>
+                        <td className="px-4 py-3 align-middle overflow-hidden">
+                          {p.isDirectPayment ? (
+                            <span className="inline-flex items-center max-w-full px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 text-[11px] font-medium truncate">
+                              Direct Payment to School
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center max-w-full px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold truncate" title={p.agentName}>
+                              {p.agentName}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 align-middle">
                           <CurrencyFormatter amount={round2(p.commissionAmount)} showDecimals className="text-emerald-400 font-bold" />
@@ -503,7 +570,7 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                         <td className="px-4 py-3 align-middle text-slate-300 font-mono whitespace-nowrap">
                           {p.commissionPercent}%
                         </td>
-                        <td className="px-4 py-3 align-middle">
+                        <td className="px-4 py-3 align-middle text-right">
                           {renderModeOfPaymentCell(p)}
                         </td>
                         <td className="px-4 py-3 align-middle text-slate-400 whitespace-nowrap">
