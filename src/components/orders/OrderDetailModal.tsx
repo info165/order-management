@@ -49,7 +49,7 @@ import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 import { processFileForUpload } from '../../utils/fileUpload';
 import { toDateInputValue, todayLocalISO } from '../../utils/dateInput';
 import { PrintStickerModal } from './PrintStickerModal';
-import { OrderBOMFulfillmentCard } from '../inventory/OrderBOMFulfillmentCard';
+// import { OrderBOMFulfillmentCard } from '../inventory/OrderBOMFulfillmentCard'; // commented out alongside its render below
 import { matchOrderToCatalogue } from '../../utils/bomCalculator';
 import {
   getPaymentsForOrder,
@@ -1100,9 +1100,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 );
               })()}
 
-              {/* Catalogue & BOM Material Readiness Card - internal stock/BOM
-                  detail, not something a partner needs on their own order */}
-              {!isAgent && <OrderBOMFulfillmentCard order={activeOrder} />}
+              {/* Catalogue & BOM Material Readiness Card - commented out for
+                  everyone for now: with no Catalogue/BOM data set up yet, it
+                  only showed confusing placeholder text ("0 BOM components",
+                  "No component breakdown defined") on every order. Bring
+                  this back once real Catalogue/BOM data exists to show. */}
+              {/* {!isAgent && <OrderBOMFulfillmentCard order={activeOrder} />} */}
 
               {/* School, Contract, and Agent Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1573,16 +1576,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <span className="text-slate-400 block text-[11px]">Company:</span>
                         <span className="font-semibold text-slate-800">{activeOrder.company || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">Package Qty:</span>
-                        <span className="font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
-                          {existingPackageQty(activeOrder)} Unit(s)
-                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block text-[11px]">Order Value:</span>
@@ -1591,17 +1588,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         </span>
                       </div>
                     </div>
-
-                    {/* BOM Master Link indicator */}
-                    <div className="pt-1 text-[11px] text-slate-500 flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200">
-                      <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                        <span>BOM Link: {activeOrder.catalogueName || (matchOrderToCatalogue(activeOrder, catalogues)?.name) || 'Auto-matching BOM'}</span>
-                      </span>
-                      <span className="font-mono text-slate-400 text-[10px]">
-                        {activeOrder.catalogueId ? `ID: ${activeOrder.catalogueId.slice(0, 8)}...` : 'Linked by Name'}
-                      </span>
-                    </div>
+                    {/* Package Qty display and the BOM Master Link indicator
+                        were commented out here - display only, the
+                        underlying package-quantity value and catalogue
+                        auto-matching on save are both untouched. */}
 
                     {/* Assigned Partner Selection */}
                     <div className="pt-2.5 border-t border-slate-100 space-y-1.5">
