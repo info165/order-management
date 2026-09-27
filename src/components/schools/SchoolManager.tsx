@@ -38,6 +38,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editTan, setEditTan] = useState('');
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [contactSaveError, setContactSaveError] = useState<string | null>(null);
 
@@ -142,6 +143,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
     if (!selectedSchool) return;
     setEditPhone(selectedSchool.contactPhone || '');
     setEditAddress(selectedSchool.address || '');
+    setEditTan(selectedSchool.tan || '');
     setContactSaveError(null);
     setIsEditingContact(true);
   };
@@ -161,7 +163,8 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
         {
           contactPhone: editPhone.trim(),
           phone: editPhone.trim(),
-          address: editAddress.trim()
+          address: editAddress.trim(),
+          tan: editTan.trim().toUpperCase()
         },
         currentUser
       );
@@ -438,6 +441,19 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                           className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
                         />
                       </div>
+                      <div>
+                        <label className="block text-slate-500 font-semibold mb-1 text-[11px]">
+                          TAN Number <span className="text-slate-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. DELA12345B"
+                          maxLength={20}
+                          value={editTan}
+                          onChange={(e) => setEditTan(e.target.value.toUpperCase())}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
                       {contactSaveError && (
                         <p className="text-[11px] text-rose-600 font-medium">{contactSaveError}</p>
                       )}
@@ -473,6 +489,12 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                         <span className="text-slate-400 block text-[11px]">Address</span>
                         <span className="text-slate-700 block mt-0.5">
                           {selectedSchool.address || 'Not Provided'}
+                        </span>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-400 block text-[11px]">TAN Number</span>
+                        <span className="font-mono text-slate-700 block mt-0.5">
+                          {selectedSchool.tan || 'Not Provided'}
                         </span>
                       </div>
                     </div>

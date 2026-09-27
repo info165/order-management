@@ -1320,6 +1320,7 @@ export async function updateOrderSchoolDetails(
     schoolCode?: string;
     email?: string;
     pincode?: string;
+    tan?: string;
   },
   user: UserProfile
 ): Promise<{ order: Order; school?: School }> {
@@ -1343,6 +1344,7 @@ export async function updateOrderSchoolDetails(
   const trimmedSchoolCode = schoolDetails.schoolCode?.trim() ?? targetOrder.schoolCode;
   const trimmedEmail = schoolDetails.email?.trim() ?? targetOrder.schoolEmail;
   const trimmedPincode = schoolDetails.pincode?.trim() ?? targetOrder.schoolPincode;
+  const trimmedTan = schoolDetails.tan !== undefined ? schoolDetails.tan.trim().toUpperCase() : targetOrder.schoolTan;
 
   // Find existing school in master registry
   let schoolIdx = memorySchools.findIndex(s => s.schoolId === targetOrder.schoolId);
@@ -1369,6 +1371,7 @@ export async function updateOrderSchoolDetails(
       schoolCode: trimmedSchoolCode ?? existingSchool.schoolCode,
       email: trimmedEmail ?? existingSchool.email,
       pinCode: trimmedPincode ?? existingSchool.pinCode,
+      tan: trimmedTan ?? existingSchool.tan,
       updatedAt: now
     };
     memorySchools[schoolIdx] = updatedSchool;
@@ -1407,6 +1410,7 @@ export async function updateOrderSchoolDetails(
       schoolCode: trimmedSchoolCode,
       email: trimmedEmail || '',
       pinCode: trimmedPincode || '',
+      ...(trimmedTan ? { tan: trimmedTan } : {}),
       createdAt: now,
       updatedAt: now
     };
@@ -1427,6 +1431,7 @@ export async function updateOrderSchoolDetails(
     schoolCode: trimmedSchoolCode,
     schoolEmail: trimmedEmail,
     schoolPincode: trimmedPincode,
+    schoolTan: trimmedTan,
     schoolId: updatedSchool ? updatedSchool.schoolId : targetOrder.schoolId,
     updatedAt: now,
     updatedBy: user.name
@@ -1470,6 +1475,7 @@ export async function updateOrderSchoolDetails(
           schoolAddress: trimmedAddress,
           schoolEmail: trimmedEmail,
           schoolPincode: trimmedPincode,
+          ...(schoolDetails.tan !== undefined ? { schoolTan: trimmedTan } : {}),
           updatedAt: now
         };
       }
@@ -1499,6 +1505,7 @@ export async function updateOrderSchoolDetails(
     schoolCode: trimmedSchoolCode,
     schoolEmail: trimmedEmail,
     schoolPincode: trimmedPincode,
+    ...(schoolDetails.tan !== undefined ? { schoolTan: trimmedTan } : {}),
     schoolId: updatedOrder.schoolId,
     updatedAt: now,
     updatedBy: user.name
@@ -1520,6 +1527,7 @@ export async function updateOrderSchoolDetails(
       schoolAddress: trimmedAddress,
       schoolEmail: trimmedEmail,
       schoolPincode: trimmedPincode,
+      ...(schoolDetails.tan !== undefined ? { schoolTan: trimmedTan } : {}),
       updatedAt: now
     };
     await Promise.all(
@@ -1589,6 +1597,7 @@ export async function relinkOrderToSchool(
     schoolCode: targetSchool.schoolCode,
     schoolEmail: targetSchool.email,
     schoolPincode: targetSchool.pinCode || targetSchool.pincode,
+    schoolTan: targetSchool.tan || '',
     updatedAt: now,
     updatedBy: user.name
   };
@@ -1606,6 +1615,7 @@ export async function relinkOrderToSchool(
     schoolCode: updatedOrder.schoolCode,
     schoolEmail: updatedOrder.schoolEmail,
     schoolPincode: updatedOrder.schoolPincode,
+    schoolTan: updatedOrder.schoolTan,
     updatedAt: now,
     updatedBy: user.name
   });
@@ -2119,6 +2129,67 @@ export async function markDelivered(
 // ----------------------------------------------------
 // PAYMENTS SERVICE
 // ----------------------------------------------------
+const roundPaise = (n: number): number => Math.round(n * 100) / 100;
+
+// TDS is a percentage of the GROSS the school owed for this payment, and the
+// cash it actually sent is that gross minus the TDS. So from the cash received
+// and the % the gross is cash / (1 - %), and the TDS is gross - cash:
+// e.g. Rs.1,96,000 received with 2% TDS -> gross Rs.2,00,000, TDS Rs.4,000.
+export function computeTdsAmount(cashReceived: number, tdsPercent: number): number {
+  if (!(cashReceived > 0) || !(tdsPercent > 0) || tdsPercent >= 100) return 0;
+  return roundPaise((cashReceived * tdsPercent) / (100 - tdsPercent));
+}
+
+// The TDS fields stored on a payment. "No" is stored explicitly (as zeros,
+// not left out) so that editing a payment from Yes back to No really clears
+// the old values - a merge write can't remove a field by omitting it.
+// TDS can be entered two ways: as a % (the amount is worked out from it), or
+// as the exact rupee amount that was deducted (the % shown is worked out from
+// that: TDS as a share of the gross, cash + TDS). Typing the exact amount from
+// the school's remittance advice is the most precise, since it sidesteps any
+// paisa-level rounding in the % maths.
+function buildTdsFields(
+  cash: number,
+  tdsDeducted?: boolean,
+  tdsPercent?: number,
+  tdsAmountInput?: number,
+  mode?: 'percent' | 'amount'
+): { tdsDeducted: boolean; tdsPercent: number; tdsAmount: number; tdsInputMode: 'percent' | 'amount' } {
+  if (!tdsDeducted) return { tdsDeducted: false, tdsPercent: 0, tdsAmount: 0, tdsInputMode: 'percent' };
+  if (mode === 'amount') {
+    const amt = roundPaise(Number(tdsAmountInput));
+    if (!(amt > 0)) {
+      throw new Error('Enter the TDS amount that was deducted (a number above 0).');
+    }
+    const pctFromAmount = cash > 0 ? roundPaise((amt / (cash + amt)) * 100) : 0;
+    return { tdsDeducted: true, tdsPercent: pctFromAmount, tdsAmount: amt, tdsInputMode: 'amount' };
+  }
+  const pct = Number(tdsPercent);
+  if (!(pct > 0 && pct < 100)) {
+    throw new Error('Enter the TDS % (a number above 0 and below 100).');
+  }
+  return { tdsDeducted: true, tdsPercent: pct, tdsAmount: computeTdsAmount(cash, pct), tdsInputMode: 'percent' };
+}
+
+// Pending balance + status for an order given the CASH received so far and
+// the TDS withheld so far. TDS counts as settled: Rs.1,96,000 cash + Rs.4,000
+// TDS clears a Rs.2,00,000 order, so it's PAID, not partially paid. With no
+// TDS this is exactly the calculation payments have always used.
+function derivePaymentTotals(order: Order, received: number, tds: number): { pending: number; status: PaymentStatus } {
+  const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
+  const rawPending = totalAmount - received - tds;
+  const pending = tds > 0 ? Math.max(0, roundPaise(rawPending)) : Math.max(0, rawPending);
+  let status: PaymentStatus = 'PARTIALLY_PAID';
+  if (pending <= 0) {
+    status = 'PAID';
+  } else if (received + tds === 0) {
+    status = 'PAYMENT_PENDING';
+  }
+  return { pending, status };
+}
+
+const sumTds = (rows: PaymentTransaction[]): number => rows.reduce((s, p) => s + (p.tdsAmount || 0), 0);
+
 export async function addPayment(
   paymentInput: Omit<PaymentTransaction, 'paymentId' | 'createdAt'>,
   user: UserProfile
@@ -2130,32 +2201,46 @@ export async function addPayment(
   const order = memoryOrders.find(o => o.orderId === paymentInput.orderId);
   if (!order) throw new Error('Order not found');
 
-  const paymentId = `PAY-${Date.now()}`;
+  // Validate the TDS answer before anything is written.
+  const tdsFields = buildTdsFields(
+    paymentInput.amount,
+    paymentInput.tdsDeducted,
+    paymentInput.tdsPercent,
+    paymentInput.tdsAmount,
+    paymentInput.tdsInputMode
+  );
+
+  // TDS already withheld on this order's earlier payments - read from the
+  // order's real ledger (fresh from the database), not assumed.
+  const ledgerBefore = await getPaymentsForOrder(order.orderId);
+  const priorTds = sumTds(ledgerBefore);
+
+  let paymentId = `PAY-${Date.now()}`;
+  // Two payments recorded back to back (a combined payment) must never share
+  // an id - a shared id would make the second silently overwrite the first.
+  while (memoryPayments.some(p => p.paymentId === paymentId)) paymentId += 'x';
   const newPayment: PaymentTransaction = {
     ...paymentInput,
+    ...tdsFields,
     paymentId,
     createdAt: new Date().toISOString()
   };
 
   memoryPayments = [newPayment, ...memoryPayments];
   saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
-  try {
-    await syncDocToFirestore('payments', paymentId, newPayment);
-  } catch (err) {
-    console.warn(`Firestore sync note for payment ${paymentId}:`, err);
+  // A failed save must be reported, not swallowed: swallowing it left the
+  // order showing this payment as received while the payment record itself
+  // never reached the database.
+  const paymentSaved = await syncDocToFirestore('payments', paymentId, newPayment);
+  if (!paymentSaved) {
+    memoryPayments = memoryPayments.filter(p => p.paymentId !== paymentId);
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+    throw new Error('Could not save the payment to the database. Nothing was recorded - please check your connection and try again.');
   }
 
   // Recalculate totals
-  const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
   const newReceived = (order.amountReceived || 0) + paymentInput.amount;
-  const newPending = Math.max(0, totalAmount - newReceived);
-
-  let newPaymentStatus: PaymentStatus = 'PARTIALLY_PAID';
-  if (newPending <= 0) {
-    newPaymentStatus = 'PAID';
-  } else if (newReceived === 0) {
-    newPaymentStatus = 'PAYMENT_PENDING';
-  }
+  const { pending: newPending, status: newPaymentStatus } = derivePaymentTotals(order, newReceived, priorTds + tdsFields.tdsAmount);
 
   const updatedOrder = await updateOrder(
     order.orderId,
@@ -2177,7 +2262,7 @@ export async function addPayment(
     changedBy: user.userId,
     changedByName: user.name,
     changedAt: new Date().toISOString(),
-    comment: `Payment received: ₹${paymentInput.amount.toLocaleString('en-IN')} via ${paymentInput.paymentMode} (Ref: ${paymentInput.transactionReference}). Outstanding: ₹${newPending.toLocaleString('en-IN')}`,
+    comment: `Payment received: ₹${paymentInput.amount.toLocaleString('en-IN')} via ${paymentInput.paymentMode} (Ref: ${paymentInput.transactionReference})${tdsFields.tdsDeducted ? `, TDS ${tdsFields.tdsPercent}% = ₹${tdsFields.tdsAmount.toLocaleString('en-IN')} withheld` : ''}${paymentInput.paymentGroupId ? `, share of a combined ₹${(paymentInput.groupTotalAmount || 0).toLocaleString('en-IN')} payment covering ${(paymentInput.groupOrderIds || []).length} orders` : ''}. Outstanding: ₹${newPending.toLocaleString('en-IN')}`,
     visibleToAgent: true
   };
   await addTimelineEntry(timelineItem);
@@ -2227,6 +2312,10 @@ export async function updatePayment(
     transactionReference: string;
     bankReference?: string;
     remarks?: string;
+    tdsDeducted?: boolean;
+    tdsPercent?: number;
+    tdsAmount?: number;
+    tdsInputMode?: 'percent' | 'amount';
   },
   user: UserProfile
 ): Promise<{ payment: PaymentTransaction; order: Order }> {
@@ -2238,8 +2327,23 @@ export async function updatePayment(
   if (idx === -1) throw new Error('Payment record not found');
   const existing = memoryPayments[idx];
 
+  // A row of a combined payment can't be edited on its own - its amount is a
+  // share of one payment covering several orders. Details (date/mode/
+  // reference/remarks) are edited for the whole combined payment at once via
+  // updateCombinedPaymentDetails(); amounts are changed by deleting the
+  // combined payment and recording it again.
+  if (existing.paymentGroupId) {
+    throw new Error('This payment is part of a combined payment covering several orders, so it cannot be edited on its own.');
+  }
+
   const order = memoryOrders.find(o => o.orderId === existing.orderId);
   if (!order) throw new Error('Order not found');
+
+  // If the caller doesn't say anything about TDS, keep what was recorded
+  // (re-derived from the new amount); otherwise use the new answer.
+  const tdsFields = updates.tdsDeducted === undefined
+    ? buildTdsFields(updates.amount, existing.tdsDeducted, existing.tdsPercent, existing.tdsAmount, existing.tdsInputMode)
+    : buildTdsFields(updates.amount, updates.tdsDeducted, updates.tdsPercent, updates.tdsAmount, updates.tdsInputMode);
 
   const updatedPayment: PaymentTransaction = {
     ...existing,
@@ -2248,32 +2352,25 @@ export async function updatePayment(
     paymentDate: updates.paymentDate,
     transactionReference: updates.transactionReference,
     bankReference: updates.bankReference,
-    remarks: updates.remarks
+    remarks: updates.remarks,
+    ...tdsFields
   };
   memoryPayments[idx] = updatedPayment;
   saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
-  try {
-    await syncDocToFirestore('payments', paymentId, updatedPayment);
-  } catch (err) {
-    console.warn(`Firestore sync note for payment ${paymentId}:`, err);
+  const editSaved = await syncDocToFirestore('payments', paymentId, updatedPayment);
+  if (!editSaved) {
+    memoryPayments[idx] = existing;
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+    throw new Error('Could not save the change to the database. Nothing was changed - please check your connection and try again.');
   }
 
   // Editing a payment's amount changes what the order has actually received,
   // so its totals need recomputing the same way addPayment() derives them -
   // otherwise "Total Received"/"Amount Pending" would silently drift out of
   // sync with the sum of the individual payment records shown in the ledger.
-  const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
-  const newReceived = memoryPayments
-    .filter(p => p.orderId === existing.orderId)
-    .reduce((sum, p) => sum + p.amount, 0);
-  const newPending = Math.max(0, totalAmount - newReceived);
-
-  let newPaymentStatus: PaymentStatus = 'PARTIALLY_PAID';
-  if (newPending <= 0) {
-    newPaymentStatus = 'PAID';
-  } else if (newReceived === 0) {
-    newPaymentStatus = 'PAYMENT_PENDING';
-  }
+  const orderRows = memoryPayments.filter(p => p.orderId === existing.orderId);
+  const newReceived = orderRows.reduce((sum, p) => sum + p.amount, 0);
+  const { pending: newPending, status: newPaymentStatus } = derivePaymentTotals(order, newReceived, sumTds(orderRows));
 
   const updatedOrder = await updateOrder(
     order.orderId,
@@ -2328,27 +2425,21 @@ export async function deletePayment(paymentId: string, user: UserProfile): Promi
 
   memoryPayments = memoryPayments.filter(p => p.paymentId !== paymentId);
   saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
-  try {
-    await deleteDocFromFirestore('payments', paymentId);
-  } catch (err) {
-    console.warn(`Firestore delete note for payment ${paymentId}:`, err);
+  const deleted = await deleteDocFromFirestore('payments', paymentId);
+  if (!deleted) {
+    // Put it back locally - the database still has it, so the order's totals
+    // must keep counting it.
+    memoryPayments = [existing, ...memoryPayments];
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+    throw new Error('Could not delete the payment from the database. Nothing was changed - please check your connection and try again.');
   }
 
   // Same recalculation as updatePayment() - derive the order's totals from
   // the actual sum of its remaining payment records, not a delta, so they
   // can never drift out of sync with what the ledger shows.
-  const totalAmount = order.totalAmount || order.grossOrderValue || order.orderValue;
-  const newReceived = memoryPayments
-    .filter(p => p.orderId === existing.orderId)
-    .reduce((sum, p) => sum + p.amount, 0);
-  const newPending = Math.max(0, totalAmount - newReceived);
-
-  let newPaymentStatus: PaymentStatus = 'PARTIALLY_PAID';
-  if (newPending <= 0) {
-    newPaymentStatus = 'PAID';
-  } else if (newReceived === 0) {
-    newPaymentStatus = 'PAYMENT_PENDING';
-  }
+  const remainingRows = memoryPayments.filter(p => p.orderId === existing.orderId);
+  const newReceived = remainingRows.reduce((sum, p) => sum + p.amount, 0);
+  const { pending: newPending, status: newPaymentStatus } = derivePaymentTotals(order, newReceived, sumTds(remainingRows));
 
   const updatedOrder = await updateOrder(
     order.orderId,
@@ -2383,6 +2474,469 @@ export async function deletePayment(paymentId: string, user: UserProfile): Promi
   });
 
   return { order: updatedOrder };
+}
+
+// ----------------------------------------------------
+// COMBINED PAYMENTS (one school payment covering several orders)
+// ----------------------------------------------------
+// A combined payment is stored as one ordinary payment record PER ORDER, each
+// holding that order's own share and all tagged with the same paymentGroupId.
+// Every order therefore keeps its own correct received/pending/status and
+// ledger row, and nothing about how single payments work is different.
+const isAdminRole = (user: UserProfile) => user.role === 'SUPER_ADMIN' || user.role === 'ADMIN';
+
+const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+// Every row of one combined payment, straight from the database (the local
+// cache only holds the orders that happen to have been opened).
+async function loadCombinedPaymentRows(paymentGroupId: string): Promise<PaymentTransaction[]> {
+  const snap = await getDocs(query(collection(db, 'payments'), where('paymentGroupId', '==', paymentGroupId)));
+  const rows: PaymentTransaction[] = [];
+  snap.forEach(d => {
+    const p = d.data() as PaymentTransaction;
+    if (p && p.paymentId) rows.push(p);
+  });
+  return rows;
+}
+
+// When TDS is typed as ONE rupee amount for a whole combined payment, split it
+// between the orders in proportion to each order's share; the last order takes
+// the remainder so the pieces add up to exactly the amount typed. Returns an
+// empty map in % mode (each order's TDS is then worked out from its own cash).
+function splitTotalTds(
+  shares: { orderId: string; amount: number }[],
+  sharesTotal: number,
+  tdsDeducted: boolean,
+  mode?: 'percent' | 'amount',
+  tdsAmount?: number
+): Record<string, number> {
+  const tdsByOrder: Record<string, number> = {};
+  if (tdsDeducted && mode === 'amount') {
+    const totalTds = roundPaise(Number(tdsAmount));
+    let allocated = 0;
+    shares.forEach((s, i) => {
+      const part = i === shares.length - 1
+        ? roundPaise(totalTds - allocated)
+        : roundPaise((totalTds * s.amount) / sharesTotal);
+      tdsByOrder[s.orderId] = part;
+      allocated = roundPaise(allocated + part);
+    });
+    for (const s of shares) {
+      if (!(tdsByOrder[s.orderId] > 0)) {
+        throw new Error('The TDS amount is too small to split across the selected orders. Enter a larger amount or use the TDS % instead.');
+      }
+    }
+  }
+  return tdsByOrder;
+}
+
+// Every saved row of one combined payment, for the "Edit combined payment" screen.
+export async function getCombinedPaymentRows(paymentGroupId: string, user: UserProfile): Promise<PaymentTransaction[]> {
+  if (!isAdminRole(user)) {
+    throw new Error('Only a Super Admin or Admin can edit a combined payment.');
+  }
+  return loadCombinedPaymentRows(paymentGroupId);
+}
+
+export async function addCombinedPayment(
+  input: {
+    shares: { orderId: string; amount: number }[];
+    totalAmount: number;
+    paymentMode: string;
+    paymentDate: string;
+    transactionReference: string;
+    bankReference?: string;
+    remarks?: string;
+    tdsDeducted: boolean;
+    tdsPercent?: number;
+    // Alternative to tdsPercent: the TOTAL TDS rupees deducted across all the
+    // orders. It is split between the orders in proportion to their shares.
+    tdsAmount?: number;
+    tdsInputMode?: 'percent' | 'amount';
+  },
+  user: UserProfile
+): Promise<{ payments: PaymentTransaction[]; orders: Order[] }> {
+  if (!isAdminRole(user)) {
+    throw new Error('Only a Super Admin or Admin can record a combined payment.');
+  }
+
+  // ---- Validate everything BEFORE writing anything ----
+  const shares = input.shares;
+  if (!Array.isArray(shares) || shares.length < 2) {
+    throw new Error('Select at least 2 orders for a combined payment.');
+  }
+  const ids = shares.map(s => s.orderId);
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('The same order is selected more than once.');
+  }
+  for (const s of shares) {
+    if (!Number.isFinite(s.amount) || s.amount <= 0) {
+      throw new Error('Every selected order needs a share greater than zero.');
+    }
+    const o = memoryOrders.find(x => x.orderId === s.orderId);
+    if (!o || o.isDeleted) throw new Error(`Order ${s.orderId} was not found.`);
+  }
+  const sharesTotal = roundPaise(shares.reduce((sum, s) => sum + s.amount, 0));
+  if (!(input.totalAmount > 0) || Math.abs(sharesTotal - roundPaise(input.totalAmount)) > 0.005) {
+    throw new Error(`The order shares add up to ₹${sharesTotal.toLocaleString('en-IN')}, but the total payment is ₹${roundPaise(input.totalAmount || 0).toLocaleString('en-IN')}. They must match exactly.`);
+  }
+  if (!input.transactionReference.trim()) {
+    throw new Error('Enter the transaction / UTR reference.');
+  }
+  // Validates the TDS answer up front (throws if % is missing/out of range).
+  buildTdsFields(1, input.tdsDeducted, input.tdsPercent, input.tdsAmount, input.tdsInputMode);
+
+  // When the TDS was typed as a rupee amount, split it between the orders in
+  // proportion to each order's share; the last order takes the remainder so the
+  // pieces add up to exactly the amount typed.
+  const tdsByOrder = splitTotalTds(shares, sharesTotal, input.tdsDeducted, input.tdsInputMode, input.tdsAmount);
+
+  const paymentGroupId = `PGRP-${Date.now()}`;
+  const groupTotalAmount = roundPaise(input.totalAmount);
+  const created: PaymentTransaction[] = [];
+  const orders: Order[] = [];
+
+  try {
+    for (const s of shares) {
+      // Small gap so two orders never mint the same timestamp-based ids
+      // (timeline / activity-log entries are keyed by the millisecond).
+      if (created.length > 0) await pause(20);
+      const result = await addPayment(
+        {
+          orderId: s.orderId,
+          amount: s.amount,
+          paymentMode: input.paymentMode as any,
+          paymentDate: input.paymentDate,
+          transactionReference: input.transactionReference,
+          bankReference: input.bankReference,
+          remarks: input.remarks,
+          createdBy: user.userId,
+          tdsDeducted: input.tdsDeducted,
+          tdsPercent: input.tdsPercent,
+          tdsAmount: input.tdsInputMode === 'amount' ? tdsByOrder[s.orderId] : undefined,
+          tdsInputMode: input.tdsInputMode,
+          paymentGroupId,
+          groupTotalAmount,
+          groupOrderIds: ids
+        },
+        user
+      );
+      created.push(result.payment);
+      orders.push(result.order);
+    }
+  } catch (err: any) {
+    // One order failed part-way: undo the ones already recorded so the
+    // combined payment is all-or-nothing, never half applied.
+    const stuck: string[] = [];
+    for (const p of [...created].reverse()) {
+      try {
+        await pause(20);
+        await getPaymentsForOrder(p.orderId);
+        await deletePayment(p.paymentId, user);
+      } catch (_) {
+        stuck.push(p.orderId);
+      }
+    }
+    if (stuck.length === 0) {
+      throw new Error(`The combined payment could not be recorded (${err?.message || 'unknown error'}). Nothing was saved - it was rolled back.`);
+    }
+    throw new Error(`The combined payment failed part-way (${err?.message || 'unknown error'}) and could not be fully rolled back. Please check these orders and delete the payment on them by hand: ${stuck.join(', ')}.`);
+  }
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'COMBINED_PAYMENT_RECORDED',
+    entityType: 'PAYMENT',
+    entityId: paymentGroupId,
+    newValue: `₹${groupTotalAmount.toLocaleString('en-IN')} across ${shares.length} orders (${ids.join(', ')})`
+  });
+
+  return { payments: created, orders };
+}
+
+// Edits the details shared by the whole combined payment (date, mode,
+// reference, remarks) on every one of its rows at once. Amounts and TDS are
+// deliberately not editable here - changing those means deleting the combined
+// payment and recording it again, so the shares can never drift out of step.
+export async function updateCombinedPaymentDetails(
+  paymentGroupId: string,
+  updates: {
+    paymentMode: string;
+    paymentDate: string;
+    transactionReference: string;
+    bankReference?: string;
+    remarks?: string;
+  },
+  user: UserProfile
+): Promise<number> {
+  if (!isAdminRole(user)) {
+    throw new Error('Only a Super Admin or Admin can edit a combined payment.');
+  }
+  const rows = await loadCombinedPaymentRows(paymentGroupId);
+  if (rows.length === 0) throw new Error('This combined payment was not found.');
+
+  const done: PaymentTransaction[] = [];
+  try {
+    for (const row of rows) {
+      const next: PaymentTransaction = {
+        ...row,
+        paymentMode: updates.paymentMode as any,
+        paymentDate: updates.paymentDate,
+        transactionReference: updates.transactionReference,
+        bankReference: updates.bankReference || '',
+        remarks: updates.remarks || ''
+      };
+      const ok = await syncDocToFirestore('payments', row.paymentId, next);
+      if (!ok) throw new Error(`Could not save the change on order ${row.orderId}.`);
+      done.push(row);
+      const idx = memoryPayments.findIndex(p => p.paymentId === row.paymentId);
+      if (idx !== -1) memoryPayments[idx] = next;
+    }
+  } catch (err: any) {
+    // Put the rows already changed back the way they were.
+    for (const row of done) {
+      await syncDocToFirestore('payments', row.paymentId, row);
+      const idx = memoryPayments.findIndex(p => p.paymentId === row.paymentId);
+      if (idx !== -1) memoryPayments[idx] = row;
+    }
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+    throw new Error(`${err?.message || 'Could not update the combined payment'} Nothing was changed.`);
+  }
+  saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'COMBINED_PAYMENT_EDITED',
+    entityType: 'PAYMENT',
+    entityId: paymentGroupId,
+    newValue: `Details updated on all ${rows.length} orders`
+  });
+  return rows.length;
+}
+
+// Edits a WHOLE combined payment in one go: the total, every order's share, the
+// TDS, and the shared details. The set of orders stays the same (to cover
+// different orders, delete the combined payment and record it again).
+//
+// Safety: everything is validated before anything is written; then each order's
+// payment row is rewritten and each order's totals recalculated from its real
+// ledger. If anything fails part-way, every row and order already changed is put
+// back exactly as it was, so the edit is all-or-nothing.
+export async function editCombinedPayment(
+  paymentGroupId: string,
+  input: {
+    shares: { orderId: string; amount: number }[];
+    totalAmount: number;
+    paymentMode: string;
+    paymentDate: string;
+    transactionReference: string;
+    bankReference?: string;
+    remarks?: string;
+    tdsDeducted: boolean;
+    tdsPercent?: number;
+    tdsAmount?: number;
+    tdsInputMode?: 'percent' | 'amount';
+  },
+  user: UserProfile
+): Promise<{ orders: Order[] }> {
+  if (!isAdminRole(user)) {
+    throw new Error('Only a Super Admin or Admin can edit a combined payment.');
+  }
+  const oldRows = await loadCombinedPaymentRows(paymentGroupId);
+  if (oldRows.length === 0) throw new Error('This combined payment was not found.');
+
+  // ---- Validate everything BEFORE writing anything ----
+  const shares = input.shares;
+  const rowOrderIds = oldRows.map(r => r.orderId).sort();
+  const shareOrderIds = Array.isArray(shares) ? shares.map(s => s.orderId).sort() : [];
+  if (rowOrderIds.length !== shareOrderIds.length || rowOrderIds.some((id, i) => id !== shareOrderIds[i])) {
+    throw new Error("A combined payment's orders can't be changed here. Delete it and record a new combined payment to cover different orders.");
+  }
+  for (const s of shares) {
+    if (!Number.isFinite(s.amount) || s.amount <= 0) {
+      throw new Error('Every order needs a share greater than zero.');
+    }
+  }
+  const sharesTotal = roundPaise(shares.reduce((sum, s) => sum + s.amount, 0));
+  if (!(input.totalAmount > 0) || Math.abs(sharesTotal - roundPaise(input.totalAmount)) > 0.005) {
+    throw new Error(`The order shares add up to ₹${sharesTotal.toLocaleString('en-IN')}, but the total payment is ₹${roundPaise(input.totalAmount || 0).toLocaleString('en-IN')}. They must match exactly.`);
+  }
+  if (!input.transactionReference.trim()) {
+    throw new Error('Enter the transaction / UTR reference.');
+  }
+  buildTdsFields(1, input.tdsDeducted, input.tdsPercent, input.tdsAmount, input.tdsInputMode);
+  const tdsByOrder = splitTotalTds(shares, sharesTotal, input.tdsDeducted, input.tdsInputMode, input.tdsAmount);
+
+  const orderIds = oldRows.map(r => r.orderId);
+  for (const id of orderIds) {
+    const o = memoryOrders.find(x => x.orderId === id);
+    if (!o || o.isDeleted) throw new Error(`Order ${id} was not found.`);
+  }
+  // Every order's complete ledger must be in memory (fresh from the database):
+  // each order's totals are recalculated from it below.
+  for (const id of orderIds) {
+    await getPaymentsForOrder(id);
+  }
+
+  const groupTotalAmount = roundPaise(input.totalAmount);
+  const newRows: PaymentTransaction[] = oldRows.map(row => {
+    const share = shares.find(s => s.orderId === row.orderId)!.amount;
+    const tds = buildTdsFields(
+      share,
+      input.tdsDeducted,
+      input.tdsPercent,
+      input.tdsInputMode === 'amount' ? tdsByOrder[row.orderId] : undefined,
+      input.tdsInputMode
+    );
+    return {
+      ...row,
+      amount: share,
+      paymentMode: input.paymentMode as any,
+      paymentDate: input.paymentDate,
+      transactionReference: input.transactionReference.trim(),
+      bankReference: input.bankReference || '',
+      remarks: input.remarks || '',
+      groupTotalAmount,
+      ...tds
+    };
+  });
+  const originalOrders = new Map<string, Order>();
+  for (const id of orderIds) originalOrders.set(id, { ...(memoryOrders.find(x => x.orderId === id) as Order) });
+
+  // ---- Write phase (with full rollback) ----
+  const rowsWritten: PaymentTransaction[] = [];
+  const ordersChanged: string[] = [];
+  const updatedOrders: Order[] = [];
+  const setMemoryRow = (row: PaymentTransaction) => {
+    const idx = memoryPayments.findIndex(p => p.paymentId === row.paymentId);
+    if (idx !== -1) memoryPayments[idx] = row;
+    else memoryPayments = [row, ...memoryPayments];
+  };
+  try {
+    for (let i = 0; i < newRows.length; i++) {
+      const next = newRows[i];
+      const ok = await syncDocToFirestore('payments', next.paymentId, next);
+      if (!ok) throw new Error(`Could not save the change on order ${next.orderId}.`);
+      rowsWritten.push(oldRows[i]);
+      setMemoryRow(next);
+    }
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+
+    for (const id of orderIds) {
+      const order = memoryOrders.find(x => x.orderId === id) as Order;
+      const ledger = memoryPayments.filter(p => p.orderId === id);
+      const received = roundPaise(ledger.reduce((sum, p) => sum + p.amount, 0));
+      const { pending, status } = derivePaymentTotals(order, received, sumTds(ledger));
+      if (ordersChanged.length > 0) await pause(20);
+      const updated = await updateOrder(id, { amountReceived: received, amountPending: pending, paymentStatus: status }, user);
+      ordersChanged.push(id);
+      updatedOrders.push(updated);
+    }
+  } catch (err: any) {
+    // Put back every order and payment row already changed.
+    const stuck: string[] = [];
+    for (const id of [...ordersChanged].reverse()) {
+      const o = originalOrders.get(id)!;
+      try {
+        await updateOrder(id, { amountReceived: o.amountReceived || 0, amountPending: o.amountPending ?? 0, paymentStatus: o.paymentStatus }, user);
+      } catch (_) {
+        stuck.push(id);
+      }
+    }
+    for (const row of [...rowsWritten].reverse()) {
+      // Saves are merges, so a field the original row never had would survive a
+      // plain restore. Write every field this edit touches back explicitly
+      // (an absent field becomes its empty/zero equivalent).
+      const restored: PaymentTransaction = {
+        ...row,
+        bankReference: row.bankReference ?? '',
+        remarks: row.remarks ?? '',
+        tdsDeducted: row.tdsDeducted ?? false,
+        tdsPercent: row.tdsPercent ?? 0,
+        tdsAmount: row.tdsAmount ?? 0,
+        tdsInputMode: row.tdsInputMode ?? 'percent'
+      };
+      const ok = await syncDocToFirestore('payments', row.paymentId, restored);
+      if (!ok) stuck.push(row.orderId);
+      setMemoryRow(restored);
+    }
+    saveStorage(STORAGE_KEYS.PAYMENTS, memoryPayments);
+    if (stuck.length === 0) {
+      throw new Error(`The combined payment could not be updated (${err?.message || 'unknown error'}). Nothing was changed - it was rolled back.`);
+    }
+    throw new Error(`The combined payment update failed part-way (${err?.message || 'unknown error'}) and could not be fully rolled back. Please check these orders: ${Array.from(new Set(stuck)).join(', ')}.`);
+  }
+
+  // ---- Trail: each order's own timeline + the audit log ----
+  for (let i = 0; i < newRows.length; i++) {
+    const before = oldRows[i];
+    const after = newRows[i];
+    const order = updatedOrders.find(o => o.orderId === after.orderId)!;
+    if (i > 0) await pause(20);
+    await addTimelineEntry({
+      historyId: `HIST-${Date.now()}-${i}`,
+      orderId: after.orderId,
+      previousStatus: order.status,
+      newStatus: order.status,
+      changedBy: user.userId,
+      changedByName: user.name,
+      changedAt: new Date().toISOString(),
+      comment: `Combined payment edited: share ₹${before.amount.toLocaleString('en-IN')} -> ₹${after.amount.toLocaleString('en-IN')}${after.tdsDeducted ? `, TDS ${after.tdsPercent}% = ₹${(after.tdsAmount || 0).toLocaleString('en-IN')} withheld` : ', no TDS'} (part of a combined ₹${groupTotalAmount.toLocaleString('en-IN')} payment covering ${newRows.length} orders). Outstanding: ₹${(order.amountPending ?? 0).toLocaleString('en-IN')}`,
+      visibleToAgent: true
+    });
+  }
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'COMBINED_PAYMENT_EDITED',
+    entityType: 'PAYMENT',
+    entityId: paymentGroupId,
+    previousValue: `₹${(oldRows[0].groupTotalAmount || 0).toLocaleString('en-IN')} across ${oldRows.length} orders`,
+    newValue: `₹${groupTotalAmount.toLocaleString('en-IN')} across ${newRows.length} orders (${orderIds.join(', ')})`
+  });
+
+  return { orders: updatedOrders };
+}
+
+// Deletes the whole combined payment - every order's share - and recalculates
+// each order's totals.
+export async function deleteCombinedPayment(
+  paymentGroupId: string,
+  user: UserProfile
+): Promise<{ count: number; orders: Order[] }> {
+  if (!isAdminRole(user)) {
+    throw new Error('Only a Super Admin or Admin can delete a combined payment.');
+  }
+  const rows = await loadCombinedPaymentRows(paymentGroupId);
+  if (rows.length === 0) throw new Error('This combined payment was not found.');
+
+  let deletedCount = 0;
+  const updatedOrders: Order[] = [];
+  try {
+    for (const row of rows) {
+      if (deletedCount > 0) await pause(20);
+      // Load this order's full ledger first: deletePayment recalculates the
+      // order from the payments in memory, so they must all be there.
+      await getPaymentsForOrder(row.orderId);
+      const result = await deletePayment(row.paymentId, user);
+      updatedOrders.push(result.order);
+      deletedCount++;
+    }
+  } catch (err: any) {
+    throw new Error(`${err?.message || 'Delete failed.'} ${deletedCount} of ${rows.length} orders were already removed - open the remaining orders and delete their part by hand.`);
+  }
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'COMBINED_PAYMENT_DELETED',
+    entityType: 'PAYMENT',
+    entityId: paymentGroupId,
+    previousValue: `${rows.length} orders (${rows.map(r => r.orderId).join(', ')})`
+  });
+  return { count: rows.length, orders: updatedOrders };
 }
 
 // ----------------------------------------------------
@@ -2711,11 +3265,13 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
   const addressChanged = updates.address !== undefined;
   const emailChanged = updates.email !== undefined;
   const pincodeChanged = updates.pinCode !== undefined;
-  if (phoneChanged || addressChanged || emailChanged || pincodeChanged) {
+  const tanChanged = updates.tan !== undefined;
+  if (phoneChanged || addressChanged || emailChanged || pincodeChanged || tanChanged) {
     const newPhone = updates.contactPhone ?? updates.phone ?? '';
     const newAddress = updates.address ?? '';
     const newEmail = updates.email ?? '';
     const newPincode = updates.pinCode ?? '';
+    const newTan = updates.tan ?? '';
     // Query Firestore directly for every order actually linked to this
     // school, rather than trusting this browser's local memoryOrders cache -
     // which can be stale or incomplete (e.g. loaded before some order was
@@ -2740,6 +3296,7 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
           schoolAddress: addressChanged ? newAddress : o.schoolAddress,
           schoolEmail: emailChanged ? newEmail : o.schoolEmail,
           schoolPincode: pincodeChanged ? newPincode : o.schoolPincode,
+          schoolTan: tanChanged ? newTan : o.schoolTan,
           updatedAt: now
         };
       }
@@ -2754,6 +3311,7 @@ export async function updateSchool(schoolId: string, updates: Partial<School>, u
         ...(addressChanged ? { schoolAddress: newAddress } : {}),
         ...(emailChanged ? { schoolEmail: newEmail } : {}),
         ...(pincodeChanged ? { schoolPincode: newPincode } : {}),
+        ...(tanChanged ? { schoolTan: newTan } : {}),
         updatedAt: now
       };
       await Promise.all(

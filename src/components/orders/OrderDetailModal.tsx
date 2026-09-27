@@ -49,6 +49,7 @@ import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 import { processFileForUpload } from '../../utils/fileUpload';
 import { toDateInputValue, todayLocalISO } from '../../utils/dateInput';
 import { PrintStickerModal } from './PrintStickerModal';
+import { CombinedPaymentModal } from './CombinedPaymentModal';
 // import { OrderBOMFulfillmentCard } from '../inventory/OrderBOMFulfillmentCard'; // commented out alongside its render below
 import { matchOrderToCatalogue } from '../../utils/bomCalculator';
 import {
@@ -56,6 +57,11 @@ import {
   addPayment,
   updatePayment,
   deletePayment,
+  updateCombinedPaymentDetails,
+  deleteCombinedPayment,
+  getCombinedPaymentRows,
+  getOrders,
+  computeTdsAmount,
   getDocumentsForOrder,
   uploadDocument,
   deleteDocument,
@@ -131,6 +137,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [schoolFormCode, setSchoolFormCode] = useState(order.schoolCode || '');
   const [schoolFormEmail, setSchoolFormEmail] = useState(order.schoolEmail || '');
   const [schoolFormPincode, setSchoolFormPincode] = useState(order.schoolPincode || '');
+  const [schoolFormTan, setSchoolFormTan] = useState(order.schoolTan || '');
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [schoolSaveError, setSchoolSaveError] = useState<string | null>(null);
 
@@ -166,6 +173,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setSchoolFormCode(linkedSchool?.schoolCode ?? targetOrder.schoolCode ?? '');
     setSchoolFormEmail(linkedSchool?.email ?? targetOrder.schoolEmail ?? '');
     setSchoolFormPincode(linkedSchool ? (linkedSchool.pinCode || linkedSchool.pincode || '') : (targetOrder.schoolPincode || ''));
+    // The order's own TAN (typed when it was created) wins; else the school's.
+    setSchoolFormTan(targetOrder.schoolTan || linkedSchool?.tan || '');
   };
 
   // Contract & commercial details edit state (order number, PO number, date,
@@ -244,7 +253,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               state: schoolFormState.trim(),
               schoolCode: schoolFormCode.trim(),
               email: schoolFormEmail.trim(),
-              pincode: schoolFormPincode.trim()
+              pincode: schoolFormPincode.trim(),
+              tan: schoolFormTan.trim()
             },
             currentUser
           );
@@ -384,9 +394,24 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   const [transactionRef, setTransactionRef] = useState('');
   const [bankRef, setBankRef] = useState('');
   const [paymentRemarks, setPaymentRemarks] = useState('');
+  // "Is TDS deducted?" - Yes reveals a manually typed %.
+  const [tdsDeducted, setTdsDeducted] = useState(false);
+  const [tdsPercentInput, setTdsPercentInput] = useState('');
+  // TDS can be typed as a % or as the exact rupee amount deducted (one at a time).
+  const [tdsAmountInput, setTdsAmountInput] = useState('');
+  const [tdsMode, setTdsMode] = useState<'percent' | 'amount'>('percent');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
+  // Editing a row of a combined payment opens the combined-payment screen with
+  // ALL of its orders (not this order's single-payment form).
+  const [combinedEdit, setCombinedEdit] = useState<{
+    paymentGroupId: string;
+    rows: PaymentTransaction[];
+    orders: Order[];
+    allOrders: Order[];
+  } | null>(null);
+  const [openingCombinedEdit, setOpeningCombinedEdit] = useState(false);
 
   // Document upload states
   const [docType, setDocType] = useState<any>('Purchase Order');
@@ -778,10 +803,46 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       alert('Payment amount must be greater than zero.');
       return;
     }
+    const tdsPct = Number(tdsPercentInput);
+    const tdsAmt = Number(tdsAmountInput);
+    if (tdsDeducted && tdsMode === 'amount') {
+      if (!(tdsAmt > 0)) {
+        alert('Enter the TDS amount that was deducted (above 0), or choose "No" if TDS was not deducted.');
+        return;
+      }
+    } else if (tdsDeducted && !(tdsPct > 0 && tdsPct < 100)) {
+      alert('Enter the TDS % or the TDS amount deducted, or choose "No" if TDS was not deducted.');
+      return;
+    }
+    const tdsPayload = tdsDeducted
+      ? (tdsMode === 'amount'
+          ? { tdsDeducted: true, tdsAmount: tdsAmt, tdsInputMode: 'amount' as const }
+          : { tdsDeducted: true, tdsPercent: tdsPct, tdsInputMode: 'percent' as const })
+      : { tdsDeducted: false };
     setIsSubmittingPayment(true);
     try {
       let updated: Order;
-      if (editingPaymentId) {
+      const editingRow = editingPaymentId ? payments.find(p => p.paymentId === editingPaymentId) : undefined;
+      if (editingRow?.paymentGroupId) {
+        // One row of a combined payment: the change applies to ALL of its orders.
+        const n = (editingRow.groupOrderIds || []).length;
+        if (!confirm(`This payment is part of a combined ₹${(editingRow.groupTotalAmount || 0).toLocaleString('en-IN')} payment covering ${n} orders.\n\nSaving will update the date, mode, reference and remarks on ALL ${n} orders. (Amounts and TDS cannot be changed here - delete the combined payment and record it again for that.)\n\nContinue?`)) {
+          return;
+        }
+        await updateCombinedPaymentDetails(
+          editingRow.paymentGroupId,
+          {
+            paymentMode,
+            paymentDate,
+            transactionReference: transactionRef || editingRow.transactionReference,
+            bankReference: bankRef || undefined,
+            remarks: paymentRemarks || 'Payment recorded via portal'
+          },
+          currentUser
+        );
+        updated = activeOrder;
+        alert(`Combined payment updated on all ${n} orders.`);
+      } else if (editingPaymentId) {
         const result = await updatePayment(
           editingPaymentId,
           {
@@ -790,7 +851,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             paymentDate,
             transactionReference: transactionRef || `REF-${Date.now()}`,
             bankReference: bankRef || undefined,
-            remarks: paymentRemarks || 'Payment recorded via portal'
+            remarks: paymentRemarks || 'Payment recorded via portal',
+            ...tdsPayload
           },
           currentUser
         );
@@ -806,7 +868,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             transactionReference: transactionRef || `REF-${Date.now()}`,
             bankReference: bankRef || undefined,
             remarks: paymentRemarks || 'Payment recorded via portal',
-            createdBy: currentUser.userId
+            createdBy: currentUser.userId,
+            ...tdsPayload
           },
           currentUser
         );
@@ -815,6 +878,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       }
       setActiveOrder(updated);
       setEditingPaymentId(null);
+      setTdsDeducted(false);
+      setTdsPercentInput('');
+      setTdsAmountInput('');
+      setTdsMode('percent');
       setPaymentAmount(0);
       setPaymentMode('PFMS');
       setPaymentDate(new Date().toISOString().split('T')[0]);
@@ -830,7 +897,38 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
+  // Edit on a combined-payment row: open the combined screen with every order
+  // it covers, pre-filled from the saved rows and the freshest order figures.
+  const openCombinedPaymentEdit = async (p: PaymentTransaction) => {
+    if (!p.paymentGroupId) return;
+    setOpeningCombinedEdit(true);
+    try {
+      const rows = await getCombinedPaymentRows(p.paymentGroupId, currentUser);
+      if (rows.length === 0) {
+        alert('This combined payment could not be found. It may have been deleted - please close and reopen the order.');
+        return;
+      }
+      const all = await getOrders(currentUser);
+      const orders = rows
+        .map(r => all.find(o => o.orderId === r.orderId))
+        .filter((o): o is Order => !!o);
+      if (orders.length !== rows.length) {
+        alert('One or more orders in this combined payment could not be found (an order may have been deleted), so it cannot be edited here.');
+        return;
+      }
+      setCombinedEdit({ paymentGroupId: p.paymentGroupId, rows, orders, allOrders: all });
+    } catch (err: any) {
+      alert(err?.message || 'Could not open the combined payment.');
+    } finally {
+      setOpeningCombinedEdit(false);
+    }
+  };
+
   const handleEditPaymentClick = (p: PaymentTransaction) => {
+    if (p.paymentGroupId) {
+      void openCombinedPaymentEdit(p);
+      return;
+    }
     setEditingPaymentId(p.paymentId);
     setPaymentAmount(p.amount);
     setPaymentMode(p.paymentMode);
@@ -838,10 +936,24 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     setTransactionRef(p.transactionReference || '');
     setBankRef(p.bankReference || '');
     setPaymentRemarks(p.remarks || '');
+    setTdsDeducted(!!p.tdsDeducted && (p.tdsAmount || p.tdsPercent || 0) > 0);
+    if (p.tdsInputMode === 'amount') {
+      setTdsMode('amount');
+      setTdsAmountInput(p.tdsAmount ? String(p.tdsAmount) : '');
+      setTdsPercentInput('');
+    } else {
+      setTdsMode('percent');
+      setTdsPercentInput(p.tdsPercent ? String(p.tdsPercent) : '');
+      setTdsAmountInput('');
+    }
   };
 
   const handleCancelEditPayment = () => {
     setEditingPaymentId(null);
+    setTdsDeducted(false);
+    setTdsPercentInput('');
+    setTdsAmountInput('');
+    setTdsMode('percent');
     setPaymentAmount(0);
     setPaymentMode('PFMS');
     setPaymentDate(new Date().toISOString().split('T')[0]);
@@ -851,12 +963,23 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   };
 
   const handleDeletePayment = async (p: PaymentTransaction) => {
-    if (!confirm(`Delete this payment of ₹${p.amount.toLocaleString('en-IN')} (${p.paymentMode})? This cannot be undone, and the order's totals will be recalculated.`)) {
+    const groupSize = (p.groupOrderIds || []).length;
+    const confirmText = p.paymentGroupId
+      ? `This payment is part of a combined ₹${(p.groupTotalAmount || 0).toLocaleString('en-IN')} payment covering ${groupSize} orders.\n\nDeleting it removes the payment from ALL ${groupSize} orders and recalculates each order's totals. This cannot be undone.\n\nDelete the whole combined payment?`
+      : `Delete this payment of ₹${p.amount.toLocaleString('en-IN')} (${p.paymentMode})? This cannot be undone, and the order's totals will be recalculated.`;
+    if (!confirm(confirmText)) {
       return;
     }
     setDeletingPaymentId(p.paymentId);
     try {
-      const result = await deletePayment(p.paymentId, currentUser);
+      let refreshed: Order;
+      if (p.paymentGroupId) {
+        const groupResult = await deleteCombinedPayment(p.paymentGroupId, currentUser);
+        refreshed = groupResult.orders.find(o => o.orderId === order.orderId) || activeOrder;
+      } else {
+        refreshed = (await deletePayment(p.paymentId, currentUser)).order;
+      }
+      const result = { order: refreshed };
       setActiveOrder(result.order);
       if (editingPaymentId === p.paymentId) {
         handleCancelEditPayment();
@@ -1057,8 +1180,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 const inclusiveOrderValue = order.grossOrderValue || order.totalAmount || order.orderValue || 0;
                 const taxableValue = Number((inclusiveOrderValue / 1.18).toFixed(2));
                 const gstAmount = Number((inclusiveOrderValue - taxableValue).toFixed(2));
-                const amountReceived = order.amountReceived || 0;
-                const amountPending = Math.max(0, inclusiveOrderValue - amountReceived);
+                const tdsCredited = payments.reduce((s, p) => s + (p.tdsAmount || 0), 0);
+                // A PAID order is loaded with "received" set to the full order
+                // value, which would read as cash + TDS double counted. When TDS
+                // was withheld, show the real cash from the payment ledger.
+                const amountReceived = tdsCredited > 0
+                  ? Math.round(payments.reduce((s, p) => s + p.amount, 0) * 100) / 100
+                  : (order.amountReceived || 0);
+                // The stored pending already counts any TDS withheld, which
+                // "value minus cash received" alone would not.
+                const amountPending = order.amountPending ?? Math.max(0, inclusiveOrderValue - amountReceived);
 
                 return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -1088,6 +1219,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <div className="text-base font-bold text-emerald-700 mt-1 font-mono">
                         <CurrencyFormatter amount={amountReceived} />
                       </div>
+                      {tdsCredited > 0 && (
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          + ₹{tdsCredited.toLocaleString('en-IN')} TDS withheld
+                        </div>
+                      )}
                     </div>
 
                     <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
@@ -1169,6 +1305,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                               setSchoolFormCode(picked.schoolCode || '');
                               setSchoolFormEmail(picked.email || '');
                               setSchoolFormPincode(picked.pinCode || picked.pincode || '');
+                              setSchoolFormTan(picked.tan || '');
                             }
                           }}
                           className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
@@ -1294,6 +1431,21 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         />
                       </div>
 
+                      <div>
+                        <label className="text-slate-600 font-semibold block mb-1">
+                          TAN Number <span className="text-slate-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={schoolFormTan}
+                          onChange={(e) => setSchoolFormTan(e.target.value.toUpperCase())}
+                          placeholder="e.g. DELA12345B"
+                          maxLength={20}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          disabled={isSavingSchool}
+                        />
+                      </div>
+
                       <div className="flex items-center gap-2 pt-1">
                         <button
                           type="button"
@@ -1374,6 +1526,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <div className="pt-2 border-t border-slate-100">
                         <span className="text-slate-400 block text-[11px]">Email ID:</span>
                         <span className="font-medium text-slate-700 break-all">{activeOrder.schoolEmail || 'Not provided'}</span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100">
+                        <span className="text-slate-400 block text-[11px]">TAN Number:</span>
+                        <span className="font-mono font-medium text-slate-700 break-all">{activeOrder.schoolTan || 'Not provided'}</span>
                       </div>
                     </div>
                   )}
@@ -2672,7 +2829,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <div>
                     <span className="text-[11px] text-slate-400 uppercase font-semibold block">Total Received</span>
                     <span className="text-base font-bold font-mono text-emerald-700">
-                      <CurrencyFormatter amount={activeOrder.amountReceived || 0} />
+                      <CurrencyFormatter
+                        amount={payments.some(p => (p.tdsAmount || 0) > 0)
+                          ? Math.round(payments.reduce((s, p) => s + p.amount, 0) * 100) / 100
+                          : (activeOrder.amountReceived || 0)}
+                      />
                     </span>
                   </div>
 
@@ -2713,6 +2874,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           min={0.00001}
                           step={0.00001}
                           value={paymentAmount || ''}
+                          disabled={!!(editingPaymentId && payments.find(p => p.paymentId === editingPaymentId)?.paymentGroupId)}
                           onChange={(e) => {
                             // Repeatedly clicking the spinner arrows accumulates
                             // binary floating-point drift (e.g. 15000 ->
@@ -2788,6 +2950,104 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       />
                     </div>
 
+                    {/* TDS question: Yes reveals a manually typed % */}
+                    {(() => {
+                      const editingRow = editingPaymentId ? payments.find(p => p.paymentId === editingPaymentId) : undefined;
+                      const lockedCombined = !!editingRow?.paymentGroupId;
+                      const totalPayable = activeOrder.totalAmount || activeOrder.grossOrderValue || activeOrder.orderValue || 0;
+                      const otherRows = payments.filter(p => p.paymentId !== editingPaymentId);
+                      const priorSettled = otherRows.reduce((s, p) => s + p.amount + (p.tdsAmount || 0), 0);
+                      const cash = Number(paymentAmount) || 0;
+                      const typedPct = Number(tdsPercentInput);
+                      const typedAmt = Math.round((Number(tdsAmountInput) || 0) * 100) / 100;
+                      const tdsNow = !tdsDeducted
+                        ? 0
+                        : tdsMode === 'amount'
+                          ? (typedAmt > 0 ? typedAmt : 0)
+                          : (typedPct > 0 && typedPct < 100 ? computeTdsAmount(cash, typedPct) : 0);
+                      // % shown: as typed, or worked out from the typed amount (TDS / gross).
+                      const pct = tdsMode === 'amount'
+                        ? (cash > 0 && tdsNow > 0 ? Math.round((tdsNow / (cash + tdsNow)) * 10000) / 100 : 0)
+                        : typedPct;
+                      const settled = priorSettled + cash + tdsNow;
+                      const pendingAfter = Math.max(0, Math.round((totalPayable - settled) * 100) / 100);
+                      return (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 space-y-2.5">
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                            <span className="text-slate-700 font-semibold">Is TDS deducted?</span>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-slate-800">
+                              <input
+                                type="radio"
+                                name="tds-deducted"
+                                checked={tdsDeducted}
+                                disabled={lockedCombined}
+                                onChange={() => setTdsDeducted(true)}
+                              />
+                              <span>Yes</span>
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-slate-800">
+                              <input
+                                type="radio"
+                                name="tds-deducted"
+                                checked={!tdsDeducted}
+                                disabled={lockedCombined}
+                                onChange={() => { setTdsDeducted(false); setTdsPercentInput(''); setTdsAmountInput(''); setTdsMode('percent'); }}
+                              />
+                              <span>No</span>
+                            </label>
+                            {tdsDeducted && (
+                              <>
+                                <div className="inline-flex items-center gap-1.5">
+                                  <span className="text-slate-600 font-semibold">TDS %</span>
+                                  <input
+                                    type="number"
+                                    min={0.01}
+                                    max={99.99}
+                                    step={0.01}
+                                    disabled={lockedCombined}
+                                    value={tdsMode === 'percent' ? tdsPercentInput : ''}
+                                    onChange={(e) => { setTdsMode('percent'); setTdsPercentInput(e.target.value); setTdsAmountInput(''); }}
+                                    placeholder={tdsMode === 'amount' && pct > 0 ? String(pct) : 'e.g. 2'}
+                                    className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  />
+                                </div>
+                                <span className="text-slate-400 font-semibold text-[11px] uppercase">or</span>
+                                <div className="inline-flex items-center gap-1.5">
+                                  <span className="text-slate-600 font-semibold">TDS amount (₹)</span>
+                                  <input
+                                    type="number"
+                                    min={0.01}
+                                    step={0.01}
+                                    disabled={lockedCombined}
+                                    value={tdsMode === 'amount' ? tdsAmountInput : ''}
+                                    onChange={(e) => { setTdsMode('amount'); setTdsAmountInput(e.target.value); setTdsPercentInput(''); }}
+                                    placeholder={tdsMode === 'percent' && tdsNow > 0 ? String(tdsNow) : 'e.g. 4000'}
+                                    className="w-32 px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                  />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          {lockedCombined && (
+                            <p className="text-[11px] text-slate-500">
+                              This is part of a combined payment - amount and TDS can't be changed here. Delete the combined payment and record it again to change them.
+                            </p>
+                          )}
+                          {!lockedCombined && cash > 0 && (
+                            <p className="text-[11px] text-slate-600">
+                              {tdsNow > 0 && (
+                                <>TDS {pct}% = <b>₹{tdsNow.toLocaleString('en-IN')}</b> withheld{tdsMode === 'amount' ? ' (amount typed in)' : ''} (on a gross of ₹{(cash + tdsNow).toLocaleString('en-IN')}). </>
+                              )}
+                              Settled after this: <b>₹{settled.toLocaleString('en-IN')}</b> of ₹{totalPayable.toLocaleString('en-IN')} -{' '}
+                              {pendingAfter <= 0
+                                ? <b className="text-emerald-700">order will be marked PAID</b>
+                                : <b className="text-amber-700">partially paid, ₹{pendingAfter.toLocaleString('en-IN')} still pending</b>}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     <div className="flex justify-end gap-2">
                       {editingPaymentId && (
                         <button
@@ -2830,13 +3090,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <th className="px-4 py-2.5">Reference / UTR</th>
                       <th className="px-4 py-2.5">Remarks</th>
                       <th className="px-4 py-2.5 text-right">Amount (₹)</th>
+                      <th className="px-4 py-2.5 text-center">TDS</th>
                       {!isAgent && <th className="px-4 py-2.5 text-center">Action</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {payments.length === 0 ? (
                       <tr>
-                        <td colSpan={isAgent ? 5 : 6} className="py-8 text-center text-slate-400">
+                        <td colSpan={isAgent ? 6 : 7} className="py-8 text-center text-slate-400">
                           No payment credits logged for this order yet.
                         </td>
                       </tr>
@@ -2863,9 +3124,26 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                               <div className="text-[10px] text-slate-400">{p.bankReference}</div>
                             )}
                           </td>
-                          <td className="px-4 py-2.5 text-slate-600">{p.remarks || '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-600">
+                            <div>{p.remarks || '—'}</div>
+                            {p.paymentGroupId && (
+                              <div className="mt-1 inline-flex items-center text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                                Part of a combined ₹{(p.groupTotalAmount || 0).toLocaleString('en-IN')} payment ({(p.groupOrderIds || []).length} orders)
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-2.5 text-right font-mono font-bold text-emerald-700">
                             <CurrencyFormatter amount={p.amount} />
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-mono text-slate-700">
+                            {p.tdsDeducted && ((p.tdsAmount || 0) > 0 || (p.tdsPercent || 0) > 0) ? (
+                              <div title={`₹${(p.tdsAmount || 0).toLocaleString('en-IN')} withheld`}>
+                                <div className="font-semibold">{p.tdsPercent}%</div>
+                                <div className="text-[10px] text-slate-500">₹{(p.tdsAmount || 0).toLocaleString('en-IN')}</div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </td>
                           {!isAgent && (
                             <td className="px-4 py-2.5 text-center">
@@ -2873,8 +3151,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleEditPaymentClick(p)}
-                                  disabled={deletingPaymentId === p.paymentId}
-                                  title="Edit this payment"
+                                  disabled={deletingPaymentId === p.paymentId || openingCombinedEdit}
+                                  title={p.paymentGroupId ? 'Edit this combined payment (all its orders)' : 'Edit this payment'}
                                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-800 disabled:opacity-50"
                                 >
                                   <Edit2 className="w-3 h-3" />
@@ -3739,6 +4017,22 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           order={activeOrder}
           currentUser={currentUser}
           onClose={() => setShowPrintSticker(false)}
+        />
+      )}
+
+      {combinedEdit && (
+        <CombinedPaymentModal
+          selectedOrders={combinedEdit.orders}
+          allOrders={combinedEdit.allOrders}
+          currentUser={currentUser}
+          editing={{ paymentGroupId: combinedEdit.paymentGroupId, rows: combinedEdit.rows }}
+          onClose={() => setCombinedEdit(null)}
+          onRecorded={async (updatedOrders) => {
+            const mine = updatedOrders?.find(o => o.orderId === order.orderId);
+            if (mine) setActiveOrder(mine);
+            await loadData();
+            onOrderUpdated(mine);
+          }}
         />
       )}
     </div>

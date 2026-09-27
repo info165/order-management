@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Building, Plus, AlertCircle, CheckCircle, Package, Search, PlusCircle, Trash2 } from 'lucide-react';
-import { Order, School, Agent, Product, UserProfile, Catalogue } from '../../types';
-import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, removeCompany as removeCompanyFromSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings, getCatalogues } from '../../services/dataService';
+import { Order, School, Agent, Product, UserProfile /*, Catalogue */ } from '../../types';
+import { getSchools, getAgents, getProducts, createOrder, checkPotentialDuplicateOrder, createSchool, createProduct, getSystemSettings, addCompany as addCompanyToSettings, removeCompany as removeCompanyFromSettings, addCategory as addCategoryToSettings, removeCategory as removeCategoryFromSettings /*, getCatalogues */ } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { EQUIPMENT_CATEGORIES } from '../../utils/orderCategories';
 
@@ -15,7 +15,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [schools, setSchools] = useState<School[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [catalogues, setCatalogues] = useState<Catalogue[]>([]);
+  // const [catalogues, setCatalogues] = useState<Catalogue[]>([]); // inventory: commented out
   const [loadingMaster, setLoadingMaster] = useState(true);
 
   // School fields
@@ -29,6 +29,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   const [principalName, setPrincipalName] = useState('');
   const [schoolContactPhone, setSchoolContactPhone] = useState('');
   const [schoolEmail, setSchoolEmail] = useState('');
+  const [schoolTan, setSchoolTan] = useState('');
   const [showSchoolDropdown, setShowSchoolDropdown] = useState(false);
   const [isNewSchool, setIsNewSchool] = useState(false);
   const schoolDropdownRef = useRef<HTMLDivElement>(null);
@@ -42,10 +43,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
 
   // Category & Custom Category Creation
   const [category, setCategory] = useState('');
-  const [packageQuantity, setPackageQuantity] = useState<number>(1);
-  const [selectedCatalogueId, setSelectedCatalogueId] = useState('');
-  const [isCustomOrder, setIsCustomOrder] = useState(false);
-  const [customOrderDetails, setCustomOrderDetails] = useState('');
+  // Inventory fields commented out (package quantity, catalogue link, custom order):
+  // const [packageQuantity, setPackageQuantity] = useState<number>(1);
+  // const [selectedCatalogueId, setSelectedCatalogueId] = useState('');
+  // const [isCustomOrder, setIsCustomOrder] = useState(false);
+  // const [customOrderDetails, setCustomOrderDetails] = useState('');
   const [categories, setCategories] = useState<string[]>(EQUIPMENT_CATEGORIES);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -79,19 +81,21 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
   useEffect(() => {
     async function loadMasterData() {
       try {
-        const [sList, aList, pList, settings, cList] = await Promise.all([
+        // Inventory catalogue loading commented out (getCatalogues / cList /
+        // setCatalogues) - the form no longer uses catalogues.
+        const [sList, aList, pList, settings] = await Promise.all([
           getSchools(),
           getAgents(),
           getProducts(),
-          getSystemSettings(),
-          getCatalogues()
+          getSystemSettings()
+          // getCatalogues()
         ]);
         setSchools(sList);
         setAgents(aList);
         setProducts(pList);
         setCompanies(settings.companies || []);
         setCategories(settings.categories && settings.categories.length > 0 ? settings.categories : EQUIPMENT_CATEGORIES);
-        setCatalogues(cList || []);
+        // setCatalogues(cList || []);
       } catch (e) {
         console.error('Error loading master data', e);
       } finally {
@@ -240,42 +244,45 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
     }
   };
 
-  const handleCatalogueSelect = (catId: string) => {
-    setSelectedCatalogueId(catId);
-    const cat = catalogues.find(c => c.catalogueId === catId);
-    if (cat) {
-      setCategory(cat.name);
-      if (cat.isCustomCatalogue) {
-        setIsCustomOrder(true);
-        if (cat.customDetails) {
-          setCustomOrderDetails(cat.customDetails);
-        }
-      }
-      // Also sync category in available categories list if not present
-      if (!categories.includes(cat.name)) {
-        setCategories(prev => [...prev, cat.name]);
-      }
-    }
-  };
+  // Inventory: picking a catalogue directly - commented out with the dropdown.
+  // const handleCatalogueSelect = (catId: string) => {
+  //   setSelectedCatalogueId(catId);
+  //   const cat = catalogues.find(c => c.catalogueId === catId);
+  //   if (cat) {
+  //     setCategory(cat.name);
+  //     if (cat.isCustomCatalogue) {
+  //       setIsCustomOrder(true);
+  //       if (cat.customDetails) {
+  //         setCustomOrderDetails(cat.customDetails);
+  //       }
+  //     }
+  //     // Also sync category in available categories list if not present
+  //     if (!categories.includes(cat.name)) {
+  //       setCategories(prev => [...prev, cat.name]);
+  //     }
+  //   }
+  // };
 
   const handleCategorySelect = (cat: string) => {
     setCategory(cat);
-    const catNorm = cat.trim().toLowerCase();
-    const matched = catalogues.find(
-      c =>
-        c.name.trim().toLowerCase() === catNorm ||
-        (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
-        (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase())))
-    );
-    if (matched) {
-      setSelectedCatalogueId(matched.catalogueId);
-      if (matched.isCustomCatalogue) {
-        setIsCustomOrder(true);
-        if (matched.customDetails && !customOrderDetails) {
-          setCustomOrderDetails(matched.customDetails);
-        }
-      }
-    }
+    // Inventory: auto-picking a matching catalogue (and auto-ticking Custom
+    // Order) when a package is chosen - commented out, as before inventory.
+    // const catNorm = cat.trim().toLowerCase();
+    // const matched = catalogues.find(
+    //   c =>
+    //     c.name.trim().toLowerCase() === catNorm ||
+    //     (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
+    //     (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase())))
+    // );
+    // if (matched) {
+    //   setSelectedCatalogueId(matched.catalogueId);
+    //   if (matched.isCustomCatalogue) {
+    //     setIsCustomOrder(true);
+    //     if (matched.customDetails && !customOrderDetails) {
+    //       setCustomOrderDetails(matched.customDetails);
+    //     }
+    //   }
+    // }
     const prod = products.find(p => p.name === cat || p.category === cat);
     if (prod && prod.standardPrice) {
       setTotalInclusiveOrderValue(prod.standardPrice);
@@ -415,21 +422,25 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
         }
       }
 
-      const pkgQty = Math.max(1, Number(packageQuantity) || 1);
-      const selectedCatObj = selectedCatalogueId
-        ? catalogues.find(c => c.catalogueId === selectedCatalogueId)
-        : null;
-      const catNorm = category.trim().toLowerCase();
-      const matchedCat = selectedCatObj || catalogues.find(
-        c =>
-          c.name.trim().toLowerCase() === catNorm ||
-          (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
-          (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
-          (c.category && c.category.trim().toLowerCase() === catNorm)
-      );
-
-      const finalCatId = selectedCatalogueId || matchedCat?.catalogueId;
-      const finalCatName = selectedCatObj?.name || matchedCat?.name || category.trim();
+      // INVENTORY FIELDS COMMENTED OUT - this form saves exactly what it did
+      // before the inventory module was added (no package quantity, catalogue
+      // link, custom-order flag or items list). Restore together with the
+      // matching pieces marked the same way above and in the form below.
+      // const pkgQty = Math.max(1, Number(packageQuantity) || 1);
+      // const selectedCatObj = selectedCatalogueId
+      //   ? catalogues.find(c => c.catalogueId === selectedCatalogueId)
+      //   : null;
+      // const catNorm = category.trim().toLowerCase();
+      // const matchedCat = selectedCatObj || catalogues.find(
+      //   c =>
+      //     c.name.trim().toLowerCase() === catNorm ||
+      //     (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
+      //     (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
+      //     (c.category && c.category.trim().toLowerCase() === catNorm)
+      // );
+      //
+      // const finalCatId = selectedCatalogueId || matchedCat?.catalogueId;
+      // const finalCatName = selectedCatObj?.name || matchedCat?.name || category.trim();
 
       const created = await createOrder(
         {
@@ -447,26 +458,28 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
           principalName: principalName.trim(),
           schoolContactPhone: schoolContactPhone.trim(),
           schoolEmail: schoolEmail.trim(),
+          // Optional: only saved on the order when something was typed.
+          ...(schoolTan.trim() ? { schoolTan: schoolTan.trim().toUpperCase() } : {}),
           agentId,
           agentName,
           agentCode,
           agentCommissionPercentage,
           company: company.trim(),
           category,
-          packageQuantity: pkgQty,
-          quantity: pkgQty,
-          catalogueId: finalCatId,
-          catalogueName: finalCatName,
-          isCustomOrder,
-          customOrderDetails: isCustomOrder ? customOrderDetails.trim() : undefined,
-          items: [{
-            itemId: `item-1`,
-            productName: category,
-            category,
-            quantity: pkgQty,
-            unitPrice: Math.round((baseOrderValue / pkgQty) * 100) / 100,
-            totalPrice: baseOrderValue
-          }],
+          // packageQuantity: pkgQty,
+          // quantity: pkgQty,
+          // catalogueId: finalCatId,
+          // catalogueName: finalCatName,
+          // isCustomOrder,
+          // customOrderDetails: isCustomOrder ? customOrderDetails.trim() : undefined,
+          // items: [{
+          //   itemId: `item-1`,
+          //   productName: category,
+          //   category,
+          //   quantity: pkgQty,
+          //   unitPrice: Math.round((baseOrderValue / pkgQty) * 100) / 100,
+          //   totalPrice: baseOrderValue
+          // }],
           orderValue: totalInclusiveOrderValue,
           taxAmount: gstAmount,
           grossOrderValue: totalInclusiveOrderValue,
@@ -693,6 +706,20 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
               />
             </div>
+
+            <div>
+              <label className="block text-slate-700 font-semibold mb-1">
+                TAN Number <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={schoolTan}
+                onChange={(e) => setSchoolTan(e.target.value.toUpperCase())}
+                maxLength={20}
+                placeholder="e.g. DELA12345B"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono"
+              />
+            </div>
           </div>
 
           {/* Section 2: Contract & Order Particulars (with duplicate GeM order validation) */}
@@ -764,39 +791,31 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
               </div>
             </div>
 
-            {/* Category / Equipment Package & Units Ordered */}
-            <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-              {/* Catalogue Dropdown Option matching order names */}
-              <div>
-                <label className="block text-slate-700 font-semibold text-xs mb-1">
-                  Catalogue / BOM Master Link <span className="text-amber-600 font-normal">(Select matching catalogue to link BOM materials)</span>
-                </label>
-                <select
-                  value={selectedCatalogueId || ''}
-                  onChange={(e) => handleCatalogueSelect(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-amber-50/50 font-semibold text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                >
-                  <option value="">-- Choose Matching Catalogue / BOM Package --</option>
-                  {catalogues.map((cat) => {
-                    const matCount = (cat.items || cat.bomItems || []).length;
-                    return (
-                      <option key={cat.catalogueId} value={cat.catalogueId}>
-                        {cat.name} ({cat.code || cat.catalogueCode || 'CAT'}) - {matCount} BOM Materials {cat.isCustomCatalogue ? '[Custom Spec]' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Selecting a catalogue maps this order directly to its Bill of Materials for automated inventory calculation.
-                </p>
-              </div>
+            {/* INVENTORY UI COMMENTED OUT - the New Order page is back to how it
+                was before the inventory module: no catalogue / BOM link, no
+                package quantity, no custom-order flag, no BOM preview. The
+                commented blocks below (and the matching lines in the state,
+                handlers and save above) can be restored together later.
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2 relative">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 font-semibold text-xs">
-                      Package / Order Name <span className="text-rose-500">*</span>
-                    </label>
+                Catalogue / BOM Master Link dropdown:
+                <div>
+                  <label>Catalogue / BOM Master Link (Select matching catalogue to link BOM materials)</label>
+                  <select value={selectedCatalogueId || ''} onChange={(e) => handleCatalogueSelect(e.target.value)}>
+                    <option value="">-- Choose Matching Catalogue / BOM Package --</option>
+                    {catalogues.map((cat) => { ...one <option> per catalogue... })}
+                  </select>
+                  <p>Selecting a catalogue maps this order directly to its Bill of Materials for automated inventory calculation.</p>
+                </div>
+            */}
+
+            {/* Category / Equipment Package Dropdown with Direct Creation
+                (same two-column row as the Assigned Regional Partner, as before inventory) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-700 font-semibold">
+                    Category / Equipment Package <span className="text-rose-500">*</span>
+                  </label>
                     {currentUser.role === 'SUPER_ADMIN' && !showAddCategory && (
                       <button
                         type="button"
@@ -804,7 +823,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                         className="text-[11px] text-amber-700 font-semibold hover:underline flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" />
-                        <span>Add Package Name</span>
+                        <span>Add Category</span>
                       </button>
                     )}
                   </div>
@@ -813,7 +832,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                     required
                     value={category}
                     onChange={(e) => handleCategorySelect(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   >
                     <option value="" disabled>Select a package...</option>
                     {allAvailableCategories.map((cat) => (
@@ -890,97 +909,27 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({ currentUser, onClo
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-semibold text-xs mb-1">
-                    Package Quantity (Units) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={packageQuantity || ''}
-                    onChange={(e) => setPackageQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    placeholder="e.g. 145"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white font-bold font-mono text-xs text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Multiplies BOM components in Inventory
-                  </p>
-                </div>
-              </div>
+                {/* INVENTORY UI COMMENTED OUT (see the note above the category
+                    row): Package Quantity, Custom Order flag + details, and the
+                    live "Linked to BOM" preview. Original code, for restoring:
 
-              {/* Custom Order Flag & Details */}
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={isCustomOrder}
-                    onChange={(e) => setIsCustomOrder(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                  />
-                  <span className="font-bold text-xs text-slate-900">
-                    Mark as Custom Order (Uses catalogue name, but has custom variations / bespoke specifications)
-                  </span>
-                </label>
-
-                {isCustomOrder && (
-                  <div className="pt-1 space-y-1 pl-6.5">
-                    <label className="block text-[11px] font-semibold text-amber-900">
-                      Custom Details & Material Variations for this Order:
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={customOrderDetails}
-                      onChange={(e) => setCustomOrderDetails(e.target.value)}
-                      placeholder="Enter custom specifications, extra components, or custom requirements for this order..."
-                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-amber-300 bg-white text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Live BOM link preview */}
-              {(() => {
-                if (!category.trim() && !selectedCatalogueId) return null;
-                const catObj = selectedCatalogueId
-                  ? catalogues.find(c => c.catalogueId === selectedCatalogueId)
-                  : null;
-                const catNorm = category.trim().toLowerCase();
-                const matched = catObj || catalogues.find(
-                  c =>
-                    c.name.trim().toLowerCase() === catNorm ||
-                    (c.catalogueCode || c.code || '').trim().toLowerCase() === catNorm ||
-                    (c.salesOrderPkgKeywords && c.salesOrderPkgKeywords.some(kw => catNorm.includes(kw.trim().toLowerCase()))) ||
-                    (c.category && c.category.trim().toLowerCase() === catNorm)
-                );
-                if (!matched) {
-                  return (
-                    <div className="text-[11px] text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
-                      ℹ️ Note: No exact BOM linked to "{category}" yet. Requirements will calculate once configured in Catalogue/BOM Master.
+                    <div>
+                      <label>Package Quantity (Units) *</label>
+                      <input type="number" min={1} required value={packageQuantity || ''}
+                        onChange={(e) => setPackageQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))} placeholder="e.g. 145" />
+                      <p>Multiplies BOM components in Inventory</p>
                     </div>
-                  );
-                }
-                const matCount = (matched.items || (matched as any).bomItems || []).length;
-                return (
-                  <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold">⚡ Linked to BOM:</span>
-                      <span>{matched.name} ({matched.code || matched.catalogueCode})</span>
-                      {isCustomOrder && (
-                        <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded font-semibold border border-amber-300">
-                          Custom Order
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono text-[11px] bg-emerald-100 px-2 py-0.5 rounded font-semibold text-emerald-900">
-                      {matCount} BOM materials &times; {packageQuantity || 1} units
-                    </span>
-                  </div>
-                );
-              })()}
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    Custom Order flag (checkbox bound to isCustomOrder, with a
+                    "Custom Details & Material Variations" textarea bound to
+                    customOrderDetails shown when ticked).
+
+                    Live BOM preview: matches the chosen category / catalogue
+                    against catalogues and shows either a "No exact BOM linked"
+                    note or "Linked to BOM: <name> - N BOM materials x
+                    packageQuantity units".
+                */}
+
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
                   Assigned Regional Partner <span className="text-rose-500">*</span>

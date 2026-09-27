@@ -27,8 +27,10 @@ import { toDateInputValue } from '../../utils/dateInput';
 import { exportOrdersToExcel } from '../../services/importExportService';
 import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
+import { CheckboxFilterDropdown } from './CheckboxFilterDropdown';
 import { useColumnResize } from './useColumnResize';
 import { OrderProcurementBadge } from '../inventory/OrderProcurementBadge';
+import { CombinedPaymentModal } from './CombinedPaymentModal';
 
 // At-a-glance document status for the Dispatch & Courier column: a single
 // tick for the Consignment Note (CN) upload, a double tick (WhatsApp-style
@@ -157,6 +159,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [batchTargetStatus, setBatchTargetStatus] = useState<OrderStatus>('READY_FOR_DISPATCH');
+  // Combined payment (admins only): one payment covering 2+ selected orders.
+  const [showCombinedPayment, setShowCombinedPayment] = useState(false);
 
   const canManageOrders = !isAgent && (isAdmin || currentUser.role === 'DATA_ENTRY_OPERATOR' || currentUser.role === 'ACCOUNTS' || currentUser.role === 'DISPATCH');
   // Matches the database's actual create permission (firestore.rules' isAdminOrOps()):
@@ -773,25 +777,17 @@ export const OrderList: React.FC<OrderListProps> = ({
             {/* Quick School selector */}
             <div className="flex items-center gap-1 text-slate-600">
               <span className="text-[11px] font-medium text-slate-400">School:</span>
-              <select
-                value={colSelectedSchools.length === 1 ? colSelectedSchools[0] : (colSelectedSchools.length > 1 ? 'MULTIPLE' : 'ALL')}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'ALL') setColSelectedSchools([]);
-                  else if (val !== 'MULTIPLE') setColSelectedSchools([val]);
-                }}
-                className="px-2 py-1 rounded border border-slate-200 bg-white text-slate-800 text-xs font-medium focus:outline-none max-w-[190px] truncate"
-              >
-                <option value="ALL">All Schools ({schoolOptions.length})</option>
-                {colSelectedSchools.length > 1 && (
-                  <option value="MULTIPLE">Selected ({colSelectedSchools.length} schools)</option>
-                )}
-                {schoolOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label} ({opt.count})
-                  </option>
-                ))}
-              </select>
+              {/* Tick any number of schools to show only their orders. Uses the
+                  same filter state as the School Name column's funnel, so the
+                  two always agree. */}
+              <CheckboxFilterDropdown
+                allLabel="Schools"
+                noun={{ one: 'school', many: 'schools' }}
+                options={schoolOptions}
+                selectedValues={colSelectedSchools}
+                onChange={setColSelectedSchools}
+                maxTriggerWidthClass="max-w-[210px]"
+              />
             </div>
 
             {/* Quick Status selector */}
@@ -976,6 +972,16 @@ export const OrderList: React.FC<OrderListProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete</span>
+              </button>
+            )}
+            {isAdmin && selectedOrderIds.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => setShowCombinedPayment(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-2.5 py-1 rounded-lg transition-colors border border-emerald-500/60 cursor-pointer"
+                title="Record one payment that covers all the selected orders"
+              >
+                Record combined payment
               </button>
             )}
             {extraBulkAction && (
@@ -1779,6 +1785,19 @@ export const OrderList: React.FC<OrderListProps> = ({
       </div>
 
       {/* Bulk Delete Confirmation Modal (admins only) */}
+      {showCombinedPayment && isAdmin && selectedOrdersForDelete.length >= 2 && (
+        <CombinedPaymentModal
+          selectedOrders={selectedOrdersForDelete}
+          allOrders={orders}
+          currentUser={currentUser}
+          onClose={() => setShowCombinedPayment(false)}
+          onRecorded={() => {
+            setSelectedOrderIds([]);
+            onOrdersUpdated?.();
+          }}
+        />
+      )}
+
       {deleteModalOpen && isAdmin && (
         <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">

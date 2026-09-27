@@ -85,6 +85,9 @@ export interface School {
   phone?: string;
   contactPhone?: string;
   email?: string;
+  // The school's TAN (Tax Deduction Account Number) - optional, edited in the
+  // School Registry.
+  tan?: string;
   region?: string;
   status?: string;
   isActive?: boolean;
@@ -177,6 +180,9 @@ export interface Order {
   principalName?: string;
   schoolContactPhone?: string;
   schoolEmail?: string;
+  // The school's TAN (Tax Deduction Account Number) - optional, typed when the
+  // order is created. Stored on the order only.
+  schoolTan?: string;
   schoolPincode?: string;
   agentCommissionPercentage?: number;
 
@@ -283,6 +289,24 @@ export interface PaymentTransaction {
   proofDocumentId?: string;
   createdBy: string;
   createdAt: string;
+  // TDS the school deducted from this payment. `amount` above stays the CASH
+  // actually received (so the ledger matches the bank); tdsAmount is what got
+  // withheld on top of it, and counts as settled toward the order's value.
+  // All optional - payments recorded before this existed simply lack them.
+  tdsDeducted?: boolean;
+  tdsPercent?: number;
+  tdsAmount?: number;
+  // How the TDS was entered: as a % (the amount is worked out from it) or as
+  // the exact rupee amount that was deducted (the % shown is worked out from
+  // that). Remembered so editing a payment never silently changes a TDS amount
+  // that was typed in exactly.
+  tdsInputMode?: 'percent' | 'amount';
+  // Set only on the rows of a combined payment (one school payment covering
+  // several orders): every row shares this id, holds ITS OWN order's share in
+  // `amount`, and carries the combined total / member orders for display.
+  paymentGroupId?: string;
+  groupTotalAmount?: number;
+  groupOrderIds?: string[];
 }
 
 // A commission payment recorded from the hidden /cb page's Commission

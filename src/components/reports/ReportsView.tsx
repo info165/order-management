@@ -27,7 +27,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, currentUser })
   const totalValue = useMemo(() => orders.reduce((acc, o) => acc + (o.grossOrderValue || o.totalAmount || o.orderValue || 0), 0), [orders]);
   const taxableValue = useMemo(() => Number((totalValue / 1.18).toFixed(2)), [totalValue]);
   const totalReceived = useMemo(() => orders.reduce((acc, o) => acc + (o.amountReceived || 0), 0), [orders]);
-  const totalPending = useMemo(() => Math.max(0, totalValue - totalReceived), [totalValue, totalReceived]);
+  // Uses each order's stored pending (which already counts TDS withheld on
+  // its payments) rather than value minus cash received, so a TDS-settled order
+  // doesn't show its TDS amount as still owed.
+  const totalPending = useMemo(
+    () => orders.reduce((acc, o) => acc + (o.amountPending ?? Math.max(0, (o.grossOrderValue || o.totalAmount || o.orderValue || 0) - (o.amountReceived || 0))), 0),
+    [orders]
+  );
 
   // State-wise Breakdown
   const stateSummary = useMemo(() => {
@@ -40,7 +46,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, currentUser })
       map[st].count += 1;
       map[st].value += orderVal;
       map[st].received += rec;
-      map[st].pending += Math.max(0, orderVal - rec);
+      map[st].pending += o.amountPending ?? Math.max(0, orderVal - rec);
     });
     return Object.entries(map).sort((a, b) => b[1].value - a[1].value);
   }, [orders]);
