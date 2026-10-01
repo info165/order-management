@@ -38,6 +38,7 @@ import {
   OrderStatusHistoryItem,
   UserProfile,
   DeliveryRecord,
+  ShipmentRecord,
   Agent,
   School,
   Catalogue
@@ -69,6 +70,8 @@ import {
   updateOrderStatus,
   updateDispatch,
   markDelivered,
+  addShipment,
+  addShipmentDelivery,
   updateOrder,
   updateOrderSchoolDetails,
   relinkOrderToSchool,
@@ -755,6 +758,174 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       alert(err.message);
     } finally {
       setIsSubmittingDispatch(false);
+    }
+  };
+
+  // Handle adding ONE shipment (Partially Dispatched = isFinal false, keeps
+  // the form open for the next box; Fully Dispatched = isFinal true, this is
+  // the last one). Only used while the order hasn't already been marked
+  // Fully Dispatched - handleUpdateDispatch() above remains how an
+  // already-fully-dispatched legacy order gets its details corrected.
+  // The "Add a Shipment" form starts OPEN for an order's very first shipment
+  // (nothing to look at yet, so there's no reason to make that an extra
+  // click) but COLLAPSED from the second shipment onward - otherwise
+  // reopening an order that already has a shipment on it showed that
+  // shipment's own courier/docket pre-filled (since those fields mirror the
+  // latest shipment for every OTHER screen's benefit), which looked exactly
+  // like unsaved, stale data rather than a blank form for the next box.
+  const [showAddShipmentForm, setShowAddShipmentForm] = useState(() => (order.shipments || []).length === 0);
+
+  const resetShipmentForm = () => {
+    setCourierName('Delhivery');
+    setTrackingNumber('');
+    setNumberOfBoxes('1');
+    setDispatchDate(todayLocalISO());
+    setExpectedDeliveryDate('');
+    setDispatchRemarks('');
+  };
+
+  const handleOpenAddShipment = () => {
+    resetShipmentForm();
+    setShowAddShipmentForm(true);
+  };
+
+  const handleAddShipment = async (isFinal: boolean) => {
+    if (!courierName.trim()) {
+      alert('Please provide the courier/transporter name.');
+      return;
+    }
+    if (
+      !isFinal &&
+      !window.confirm(
+        `Record this as a PARTIAL shipment (${numberOfBoxes || '1'} box(es) via ${courierName})?\n\nThe order will show "Partially Dispatched" and you can add another shipment later for the remaining boxes.`
+      )
+    ) {
+      return;
+    }
+    if (
+      isFinal &&
+      (activeOrder.shipments || []).length > 0 &&
+      !window.confirm(
+        `Record this as the FINAL shipment (${numberOfBoxes || '1'} box(es) via ${courierName})?\n\nOnce Fully Dispatched, no further shipments can be added to this order.`
+      )
+    ) {
+      return;
+    }
+    setIsSubmittingDispatch(true);
+    try {
+      const { order: updated } = await addShipment(
+        order.orderId,
+        { courierName, trackingNumber, dispatchDate, numberOfBoxes, expectedDeliveryDate, dispatchRemarks, isFinal },
+        currentUser
+      );
+      setActiveOrder(updated);
+      resetShipmentForm();
+      setShowAddShipmentForm(false);
+      await loadData();
+      onOrderUpdated(updated);
+      alert(isFinal ? 'Marked Fully Dispatched.' : 'Partial shipment recorded. Add another when the rest is sent.');
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmittingDispatch(false);
+    }
+  };
+
+  // Inline "mark this shipment delivered" mini-form state - at most one open
+  // at a time, keyed by which shipment it's for.
+  const [shipmentDeliveryForm, setShipmentDeliveryForm] = useState<{
+    shipmentId: string;
+    deliveryDate: string;
+    receiverDesignation: string;
+    deliveryRemarks: string;
+  } | null>(null);
+  const [isSubmittingShipmentDelivery, setIsSubmittingShipmentDelivery] = useState(false);
+
+  const handleOpenShipmentDelivery = (shipmentId: string) => {
+    setShipmentDeliveryForm({
+      shipmentId,
+      deliveryDate: todayLocalISO(),
+      receiverDesignation: 'Principal / Incharge',
+      deliveryRemarks: ''
+    });
+  };
+
+  const handleConfirmShipmentDelivery = async () => {
+    if (!shipmentDeliveryForm) return;
+    setIsSubmittingShipmentDelivery(true);
+    try {
+      const updated = await addShipmentDelivery(
+        order.orderId,
+        shipmentDeliveryForm.shipmentId,
+        {
+          deliveryDate: shipmentDeliveryForm.deliveryDate,
+          receiverDesignation: shipmentDeliveryForm.receiverDesignation,
+          deliveryRemarks: shipmentDeliveryForm.deliveryRemarks
+        },
+        currentUser
+      );
+      setActiveOrder(updated);
+      setShipmentDeliveryForm(null);
+      await loadData();
+      onOrderUpdated(updated);
+      alert('Shipment delivery recorded.');
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmittingShipmentDelivery(false);
+    }
+  };
+
+  // CN/POD upload for ONE shipment - tags the document to that shipment, and
+  // (only when it's the most recent shipment) also mirrors the file onto the
+  // order's own cnCopyUrl/podCopyUrl so every screen that shows "the"
+  // CN/POD for an order keeps working unchanged.
+  const handleShipmentFileUpload = async (
+    shipmentId: string,
+    shipmentNo: number,
+    kind: 'cnCopy' | 'podCopy',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const label = kind === 'cnCopy' ? 'Consignment Note' : 'Proof of Delivery';
+    setUploadingLabel(`${label} (Shipment #${shipmentNo})`);
+    try {
+      const dataUrl = await processFileForUpload(file);
+      const shipments = activeOrder.shipments || [];
+      const isLatest = shipments.length > 0 && shipments[shipments.length - 1].shipmentId === shipmentId;
+      if (isLatest) {
+        await updateOrder(
+          order.orderId,
+          kind === 'cnCopy'
+            ? { cnCopyUrl: dataUrl, cnCopyFileName: file.name }
+            : { podCopyUrl: dataUrl, podCopyFileName: file.name },
+          currentUser
+        );
+      }
+      await uploadDocument(
+        {
+          orderId: order.orderId,
+          documentType: kind === 'cnCopy' ? 'Dispatch Receipt' : 'Delivery Challan',
+          fileName: `${kind === 'cnCopy' ? 'CN_Copy' : 'POD_Signed'}_Shipment${shipmentNo}_${file.name}`,
+          fileUrl: dataUrl,
+          fileSize: `${Math.round(file.size / 1024)} KB`,
+          uploadedBy: currentUser.name,
+          visibleToAgent: true,
+          quickVaultCategory: kind,
+          shipmentId,
+          shipmentNo
+        },
+        currentUser
+      );
+      await loadData();
+      onOrderUpdated();
+      alert(`${label} for Shipment #${shipmentNo} uploaded successfully.`);
+    } catch (err: any) {
+      alert(`Failed to save ${label}: ` + err.message);
+    } finally {
+      setUploadingLabel(null);
     }
   };
 
@@ -1925,6 +2096,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           value={newStatus}
                           onChange={(e) => setNewStatus(e.target.value as OrderStatus)}
                           className="w-full px-3 py-2 rounded-lg border border-slate-300 font-semibold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          // Deliberately no "Partially Dispatched" option here - this
+                          // dropdown only ever changes order.status, never
+                          // dispatchStatus or the shipment list, so picking a
+                          // dispatch-flavoured value here could silently disagree
+                          // with (or duplicate) what the Dispatch & Logistics tab's
+                          // own Partially/Fully Dispatched buttons already show.
+                          // Dispatch state has exactly one door in: that tab.
                         >
                           <option value="PO_PENDING">PO Pending</option>
                           <option value="PO_RECEIVED">PO Received</option>
@@ -2034,6 +2212,59 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* TAB: GEM STATUS */}
           {activeTab === 'gemStatus' && (
             <div className="space-y-6">
+              {/* Shipment Documents - only appears once this order has used the
+                  Partially/Fully Dispatched flow. Shows each shipment's own
+                  CN and POD side by side, instead of just one of each for the
+                  whole order - e.g. 2 shipments with 2 PODs show up as 2
+                  separate rows here, not one overwriting the other. */}
+              {(activeOrder.shipments || []).length > 0 && (
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                  <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                    <Truck className="w-4 h-4 text-purple-600" />
+                    <span>Shipment Documents ({(activeOrder.shipments || []).length})</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(activeOrder.shipments || []).map(s => {
+                      const cnDoc = documents.find(d => d.shipmentId === s.shipmentId && d.quickVaultCategory === 'cnCopy');
+                      const podDoc = documents.find(d => d.shipmentId === s.shipmentId && d.quickVaultCategory === 'podCopy');
+                      return (
+                        <div key={s.shipmentId} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-900">
+                              Shipment #{s.shipmentNo}{s.isFinal ? ' (Final)' : ''}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${s.deliveryStatusForShipment === 'Delivered' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                              {s.deliveryStatusForShipment}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">{s.courierName} - Docket {s.docketNumber || 'N/A'} - {s.numberOfBoxes} box(es)</p>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-slate-700">CN / LR Copy</span>
+                            {cnDoc ? (
+                              <button type="button" onClick={() => setPreviewDoc({ url: cnDoc.fileUrl, title: `Shipment #${s.shipmentNo} - CN Copy`, fileName: cnDoc.fileName })} className="text-purple-700 font-semibold hover:underline flex items-center gap-1">
+                                <Eye className="w-3 h-3" /> View
+                              </button>
+                            ) : (
+                              <span className="text-slate-400">Not uploaded</span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-slate-700">Proof of Delivery</span>
+                            {podDoc ? (
+                              <button type="button" onClick={() => setPreviewDoc({ url: podDoc.fileUrl, title: `Shipment #${s.shipmentNo} - POD`, fileName: podDoc.fileName })} className="text-emerald-700 font-semibold hover:underline flex items-center gap-1">
+                                <Eye className="w-3 h-3" /> View
+                              </button>
+                            ) : (
+                              <span className="text-slate-400">{s.deliveryStatusForShipment === 'Delivered' ? 'Not uploaded' : 'Pending delivery'}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                   <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -2316,9 +2547,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* TAB 3: DISPATCH & LOGISTICS */}
           {activeTab === 'dispatch' && (
             <div className="space-y-6">
-              {/* Current Tracking Card */}
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              {/* Current Tracking Card - compact single-row summary */}
+              <div className="bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
                   <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                     <Truck className="w-4 h-4 text-purple-600" />
                     <span>Active Consignment Tracking</span>
@@ -2326,39 +2557,30 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <StatusBadge status={activeOrder.dispatchStatus} type="dispatch" />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <span className="text-slate-400 block text-[11px]">Courier / Transporter</span>
-                    <span className="font-bold text-slate-800 text-sm mt-0.5 block">
-                      {courierName || 'Not Assigned'}
-                    </span>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Courier:</span>
+                    <span className="font-bold text-slate-800">{courierName || 'Not Assigned'}</span>
                   </div>
-
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <span className="text-slate-400 block text-[11px]">Docket / Tracking Number</span>
-                    <div className="mt-1">
-                      <TrackingLink courierName={courierName} docketNumber={trackingNumber} />
-                    </div>
+                  <span className="text-slate-200">|</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Docket:</span>
+                    <TrackingLink courierName={courierName} docketNumber={trackingNumber} />
                   </div>
-
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <span className="text-slate-400 block text-[11px]">Carton Boxes</span>
-                    <span className="font-bold text-slate-800 text-sm mt-0.5 block">
-                      {numberOfBoxes || '1'}
-                    </span>
+                  <span className="text-slate-200">|</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Boxes:</span>
+                    <span className="font-bold text-slate-800">{numberOfBoxes || '1'}</span>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-xs pt-2">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Date of Dispatch:</span>
+                  <span className="text-slate-200">|</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Dispatched:</span>
                     <span className="font-mono text-slate-700">{dispatchDate || 'Pending'}</span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Expected Delivery Date:</span>
-                    <span className="font-mono font-semibold text-slate-800">
-                      {expectedDeliveryDate || 'Pending'}
-                    </span>
+                  <span className="text-slate-200">|</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400">Expected:</span>
+                    <span className="font-mono font-semibold text-slate-800">{expectedDeliveryDate || 'Pending'}</span>
                   </div>
                 </div>
               </div>
@@ -2410,8 +2632,320 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </div>
               )}
 
-              {/* Update Dispatch Details (Admin / Dispatch role) */}
-              {!isAgent && (
+              {/* Shipments - Partially/Fully Dispatched flow. Used for any
+                  order that hasn't already been fully dispatched the older,
+                  single-shipment way (dispatchStatus NOT_READY/READY), or
+                  that already has at least one shipment on record. An order
+                  fully dispatched the old way (no shipments[], already
+                  DISPATCHED/DELIVERED) keeps using the original form below
+                  instead - nothing about correcting an existing legacy
+                  dispatch changes. */}
+              {(() => {
+                const usesShipmentFlow =
+                  (activeOrder.shipments && activeOrder.shipments.length > 0) ||
+                  activeOrder.dispatchStatus === 'NOT_READY' ||
+                  activeOrder.dispatchStatus === 'READY' ||
+                  activeOrder.dispatchStatus === 'PARTIALLY_DISPATCHED';
+                if (!usesShipmentFlow || isAgent) return null;
+                const canAddMoreShipments = activeOrder.dispatchStatus !== 'DISPATCHED' && activeOrder.dispatchStatus !== 'DELIVERED';
+                const shipments = activeOrder.shipments || [];
+
+                return (
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Truck className="w-4 h-4 text-purple-600" />
+                        <span>Shipments{shipments.length > 0 ? ` (${shipments.length})` : ''}</span>
+                      </h3>
+                      {!canAddMoreShipments ? (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          Fully Dispatched - no more shipments can be added
+                        </span>
+                      ) : !showAddShipmentForm ? (
+                        <button
+                          type="button"
+                          onClick={handleOpenAddShipment}
+                          className="inline-flex items-center gap-1 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-lg shadow-xs transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add a Shipment</span>
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {canAddMoreShipments && showAddShipmentForm && (
+                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-3.5 space-y-3 text-xs">
+                        {shipments.length > 0 && (
+                          <p className="text-[11px] text-slate-500 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5">
+                            {shipments.length} shipment{shipments.length > 1 ? 's' : ''} already sent. Fill in the next one below.
+                          </p>
+                        )}
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                          <div className="sm:col-span-2">
+                            <label className="block text-slate-500 font-semibold mb-0.5 text-[11px]">Courier / Transporter</label>
+                            <select
+                              value={courierName}
+                              onChange={(e) => setCourierName(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            >
+                              <option value="Delhivery">Delhivery</option>
+                              <option value="India Post / Speed Post">India Post / Speed Post</option>
+                              <option value="DTDC">DTDC Express</option>
+                              <option value="Blue Dart">Blue Dart</option>
+                              <option value="Trackon">Trackon Courier</option>
+                              <option value="Surface Transport">Surface Transport (Truck/Lorry)</option>
+                              <option value="Direct Handover">Direct Handover to School</option>
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-slate-500 font-semibold mb-0.5 text-[11px]">Docket / LR Number</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. 314257981 (optional)"
+                              value={trackingNumber}
+                              onChange={(e) => setTrackingNumber(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-500 font-semibold mb-0.5 text-[11px]">Boxes</label>
+                            <input
+                              type="text"
+                              placeholder="1"
+                              value={numberOfBoxes}
+                              onChange={(e) => setNumberOfBoxes(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                          <div className="col-span-1 sm:col-span-2">
+                            <label className="block text-slate-500 font-semibold mb-0.5 text-[11px]">Dispatch Date</label>
+                            <input
+                              type="date"
+                              value={dispatchDate}
+                              onChange={(e) => setDispatchDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div className="col-span-1 sm:col-span-2">
+                            <label className="block text-slate-500 font-semibold mb-0.5 text-[11px]">Expected Delivery</label>
+                            <input
+                              type="date"
+                              value={expectedDeliveryDate}
+                              onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-mono text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div className="col-span-2 sm:col-span-1" />
+                        </div>
+                        <div>
+                          <label className="block text-slate-500 font-semibold mb-0.5 text-[11px]">Logistics Notes / Hub Route</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Surface cargo routed via Siliguri Hub"
+                            value={dispatchRemarks}
+                            onChange={(e) => setDispatchRemarks(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2 pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddShipmentForm(false)}
+                            disabled={isSubmittingDispatch}
+                            className="px-4 py-2 text-slate-600 hover:text-slate-900 font-semibold disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddShipment(false)}
+                            disabled={isSubmittingDispatch}
+                            title="More boxes for this order are still to be sent later"
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shadow-sm disabled:opacity-50"
+                          >
+                            {isSubmittingDispatch ? 'Saving...' : 'Partially Dispatched'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddShipment(true)}
+                            disabled={isSubmittingDispatch}
+                            title="This is the last box for this order"
+                            className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-semibold rounded-lg shadow-sm disabled:opacity-50"
+                          >
+                            {isSubmittingDispatch ? 'Saving...' : 'Fully Dispatched'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {shipments.length > 0 && (
+                      <div className="space-y-3 pt-3 border-t border-slate-100">
+                        {shipments.map(s => {
+                          const cnDoc = documents.find(d => d.shipmentId === s.shipmentId && d.quickVaultCategory === 'cnCopy');
+                          const podDoc = documents.find(d => d.shipmentId === s.shipmentId && d.quickVaultCategory === 'podCopy');
+                          const deliveryOpen = shipmentDeliveryForm?.shipmentId === s.shipmentId;
+                          const delivered = s.deliveryStatusForShipment === 'Delivered';
+                          return (
+                            <div key={s.shipmentId} className="bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 space-y-2.5 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-900">
+                                  Shipment #{s.shipmentNo}{s.isFinal ? ' (Final)' : ''}
+                                </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${delivered ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                                  {delivered ? 'Delivered' : 'In Transit'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div>
+                                  <span className="text-slate-400 block text-[10px]">Courier</span>
+                                  <span className="font-semibold text-slate-800">{s.courierName}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px]">Docket</span>
+                                  <TrackingLink courierName={s.courierName} docketNumber={s.docketNumber} />
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px]">Boxes</span>
+                                  <span className="font-semibold text-slate-800">{s.numberOfBoxes}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 block text-[10px]">Dispatched</span>
+                                  <span className="font-mono text-slate-700">{s.dispatchDate}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-slate-500 font-semibold">CN / LR Copy:</span>
+                                {cnDoc ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewDoc({ url: cnDoc.fileUrl, title: `Shipment #${s.shipmentNo} - CN Copy`, fileName: cnDoc.fileName })}
+                                      className="text-purple-700 font-semibold hover:underline"
+                                    >
+                                      View
+                                    </button>
+                                    <label className="cursor-pointer text-slate-500 hover:text-purple-700">
+                                      Replace
+                                      <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'cnCopy', e)} />
+                                    </label>
+                                  </>
+                                ) : (
+                                  <label className="cursor-pointer text-purple-700 font-semibold hover:underline">
+                                    Upload
+                                    <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'cnCopy', e)} />
+                                  </label>
+                                )}
+                              </div>
+
+                              {/* POD file - independent of the delivery confirmation below,
+                                  same as CN above: can be uploaded any time, before, during
+                                  or after "Mark this shipment delivered" is actually clicked. */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-slate-500 font-semibold">Proof of Delivery:</span>
+                                {podDoc ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewDoc({ url: podDoc.fileUrl, title: `Shipment #${s.shipmentNo} - POD`, fileName: podDoc.fileName })}
+                                      className="text-emerald-700 font-semibold hover:underline"
+                                    >
+                                      View
+                                    </button>
+                                    <label className="cursor-pointer text-slate-500 hover:text-emerald-700">
+                                      Replace
+                                      <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'podCopy', e)} />
+                                    </label>
+                                  </>
+                                ) : (
+                                  <label className="cursor-pointer text-emerald-700 font-semibold hover:underline">
+                                    Upload
+                                    <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'podCopy', e)} />
+                                  </label>
+                                )}
+                              </div>
+
+                              {delivered ? (
+                                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700">
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span>
+                                    Delivered {s.deliveredDate}{s.receiverDesignation ? ` - ${s.receiverDesignation}` : ''}
+                                  </span>
+                                </div>
+                              ) : deliveryOpen ? (
+                                <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3 space-y-2">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-emerald-900 font-semibold mb-1">Delivered Date</label>
+                                      <input
+                                        type="date"
+                                        value={shipmentDeliveryForm.deliveryDate}
+                                        onChange={(e) => setShipmentDeliveryForm({ ...shipmentDeliveryForm, deliveryDate: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-300 font-mono text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-emerald-900 font-semibold mb-1">Receiver Designation</label>
+                                      <input
+                                        type="text"
+                                        value={shipmentDeliveryForm.receiverDesignation}
+                                        onChange={(e) => setShipmentDeliveryForm({ ...shipmentDeliveryForm, receiverDesignation: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-300 text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                      />
+                                    </div>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    placeholder="Delivery remarks / verification"
+                                    value={shipmentDeliveryForm.deliveryRemarks}
+                                    onChange={(e) => setShipmentDeliveryForm({ ...shipmentDeliveryForm, deliveryRemarks: e.target.value })}
+                                    className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-300 text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <button type="button" onClick={() => setShipmentDeliveryForm(null)} className="px-3 py-1.5 text-slate-600 hover:text-slate-900 font-semibold">
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleConfirmShipmentDelivery}
+                                      disabled={isSubmittingShipmentDelivery}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg disabled:opacity-50"
+                                    >
+                                      {isSubmittingShipmentDelivery ? 'Saving...' : 'Confirm Delivered'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenShipmentDelivery(s.shipmentId)}
+                                  className="text-emerald-700 font-semibold hover:underline"
+                                >
+                                  Mark this shipment delivered
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Update Dispatch Details (Admin / Dispatch role) - legacy,
+                  single-shipment orders only (already fully dispatched the
+                  older way, before this order ever had a shipments list).
+                  Kept exactly as it worked before, purely for correcting
+                  details on such an order. */}
+              {!isAgent && !(
+                (activeOrder.shipments && activeOrder.shipments.length > 0) ||
+                activeOrder.dispatchStatus === 'NOT_READY' ||
+                activeOrder.dispatchStatus === 'READY' ||
+                activeOrder.dispatchStatus === 'PARTIALLY_DISPATCHED'
+              ) && (
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                   <h3 className="font-semibold text-xs text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
                     Enter / Update Courier & Dispatch Details
@@ -2621,8 +3155,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </div>
               )}
 
-              {/* Record Delivery & POD (Admin Only) */}
-              {!isAgent && (
+              {/* Record Delivery & POD (Admin Only) - legacy, single-shipment
+                  orders only; see the matching note above the dispatch form. */}
+              {!isAgent && !(
+                (activeOrder.shipments && activeOrder.shipments.length > 0) ||
+                activeOrder.dispatchStatus === 'NOT_READY' ||
+                activeOrder.dispatchStatus === 'READY' ||
+                activeOrder.dispatchStatus === 'PARTIALLY_DISPATCHED'
+              ) && (
                 <div className="bg-emerald-50/60 p-5 rounded-xl border border-emerald-200 shadow-sm space-y-4">
                   <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
                     <h3 className="font-semibold text-xs text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">

@@ -282,6 +282,7 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
                             <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
                               order.dispatchStatus === 'DELIVERED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                               order.dispatchStatus === 'DISPATCHED' ? 'bg-sky-50 text-sky-800 border-sky-200' :
+                              order.dispatchStatus === 'PARTIALLY_DISPATCHED' ? 'bg-amber-50 text-amber-800 border-amber-200' :
                               order.dispatchStatus === 'IN_TRANSIT' ? 'bg-blue-50 text-blue-800 border-blue-200' :
                               'bg-slate-100 text-slate-600 border-slate-200'
                             }`}>

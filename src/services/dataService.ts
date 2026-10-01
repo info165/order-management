@@ -9,6 +9,7 @@ import {
   PaymentTransaction,
   DispatchRecord,
   DeliveryRecord,
+  ShipmentRecord,
   OrderDocument,
   NotificationItem,
   ActivityLog,
@@ -2121,6 +2122,269 @@ export async function markDelivered(
     entityType: 'ORDER',
     entityId: orderId,
     newValue: `Delivered on ${deliveryInput.deliveryDate}${deliveryInput.receiverDesignation ? ` (${deliveryInput.receiverDesignation})` : ''}`
+  });
+
+  return updatedOrder;
+}
+
+// ----------------------------------------------------
+// SHIPMENTS (one order sent out as several consignments)
+// ----------------------------------------------------
+// Records one shipment against an order - "Partially Dispatched" when more is
+// still to come, "Fully Dispatched" when this is the last one. Unlike
+// updateDispatch() (which this supersedes for new dispatch entries), this
+// keeps every shipment on record instead of overwriting the previous one, so
+// an order sent in 2 boxes on 2 different days never loses the first box's
+// paperwork. The top-level courier/docket/box-count/date fields are still
+// updated too (mirroring this latest shipment), so every existing screen
+// that shows "the" courier/docket for an order keeps working unchanged.
+export async function addShipment(
+  orderId: string,
+  input: {
+    courierName: string;
+    trackingNumber: string;
+    dispatchDate: string;
+    numberOfBoxes?: string | number;
+    expectedDeliveryDate?: string;
+    dispatchRemarks?: string;
+    // true = "Fully Dispatched" (nothing more to come for this order);
+    // false = "Partially Dispatched" (more shipments expected).
+    isFinal: boolean;
+  },
+  user: UserProfile
+): Promise<{ order: Order; shipment: ShipmentRecord }> {
+  if (user.role === 'AGENT') {
+    throw new Error('Partners cannot update dispatch records.');
+  }
+
+  const order = memoryOrders.find(o => o.orderId === orderId);
+  if (!order) throw new Error('Order not found');
+
+  if (order.dispatchStatus === 'DISPATCHED' || order.dispatchStatus === 'DELIVERED') {
+    throw new Error('This order has already been marked Fully Dispatched - no more shipments can be added. Review the shipments already recorded below.');
+  }
+
+  const now = new Date().toISOString();
+  const existingShipments = order.shipments || [];
+  const shipmentNo = existingShipments.length + 1;
+  const shipmentId = `${orderId}-SHP-${shipmentNo}`;
+
+  // Same dispatches-collection audit record addShipment()'s predecessor
+  // (updateDispatch) always wrote, now tagged with which shipment it is.
+  const dispatchRecord: DispatchRecord = {
+    dispatchId: `DSP-${Date.now()}`,
+    orderId,
+    dispatchDate: input.dispatchDate,
+    dispatchMode: input.courierName.toLowerCase().includes('post') ? 'India Post' : 'Courier',
+    courierName: input.courierName,
+    trackingNumber: input.trackingNumber,
+    numberOfBoxes: input.numberOfBoxes || '1',
+    deliveryTo: order.schoolName,
+    expectedDeliveryDate: input.expectedDeliveryDate,
+    dispatchRemarks: input.dispatchRemarks,
+    createdAt: now,
+    shipmentId
+  };
+  memoryDispatches = [dispatchRecord, ...memoryDispatches];
+  saveStorage(STORAGE_KEYS.DISPATCHES, memoryDispatches);
+  const dispatchSaved = await syncDocToFirestore('dispatches', dispatchRecord.dispatchId, dispatchRecord);
+  if (!dispatchSaved) {
+    memoryDispatches = memoryDispatches.filter(d => d.dispatchId !== dispatchRecord.dispatchId);
+    saveStorage(STORAGE_KEYS.DISPATCHES, memoryDispatches);
+    throw new Error('Could not save the dispatch record to the database. Nothing was changed - please check your connection and try again.');
+  }
+
+  const shipment: ShipmentRecord = {
+    shipmentId,
+    shipmentNo,
+    courierName: input.courierName,
+    docketNumber: input.trackingNumber,
+    numberOfBoxes: String(input.numberOfBoxes ?? '1'),
+    dispatchDate: input.dispatchDate,
+    dispatchRemarks: input.dispatchRemarks,
+    isFinal: input.isFinal,
+    deliveryStatusForShipment: 'In Transit',
+    createdAt: now,
+    createdBy: user.userId,
+    createdByName: user.name
+  };
+  const newShipments = [...existingShipments, shipment];
+  const newDispatchStatus: DispatchStatus = input.isFinal ? 'DISPATCHED' : 'PARTIALLY_DISPATCHED';
+
+  const updatedOrder = await updateOrder(
+    orderId,
+    {
+      shipments: newShipments,
+      dispatchStatus: newDispatchStatus,
+      // status mirrors dispatchStatus here (Partially/Fully Dispatched) so the
+      // master list's single Status column reflects it - this is the one
+      // place allowed to set it, since it's also updating dispatchStatus and
+      // the shipment list in the same write, so the two fields can never
+      // disagree the way a standalone manual edit could.
+      status: order.status === 'DELIVERED' ? 'DELIVERED' : newDispatchStatus,
+      deliveryStatus: 'In Transit',
+      courierName: input.courierName,
+      docketNumber: input.trackingNumber,
+      dispatchDate: input.dispatchDate,
+      numberOfBoxes: input.numberOfBoxes,
+      expectedDeliveryDate: input.expectedDeliveryDate
+    },
+    user
+  );
+
+  const timelineItem: OrderStatusHistoryItem = {
+    historyId: `HIST-${Date.now()}`,
+    orderId,
+    previousStatus: order.status,
+    newStatus: updatedOrder.status,
+    changedBy: user.userId,
+    changedByName: user.name,
+    changedAt: now,
+    comment: `${input.isFinal ? 'Fully' : 'Partially'} dispatched - Shipment #${shipmentNo} via ${input.courierName} (Docket: ${input.trackingNumber}), ${shipment.numberOfBoxes} box(es).${input.expectedDeliveryDate ? ` Expected delivery by ${input.expectedDeliveryDate}.` : ''}`,
+    visibleToAgent: true
+  };
+  await addTimelineEntry(timelineItem);
+
+  if (order.agentId) {
+    const agent = memoryAgents.find(a => a.agentId === order.agentId);
+    if (agent && agent.userId) {
+      await createNotification({
+        userId: agent.userId,
+        type: 'DISPATCH',
+        title: input.isFinal ? 'Material Fully Dispatched!' : 'Partial Shipment Dispatched',
+        message: `Order ${orderId} (${order.schoolName}) - Shipment #${shipmentNo} dispatched via ${input.courierName}. Tracking: ${input.trackingNumber}${input.isFinal ? '' : ' (more still to come)'}.`,
+        orderId
+      });
+    }
+  }
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'DISPATCH_UPDATED',
+    entityType: 'DISPATCH',
+    entityId: orderId,
+    newValue: `Shipment #${shipmentNo} (${input.isFinal ? 'final' : 'partial'}): ${input.courierName} tracking #${input.trackingNumber}`
+  });
+
+  // Inventory is only deducted once the order is FULLY dispatched - deducting
+  // on the first partial shipment would overstate stock leaving the building
+  // before everything has actually gone. The existing guard inside this
+  // function also prevents it running twice for the same order either way.
+  if (input.isFinal) {
+    try {
+      await deductInventoryForOrder(updatedOrder, user);
+    } catch (err) {
+      console.warn('Failed to deduct inventory on dispatch update:', err);
+    }
+  }
+
+  return { order: updatedOrder, shipment };
+}
+
+// Marks ONE shipment of a multi-shipment order as delivered (its own date,
+// receiver, remarks - independent of any other shipment on the same order).
+// Only marks the WHOLE order Delivered once every shipment is accounted for
+// AND no more are still to come (i.e. the final one was already sent).
+export async function addShipmentDelivery(
+  orderId: string,
+  shipmentId: string,
+  deliveryInput: {
+    deliveryDate: string;
+    receiverDesignation?: string;
+    deliveryRemarks?: string;
+  },
+  user: UserProfile
+): Promise<Order> {
+  if (user.role === 'AGENT') {
+    throw new Error('Partners cannot record delivery completions.');
+  }
+
+  const order = memoryOrders.find(o => o.orderId === orderId);
+  if (!order) throw new Error('Order not found');
+  const shipments = order.shipments || [];
+  const idx = shipments.findIndex(s => s.shipmentId === shipmentId);
+  if (idx === -1) throw new Error('Shipment not found on this order.');
+
+  const deliveryRecord: DeliveryRecord = {
+    deliveryId: `DEL-${Date.now()}`,
+    orderId,
+    deliveryDate: deliveryInput.deliveryDate,
+    receiverDesignation: deliveryInput.receiverDesignation,
+    deliveryRemarks: deliveryInput.deliveryRemarks,
+    createdAt: new Date().toISOString(),
+    shipmentId
+  };
+  memoryDeliveries = [deliveryRecord, ...memoryDeliveries];
+  saveStorage(STORAGE_KEYS.DELIVERIES, memoryDeliveries);
+  await syncDocToFirestoreOrThrow('deliveries', deliveryRecord.deliveryId, deliveryRecord);
+
+  const updatedShipments = [...shipments];
+  updatedShipments[idx] = {
+    ...updatedShipments[idx],
+    deliveryStatusForShipment: 'Delivered',
+    deliveredDate: deliveryInput.deliveryDate,
+    receiverDesignation: deliveryInput.receiverDesignation,
+    deliveryRemarks: deliveryInput.deliveryRemarks
+  };
+
+  // The whole order only becomes "Delivered" once every shipment is in and
+  // every one of them has been confirmed delivered - a partial shipment
+  // delivered early doesn't close the order while another is still in transit
+  // or still to be sent.
+  const allSent = order.dispatchStatus === 'DISPATCHED' || order.dispatchStatus === 'DELIVERED';
+  const allDelivered = updatedShipments.every(s => s.deliveryStatusForShipment === 'Delivered');
+  const orderNowComplete = allSent && allDelivered;
+
+  const updatedOrder = await updateOrder(
+    orderId,
+    orderNowComplete
+      ? {
+          shipments: updatedShipments,
+          deliveryStatus: 'Delivered',
+          dispatchStatus: 'DELIVERED',
+          status: 'DELIVERED',
+          actualDeliveryDate: deliveryInput.deliveryDate
+        }
+      : { shipments: updatedShipments },
+    user
+  );
+
+  const timelineItem: OrderStatusHistoryItem = {
+    historyId: `HIST-${Date.now()}`,
+    orderId,
+    previousStatus: order.status,
+    newStatus: updatedOrder.status,
+    changedBy: user.userId,
+    changedByName: user.name,
+    changedAt: new Date().toISOString(),
+    comment: `Shipment #${updatedShipments[idx].shipmentNo} delivered and confirmed received by ${deliveryInput.receiverDesignation || 'School Representative'}.${orderNowComplete ? ' All shipments now delivered - order marked Delivered.' : ' Other shipment(s) on this order are still pending.'}`,
+    visibleToAgent: true
+  };
+  await addTimelineEntry(timelineItem);
+
+  if (order.agentId) {
+    const agent = memoryAgents.find(a => a.agentId === order.agentId);
+    if (agent && agent.userId) {
+      await createNotification({
+        userId: agent.userId,
+        type: 'DELIVERY',
+        title: orderNowComplete ? 'Order Fully Delivered to School' : 'Partial Shipment Delivered',
+        message: orderNowComplete
+          ? `Order ${orderId} has been confirmed fully delivered at ${order.schoolName}.`
+          : `Order ${orderId} - Shipment #${updatedShipments[idx].shipmentNo} confirmed delivered at ${order.schoolName}. More shipment(s) still pending.`,
+        orderId
+      });
+    }
+  }
+
+  await writeActivityLog({
+    userId: user.userId,
+    userName: user.name,
+    action: 'ORDER_DELIVERED',
+    entityType: 'ORDER',
+    entityId: orderId,
+    newValue: `Shipment #${updatedShipments[idx].shipmentNo} delivered on ${deliveryInput.deliveryDate}${deliveryInput.receiverDesignation ? ` (${deliveryInput.receiverDesignation})` : ''}${orderNowComplete ? ' - order complete' : ''}`
   });
 
   return updatedOrder;

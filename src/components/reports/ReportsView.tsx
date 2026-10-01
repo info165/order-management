@@ -60,7 +60,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders, currentUser })
       map[c].count += 1;
       if (o.status === 'DELIVERED' || o.deliveryStatus === 'Delivered') {
         map[c].delivered += 1;
-      } else if (o.dispatchStatus === 'DISPATCHED') {
+      } else if (o.dispatchStatus === 'DISPATCHED' || o.dispatchStatus === 'PARTIALLY_DISPATCHED') {
         map[c].inTransit += 1;
       }
     });

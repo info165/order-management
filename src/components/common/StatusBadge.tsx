@@ -16,6 +16,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
     else if (status === 'IN_TRANSIT') label = 'IN TRANSIT';
     else if (status === 'INVOICE_GENERATED') label = 'INVOICED';
     else if (status === 'PARTIALLY_PAID') label = 'PARTIAL';
+    else if (status === 'PARTIALLY_DISPATCHED') label = 'PARTIAL DISPATCH';
   }
   let colorStyles = 'bg-slate-100 text-slate-700 border-slate-200';
 
@@ -35,6 +36,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
         break;
       case 'READY_FOR_DISPATCH':
         colorStyles = 'bg-cyan-50 text-cyan-800 border-cyan-200';
+        break;
+      case 'PARTIALLY_DISPATCHED':
+        colorStyles = 'bg-amber-50 text-amber-800 border-amber-300 font-semibold';
         break;
       case 'DISPATCHED':
         colorStyles = 'bg-purple-50 text-purple-700 border-purple-300 font-semibold animate-pulse';
@@ -88,6 +92,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
         break;
       case 'DISPATCHED':
         colorStyles = 'bg-purple-50 text-purple-700 border-purple-300 font-semibold animate-pulse';
+        break;
+      case 'PARTIALLY_DISPATCHED':
+        colorStyles = 'bg-amber-50 text-amber-800 border-amber-300 font-semibold';
         break;
       case 'IN_TRANSIT':
         colorStyles = 'bg-purple-50 text-purple-700 border-purple-200';

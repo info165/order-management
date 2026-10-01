@@ -130,7 +130,10 @@ export const OrderList: React.FC<OrderListProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterOverdueDelivery, setFilterOverdueDelivery] = useState(false);
   const [filterOverduePayment, setFilterOverduePayment] = useState(false);
-  const [selectedFY, setSelectedFY] = useState('ALL');
+  // Defaults to the current financial year, not "All", so opening the
+  // registry lands you on this year's orders rather than every year mixed
+  // together. "All FY" is still one click away in the dropdown.
+  const [selectedFY, setSelectedFY] = useState('2026-27');
 
   // Excel / Google Sheets Column Filters state
   const [colContractSearch, setColContractSearch] = useState('');
@@ -311,6 +314,7 @@ export const OrderList: React.FC<OrderListProps> = ({
     return [
       { value: 'NOT_READY', label: 'Not Ready' },
       { value: 'PACKED', label: 'Packed' },
+      { value: 'PARTIALLY_DISPATCHED', label: 'Partially Dispatched' },
       { value: 'DISPATCHED', label: 'Dispatched' },
       { value: 'DELIVERED', label: 'Delivered' }
     ].map(opt => ({ ...opt, count: counts.get(opt.value) || 0 }));
@@ -525,6 +529,14 @@ export const OrderList: React.FC<OrderListProps> = ({
     isAgent
   ]);
 
+  // The "of N" denominator for the orders-count badge: the total for whichever
+  // financial year is selected (so a year reads "48 of 48", not "48 of 246"
+  // against every year combined), or the grand total when no year is picked.
+  const fyScopedTotal = useMemo(
+    () => (selectedFY === 'ALL' ? orders.length : orders.filter(o => o.financialYear === selectedFY).length),
+    [orders, selectedFY]
+  );
+
   // Core Sorting Pipeline - Defaults strictly to SL. NO. ascending (1, 2, 3...)
   const sortedOrders = useMemo(() => {
     if (!sortConfig) {
@@ -738,7 +750,7 @@ export const OrderList: React.FC<OrderListProps> = ({
           <div className="flex items-center gap-2 justify-between md:justify-end flex-wrap">
             {/* Quick Metrics Badge */}
             <span className="text-xs font-mono font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 shrink-0">
-              {sortedOrders.length} of {orders.length} Orders
+              {sortedOrders.length} of {fyScopedTotal} Orders
             </span>
 
             {canCreateOrders && (
@@ -1682,6 +1694,19 @@ export const OrderList: React.FC<OrderListProps> = ({
                       >
                         <div className="flex items-center gap-1.5">
                           <TrackingLink courierName={order.courierName} docketNumber={order.docketNumber} compact />
+                          {/* Sent in more than one shipment - the link above already
+                              shows the LATEST docket; this flags how many earlier
+                              ones aren't shown here, with their details on hover. */}
+                          {order.shipments && order.shipments.length > 1 && (
+                            <span
+                              className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-1 py-0.5 rounded shrink-0"
+                              title={`${order.shipments.length} shipments sent for this order:\n${order.shipments
+                                .map(s => `#${s.shipmentNo}: ${s.courierName} - ${s.docketNumber || 'no docket'} (${s.numberOfBoxes || '1'} box)`)
+                                .join('\n')}`}
+                            >
+                              +{order.shipments.length - 1}
+                            </span>
+                          )}
                           <DispatchDocStatus cnUploaded={!!order.cnCopyUrl} podUploaded={!!order.podCopyUrl} />
                           {isDeliveryOverdue && (
                             <span className="text-[10px] text-rose-600 font-bold flex items-center gap-0.5 shrink-0" title="Delivery Overdue">
@@ -1748,7 +1773,7 @@ export const OrderList: React.FC<OrderListProps> = ({
               <span className="font-mono text-slate-950 font-bold bg-white px-2 py-0.5 rounded border border-slate-200">
                 {sortedOrders.length}
               </span>
-              <span>of {orders.length} total orders</span>
+              <span>of {fyScopedTotal} total orders</span>
             </div>
 
             {hasAnyFilterActive && (

@@ -118,6 +118,7 @@ export type OrderStatus =
   | 'PO_VERIFIED'
   | 'PROCESSING'
   | 'READY_FOR_DISPATCH'
+  | 'PARTIALLY_DISPATCHED'
   | 'DISPATCHED'
   | 'IN_TRANSIT'
   | 'DELIVERED'
@@ -136,9 +137,37 @@ export type PaymentStatus =
 export type DispatchStatus =
   | 'NOT_READY'
   | 'READY'
+  | 'PARTIALLY_DISPATCHED'
   | 'DISPATCHED'
   | 'IN_TRANSIT'
   | 'DELIVERED';
+
+// One consignment sent out for an order. An order can have several of these
+// (e.g. 2 boxes shipped separately) instead of needing a brand new order per
+// box - each keeps its own courier/docket/box-count and, once delivered, its
+// own delivery details. The actual CN and POD FILES for a shipment live in
+// the documents collection (tagged with this shipment's shipmentId), not
+// here - keeping this array as metadata-only is what keeps the order
+// document itself small no matter how many shipments it accumulates.
+export interface ShipmentRecord {
+  shipmentId: string;
+  shipmentNo: number;
+  courierName: string;
+  docketNumber: string;
+  numberOfBoxes: string;
+  dispatchDate: string;
+  dispatchRemarks?: string;
+  // true if this shipment was sent via "Fully Dispatched" (nothing more to
+  // come for this order); false if sent via "Partially Dispatched".
+  isFinal: boolean;
+  deliveryStatusForShipment: 'In Transit' | 'Delivered';
+  deliveredDate?: string;
+  receiverDesignation?: string;
+  deliveryRemarks?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByName: string;
+}
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
@@ -228,6 +257,13 @@ export interface Order {
   cnCopyFileName?: string;
   podCopyUrl?: string; // Proof of Delivery (POD) attachment
   podCopyFileName?: string;
+  // The fields above (courierName/docketNumber/cnCopyUrl/podCopyUrl/etc.)
+  // always mirror the LATEST shipment below, so every existing screen that
+  // shows "the" courier/docket for an order keeps working unchanged. This
+  // list is the full history - present only once an order has used the
+  // Partially/Fully Dispatched flow; absent (undefined) on every order
+  // dispatched the older, single-shipment way.
+  shipments?: ShipmentRecord[];
 
   // Invoice, E-Way Bill & Payments
   invoiceNumber?: string;
@@ -369,6 +405,9 @@ export interface DispatchRecord {
   dispatchRemarks?: string;
   dispatchDocumentUrl?: string;
   createdAt: string;
+  // Which shipment this is, for a multi-shipment order (see Order.shipments).
+  // Absent on single-shipment dispatches.
+  shipmentId?: string;
 }
 
 export interface DeliveryRecord {
@@ -380,6 +419,9 @@ export interface DeliveryRecord {
   deliveryRemarks?: string;
   proofOfDeliveryUrl?: string;
   createdAt: string;
+  // Which shipment this confirms delivery of, for a multi-shipment order
+  // (see Order.shipments). Absent on single-shipment deliveries.
+  shipmentId?: string;
 }
 
 export interface OrderDocument {
@@ -413,6 +455,12 @@ export interface OrderDocument {
   // tile (Documents tab / GeM Status tab) so deleting from either place
   // removes both the order's own field and this repository entry together.
   quickVaultCategory?: string;
+  // Ties a CN/POD upload to one specific shipment on a multi-shipment order
+  // (see Order.shipments), so each shipment's own documents can be shown
+  // separately instead of only ever showing "the" CN/POD for the order.
+  // Absent on documents uploaded the older, single-shipment way.
+  shipmentId?: string;
+  shipmentNo?: number;
 }
 
 export interface NotificationItem {
