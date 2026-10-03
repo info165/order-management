@@ -317,6 +317,10 @@ export function normalizeStockMovement(m: any): StockMovement {
 // demo records. Matching on an EXACT id/sku/code/reference is safe because a
 // real record would need to coincidentally have the identical value as one
 // of this fixed, hand-picked list - not just something similar.
+// Only used to keep stale demo records out of the browser's local cache. It must
+// never drive a Firestore delete: the app's own PO-number and opening-stock
+// generators produce values this matches (e.g. PO/FS/26-27/001), so deleting on
+// a match silently destroyed real records.
 export function isDummyInventoryRecord(type: 'material' | 'catalogue' | 'vendor' | 'po' | 'movement', item: any): boolean {
   if (!item) return false;
   if (type === 'material') {
@@ -388,26 +392,6 @@ saveStorage(STORAGE_KEYS.VENDORS, memoryVendors);
 saveStorage(STORAGE_KEYS.PURCHASE_ORDERS, memoryPurchaseOrders);
 saveStorage(STORAGE_KEYS.STOCK_MOVEMENTS, memoryStockMovements);
 
-// Background asynchronous cleanup of dummy demonstration docs from Firestore ONLY.
-// CRITICAL: The sales order collection and all sales records are NEVER touched!
-// Runs once per browser, not on every load: it deletes anything matching
-// isDummyInventoryRecord()'s heuristics, and repeating that on every visit
-// would keep deleting real inventory data that happens to match those
-// patterns (e.g. a real material named or coded similarly to a demo one)
-// for as long as this app is ever used.
-if (typeof window !== 'undefined' && localStorage.getItem('fs_dummy_inventory_purged_v3') !== 'true') {
-  setTimeout(() => {
-    purgeDummyInventoryTestData()
-      .then(() => {
-        try {
-          localStorage.setItem('fs_dummy_inventory_purged_v3', 'true');
-        } catch (_) {}
-      })
-      .catch(err => {
-        console.warn('Startup dummy purge note:', err);
-      });
-  }, 1000);
-}
 
 let memoryUsers: UserProfile[] = (loadStorage(STORAGE_KEYS.USERS, INITIAL_USERS) as UserProfile[]).filter(
   u => !deletedUserIds.includes(u.userId) && !deletedUserIds.includes(u.email.toLowerCase())
@@ -4614,10 +4598,6 @@ export function subscribeToRealtimeMaterials(onUpdate: (materials: Material[]) =
             firestoreDocId: docSnap.id,
             materialId: raw?.materialId || docSnap.id
           };
-          if (isDummyInventoryRecord('material', candidate)) {
-            deleteDoc(docSnap.ref).catch(() => {});
-            return;
-          }
           if (candidate.name || candidate.sku) {
             remote.push(normalizeMaterial(candidate));
           }
@@ -4651,10 +4631,6 @@ export function subscribeToRealtimeCatalogues(onUpdate: (catalogues: Catalogue[]
             firestoreDocId: docSnap.id,
             catalogueId: c?.catalogueId || docSnap.id
           };
-          if (isDummyInventoryRecord('catalogue', candidate)) {
-            deleteDoc(docSnap.ref).catch(() => {});
-            return;
-          }
           if (candidate.name || candidate.catalogueCode || candidate.code) {
             remote.push(candidate);
           }
@@ -4688,10 +4664,6 @@ export function subscribeToRealtimeVendors(onUpdate: (vendors: Vendor[]) => void
             firestoreDocId: docSnap.id,
             vendorId: v?.vendorId || docSnap.id
           };
-          if (isDummyInventoryRecord('vendor', candidate)) {
-            deleteDoc(docSnap.ref).catch(() => {});
-            return;
-          }
           if (candidate.vendorName || candidate.vendorCode) {
             remote.push(candidate);
           }
@@ -4725,10 +4697,6 @@ export function subscribeToRealtimePurchaseOrders(onUpdate: (pos: PurchaseOrder[
             firestoreDocId: docSnap.id,
             poId: po?.poId || docSnap.id
           };
-          if (isDummyInventoryRecord('po', candidate)) {
-            deleteDoc(docSnap.ref).catch(() => {});
-            return;
-          }
           if (candidate.poNumber || candidate.vendorName) {
             remote.push(candidate);
           }
@@ -4763,10 +4731,6 @@ export function subscribeToRealtimeStockMovements(onUpdate: (movements: StockMov
             firestoreDocId: docSnap.id,
             movementId: raw?.movementId || docSnap.id
           };
-          if (isDummyInventoryRecord('movement', candidate)) {
-            deleteDoc(docSnap.ref).catch(() => {});
-            return;
-          }
           if (candidate.materialName || candidate.materialId) {
             remote.push(normalizeStockMovement(candidate));
           }
@@ -4799,10 +4763,6 @@ export async function getMaterials(): Promise<Material[]> {
         firestoreDocId: d.id,
         materialId: raw?.materialId || d.id
       };
-      if (isDummyInventoryRecord('material', candidate)) {
-        deleteDoc(d.ref).catch(() => {});
-        return;
-      }
       if (candidate.name || candidate.sku) {
         remote.push(normalizeMaterial(candidate));
       }
@@ -4826,10 +4786,6 @@ export async function getCatalogues(): Promise<Catalogue[]> {
         firestoreDocId: d.id,
         catalogueId: c?.catalogueId || d.id
       };
-      if (isDummyInventoryRecord('catalogue', candidate)) {
-        deleteDoc(d.ref).catch(() => {});
-        return;
-      }
       if (candidate.name || candidate.catalogueCode || candidate.code) {
         remote.push(candidate);
       }
@@ -4853,10 +4809,6 @@ export async function getVendors(): Promise<Vendor[]> {
         firestoreDocId: d.id,
         vendorId: v?.vendorId || d.id
       };
-      if (isDummyInventoryRecord('vendor', candidate)) {
-        deleteDoc(d.ref).catch(() => {});
-        return;
-      }
       if (candidate.vendorName || candidate.vendorCode) {
         remote.push(candidate);
       }
@@ -4880,10 +4832,6 @@ export async function getPurchaseOrders(): Promise<PurchaseOrder[]> {
         firestoreDocId: d.id,
         poId: po?.poId || d.id
       };
-      if (isDummyInventoryRecord('po', candidate)) {
-        deleteDoc(d.ref).catch(() => {});
-        return;
-      }
       if (candidate.poNumber || candidate.vendorName) {
         remote.push(candidate);
       }
@@ -4908,10 +4856,6 @@ export async function getStockMovements(): Promise<StockMovement[]> {
         firestoreDocId: d.id,
         movementId: raw?.movementId || d.id
       };
-      if (isDummyInventoryRecord('movement', candidate)) {
-        deleteDoc(d.ref).catch(() => {});
-        return;
-      }
       if (candidate.materialName || candidate.materialId) {
         remote.push(normalizeStockMovement(candidate));
       }
