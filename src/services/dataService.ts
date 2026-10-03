@@ -54,6 +54,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromServer,
   getDoc,
   setDoc,
   updateDoc,
@@ -2525,6 +2526,22 @@ export async function addPayment(
   });
 
   return { payment: newPayment, order: updatedOrder };
+}
+
+// IDs of every order that has at least one payment with TDS actually deducted.
+// Read-only: it queries only TDS-bearing payment rows and touches neither the
+// local payment cache nor any stored data. Reads from the server only (a normal
+// read quietly returns an empty result when offline) and throws if it can't
+// connect, so the caller can keep what it already knew instead of treating a
+// network blip as "no order has TDS".
+export async function getOrderIdsWithTds(): Promise<Set<string>> {
+  const snap = await getDocsFromServer(query(collection(db, 'payments'), where('tdsAmount', '>', 0)));
+  const ids = new Set<string>();
+  snap.forEach(d => {
+    const p = d.data() as PaymentTransaction;
+    if (p && p.orderId && (p.tdsAmount || 0) > 0) ids.add(p.orderId);
+  });
+  return ids;
 }
 
 export async function getPaymentsForOrder(orderId: string): Promise<PaymentTransaction[]> {

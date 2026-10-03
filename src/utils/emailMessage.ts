@@ -1,5 +1,32 @@
 import type { Order } from '../types';
-import { buildMessage, type WhatsAppMessageKind } from './whatsappMessage';
+import {
+  buildMessage,
+  displayDate,
+  getAvailableMessageKinds,
+  WHATSAPP_MESSAGE_LABELS,
+  type WhatsAppMessageKind
+} from './whatsappMessage';
+
+// Email has one message the WhatsApp side doesn't, so it gets its own kind
+// type instead of widening WhatsAppMessageKind (which would add it to the
+// WhatsApp menu too).
+export type EmailMessageKind = WhatsAppMessageKind | 'tds';
+
+export const EMAIL_MESSAGE_LABELS: Record<EmailMessageKind, string> = {
+  ...WHATSAPP_MESSAGE_LABELS,
+  tds: 'TDS Payment'
+};
+
+// The WhatsApp availability rules, plus the TDS email once the order has a
+// payment with TDS deducted.
+export function getAvailableEmailKinds(
+  order: Pick<Order, 'status' | 'paymentStatus'>,
+  hasTds: boolean
+): EmailMessageKind[] {
+  const kinds: EmailMessageKind[] = getAvailableMessageKinds(order);
+  if (hasTds) kinds.push('tds');
+  return kinds;
+}
 
 // The mailbox each company's dispatch emails are sent FROM. An order's
 // `company` field decides which one. The site never sends anything itself:
@@ -42,8 +69,11 @@ const EMAIL_SUBJECT_TITLES: Record<WhatsAppMessageKind, string> = {
   paymentPending: 'Payment Update Requested'
 };
 
-export function buildEmailSubject(order: Order, kind: WhatsAppMessageKind = 'dispatched'): string {
+export function buildEmailSubject(order: Order, kind: EmailMessageKind = 'dispatched'): string {
   const contract = clean(order.contractNumber) || clean(order.orderNumber) || clean(order.purchaseOrderNumber);
+  if (kind === 'tds') {
+    return ['TDS Payment Request', contract ? `GeM Contract ${contract}` : ''].filter(Boolean).join(' - ');
+  }
   const company = clean(order.company).toUpperCase();
   return [company, EMAIL_SUBJECT_TITLES[kind], contract ? `GeM Contract ${contract}` : ''].filter(Boolean).join(' - ');
 }
@@ -51,8 +81,53 @@ export function buildEmailSubject(order: Order, kind: WhatsAppMessageKind = 'dis
 // Same text as the WhatsApp message of that type, minus WhatsApp's *bold*
 // markers (they'd show up as stray asterisks in an email) and with the
 // WhatsApp-only "contact us on this number" wording adjusted for email.
-export function buildEmailBody(order: Order, kind: WhatsAppMessageKind = 'dispatched'): string {
+export function buildEmailBody(order: Order, kind: EmailMessageKind = 'dispatched'): string {
+  if (kind === 'tds') return buildTdsEmailBody(order);
   return buildMessage(order, kind, { forEmail: true }).replace(/\*/g, '');
+}
+
+// Asks the school to deposit the TDS it deducted and send back the payment
+// details. A line whose detail isn't on the order is left out rather than
+// printed blank; the item lines follow the dispatch message's rules (a
+// quantity of 1 isn't shown, a single item isn't numbered).
+export function buildTdsEmailBody(order: Order): string {
+  const contract = clean(order.contractNumber) || clean(order.orderNumber) || clean(order.purchaseOrderNumber);
+  const school = clean(order.schoolName);
+  const deliveredOn = clean(order.actualDeliveryDate);
+
+  let itemLines = '';
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    const many = order.items.length > 1;
+    itemLines = order.items
+      .map((it, i) => {
+        const qty = Number(it.quantity);
+        const qtyText = qty > 1 ? ` – ${clean(it.quantity)} nos.` : '';
+        return `${many ? `${i + 1}. ` : ''}${clean(it.productName)}${qtyText}`;
+      })
+      .join('\n');
+  } else {
+    itemLines = clean(order.category);
+  }
+
+  const intro =
+    'This is regarding the order' +
+    (contract ? ` against GeM Contract No. ${contract}` : '') +
+    (deliveredOn ? ` delivered on ${displayDate(deliveredOn)}` : '') +
+    (school ? ` to ${school}` : '') +
+    '.';
+
+  const details: string[] = [];
+  if (school) details.push(`School: ${school}`);
+  if (contract) details.push(`GeM Contract No.: ${contract}`);
+  if (itemLines) details.push(`Items:\n${itemLines}`);
+  if (deliveredOn) details.push(`Delivery Date: ${displayDate(deliveredOn)}`);
+
+  const blocks: string[] = ['Dear Sir/Madam,', intro];
+  if (details.length) blocks.push(`Order details:\n${details.join('\n')}`);
+  blocks.push('We kindly request you to deposit the TDS amount in the bank at the earliest.');
+  blocks.push('Once deposited, please share the payment details with us for our records.');
+  blocks.push('Thank you.');
+  return blocks.join('\n\n');
 }
 
 export interface EmailAvailability {
@@ -69,7 +144,7 @@ export interface EmailAvailability {
 export function buildGmailComposeLink(
   order: Order,
   registryEmails: Array<string | null | undefined> = [],
-  kind: WhatsAppMessageKind = 'dispatched'
+  kind: EmailMessageKind = 'dispatched'
 ): EmailAvailability {
   const sender = getSenderMailbox(order);
   const to = collectSchoolEmails(...registryEmails, order.schoolEmail);

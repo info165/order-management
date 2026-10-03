@@ -1,8 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Mail } from 'lucide-react';
 import { Order } from '../../types';
-import { buildGmailComposeLink } from '../../utils/emailMessage';
-import { WHATSAPP_MESSAGE_LABELS, WhatsAppMessageKind, getAvailableMessageKinds } from '../../utils/whatsappMessage';
+import {
+  buildGmailComposeLink,
+  EMAIL_MESSAGE_LABELS,
+  EmailMessageKind,
+  getAvailableEmailKinds
+} from '../../utils/emailMessage';
 import { FloatingMenu } from './FloatingMenu';
 
 interface EmailButtonProps {
@@ -10,31 +14,36 @@ interface EmailButtonProps {
   // Email addresses from the school's School Registry record (preferred over
   // the older copy stored on the order).
   schoolEmails?: Array<string | null | undefined>;
+  // True when this order has a payment with TDS deducted, which is what
+  // unlocks the TDS email.
+  hasTds?: boolean;
 }
 
-const OPTION_HINTS: Record<WhatsAppMessageKind, string> = {
+const OPTION_HINTS: Record<EmailMessageKind, string> = {
   dispatched: 'Items, courier & docket details',
   delivered: 'Confirm the delivery was received',
-  paymentPending: 'Ask the school for a payment update'
+  paymentPending: 'Ask the school for a payment update',
+  tds: 'Ask the school to deposit the TDS & share details'
 };
 
-const OPTION_DOTS: Record<WhatsAppMessageKind, string> = {
+const OPTION_DOTS: Record<EmailMessageKind, string> = {
   dispatched: 'bg-sky-400',
   delivered: 'bg-emerald-400',
-  paymentPending: 'bg-amber-400'
+  paymentPending: 'bg-amber-400',
+  tds: 'bg-violet-400'
 };
 
 // Opens a small menu of email types (Dispatched / Delivered / Payment Pending
-// - only the ones that fit the order's current stage). Picking one opens a
+// / TDS Payment - only the ones that fit the order right now). Picking one opens a
 // Gmail compose window on the order's own company account, with the school's
 // address and that message ready to review. It only reads the order: it writes
 // nothing and never sends anything itself; a person presses Send in Gmail.
-export const EmailButton: React.FC<EmailButtonProps> = ({ order, schoolEmails }) => {
+export const EmailButton: React.FC<EmailButtonProps> = ({ order, schoolEmails, hasTds = false }) => {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const closeMenu = useCallback(() => setOpen(false), []);
 
-  const kinds = getAvailableMessageKinds(order);
+  const kinds = getAvailableEmailKinds(order, hasTds);
   // Sender / recipient / availability don't depend on which message is picked.
   const { link, sender, to, reason } = buildGmailComposeLink(order, schoolEmails, 'dispatched');
 
@@ -85,7 +94,7 @@ export const EmailButton: React.FC<EmailButtonProps> = ({ order, schoolEmails })
           >
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${OPTION_DOTS[kind]}`} />
             <span className="min-w-0">
-              <span className="block text-xs font-semibold text-white">{WHATSAPP_MESSAGE_LABELS[kind]}</span>
+              <span className="block text-xs font-semibold text-white">{EMAIL_MESSAGE_LABELS[kind]}</span>
               <span className="block text-[10px] leading-snug text-slate-400">{OPTION_HINTS[kind]}</span>
             </span>
           </a>

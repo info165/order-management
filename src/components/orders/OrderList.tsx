@@ -25,7 +25,7 @@ import { EmailButton } from '../common/EmailButton';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { toDateInputValue } from '../../utils/dateInput';
 import { exportOrdersToExcel } from '../../services/importExportService';
-import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder } from '../../services/dataService';
+import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder, getOrderIdsWithTds } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { CheckboxFilterDropdown } from './CheckboxFilterDropdown';
 import { useColumnResize } from './useColumnResize';
@@ -209,6 +209,24 @@ export const OrderList: React.FC<OrderListProps> = ({
     });
     return unsubscribe;
   }, [showCommissionPaidBadge]);
+
+  // Which orders have a payment with TDS deducted - unlocks the TDS email in
+  // each row's Email menu. Admin-only (the only role that sees that button).
+  // Re-read whenever any order is updated, since recording a payment updates
+  // its order; a failed read keeps the previous answer.
+  const [tdsOrderIds, setTdsOrderIds] = useState<Set<string>>(new Set());
+  const latestOrderUpdate = useMemo(
+    () => orders.reduce((latest, o) => (o.updatedAt && o.updatedAt > latest ? o.updatedAt : latest), ''),
+    [orders]
+  );
+  React.useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    getOrderIdsWithTds()
+      .then(ids => { if (!cancelled) setTdsOrderIds(ids); })
+      .catch(err => console.warn('Could not load TDS payments for the email menu:', err));
+    return () => { cancelled = true; };
+  }, [isAdmin, latestOrderUpdate]);
 
   const handleApplyBulkAgent = async () => {
     if (!bulkSelectedAgentId || selectedOrderIds.length === 0) return;
@@ -1744,16 +1762,20 @@ export const OrderList: React.FC<OrderListProps> = ({
                       >
                         <div className="flex items-center justify-end gap-1">
                           {isAdmin && (order.status === 'DISPATCHED' || order.status === 'DELIVERED') && (
-                            <>
-                              <WhatsAppButton
-                                order={order}
-                                schoolPhones={[schoolsById.get(order.schoolId)?.phone, schoolsById.get(order.schoolId)?.contactPhone]}
-                              />
-                              <EmailButton
-                                order={order}
-                                schoolEmails={[schoolsById.get(order.schoolId)?.email]}
-                              />
-                            </>
+                            <WhatsAppButton
+                              order={order}
+                              schoolPhones={[schoolsById.get(order.schoolId)?.phone, schoolsById.get(order.schoolId)?.contactPhone]}
+                            />
+                          )}
+                          {/* Closed orders are included here (and not for WhatsApp) because
+                              that's when TDS has typically been deducted; the button still
+                              hides itself when the order has no email type to offer. */}
+                          {isAdmin && (order.status === 'DISPATCHED' || order.status === 'DELIVERED' || order.status === 'CLOSED') && (
+                            <EmailButton
+                              order={order}
+                              schoolEmails={[schoolsById.get(order.schoolId)?.email]}
+                              hasTds={tdsOrderIds.has(order.orderId)}
+                            />
                           )}
                         </div>
                       </td>

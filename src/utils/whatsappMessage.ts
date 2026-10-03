@@ -29,7 +29,7 @@ export function pickWhatsAppNumber(...candidates: Array<string | null | undefine
 }
 
 // Dispatch dates are stored in mixed formats; show them day-first.
-function displayDate(raw?: string | null): string {
+export function displayDate(raw?: string | null): string {
   const iso = toDateInputValue(raw);
   if (!iso) return (raw || '').trim();
   const [y, m, d] = iso.split('-');
