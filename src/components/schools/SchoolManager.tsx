@@ -17,6 +17,7 @@ import { School, Order, UserProfile } from '../../types';
 import { createSchool, updateSchool, subscribeToRealtimeSchools } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
+import { buildSchoolContactUpdates } from '../../utils/schoolContactUpdate';
 
 interface SchoolManagerProps {
   orders: Order[];
@@ -39,6 +40,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editTan, setEditTan] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [isSavingContact, setIsSavingContact] = useState(false);
   const [contactSaveError, setContactSaveError] = useState<string | null>(null);
 
@@ -144,6 +146,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
     setEditPhone(selectedSchool.contactPhone || '');
     setEditAddress(selectedSchool.address || '');
     setEditTan(selectedSchool.tan || '');
+    setEditEmail(selectedSchool.email || '');
     setContactSaveError(null);
     setIsEditingContact(true);
   };
@@ -155,19 +158,20 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
 
   const handleSaveContact = async () => {
     if (!selectedSchool) return;
+    const { updates, error } = buildSchoolContactUpdates(selectedSchool, {
+      phone: editPhone,
+      address: editAddress,
+      tan: editTan,
+      email: editEmail
+    });
+    if (error) {
+      setContactSaveError(error);
+      return;
+    }
     setIsSavingContact(true);
     setContactSaveError(null);
     try {
-      await updateSchool(
-        selectedSchool.schoolId,
-        {
-          contactPhone: editPhone.trim(),
-          phone: editPhone.trim(),
-          address: editAddress.trim(),
-          tan: editTan.trim().toUpperCase()
-        },
-        currentUser
-      );
+      await updateSchool(selectedSchool.schoolId, updates, currentUser);
       // No local setSchools() needed - subscribeToRealtimeSchools() picks
       // this up live the moment it lands in Firestore.
       setIsEditingContact(false);
@@ -443,6 +447,18 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                       </div>
                       <div>
                         <label className="block text-slate-500 font-semibold mb-1 text-[11px]">
+                          Email ID <span className="text-slate-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. principal@school.edu.in"
+                          value={editEmail}
+                          onChange={(e) => setEditEmail(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-500 font-semibold mb-1 text-[11px]">
                           TAN Number <span className="text-slate-400 font-normal">(optional)</span>
                         </label>
                         <input
@@ -491,10 +507,16 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
                           {selectedSchool.address || 'Not Provided'}
                         </span>
                       </div>
-                      <div className="sm:col-span-2">
+                      <div>
                         <span className="text-slate-400 block text-[11px]">TAN Number</span>
                         <span className="font-mono text-slate-700 block mt-0.5">
                           {selectedSchool.tan || 'Not Provided'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Email ID</span>
+                        <span className="text-slate-700 block mt-0.5 break-all">
+                          {selectedSchool.email || 'Not Provided'}
                         </span>
                       </div>
                     </div>
