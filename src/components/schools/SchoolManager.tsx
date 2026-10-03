@@ -33,6 +33,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   const [selectedState, setSelectedState] = useState('ALL');
   const [phoneFilter, setPhoneFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
   const [addressFilter, setAddressFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
+  const [emailFilter, setEmailFilter] = useState<'ALL' | 'PROVIDED' | 'NOT_PROVIDED'>('ALL');
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(null);
 
   // Inline Phone/Address edit for the selected school
@@ -78,6 +79,7 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
 
   const hasPhone = (s: School) => !!(s.contactPhone && s.contactPhone.trim());
   const hasAddress = (s: School) => !!(s.address && s.address.trim());
+  const hasEmail = (s: School) => !!(s.email && s.email.trim());
 
   // Filtered by search/type/state only - used to compute live availability
   // counts (phone, address) that reflect the other active filters, same
@@ -114,15 +116,23 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
   );
   const addressMissingCount = schoolsBeforeAvailabilityFilters.length - addressProvidedCount;
 
+  const emailProvidedCount = useMemo(
+    () => schoolsBeforeAvailabilityFilters.filter(hasEmail).length,
+    [schoolsBeforeAvailabilityFilters]
+  );
+  const emailMissingCount = schoolsBeforeAvailabilityFilters.length - emailProvidedCount;
+
   const filteredSchools = useMemo(() => {
     return schoolsBeforeAvailabilityFilters.filter(s => {
       if (phoneFilter === 'PROVIDED' && !hasPhone(s)) return false;
       if (phoneFilter === 'NOT_PROVIDED' && hasPhone(s)) return false;
       if (addressFilter === 'PROVIDED' && !hasAddress(s)) return false;
       if (addressFilter === 'NOT_PROVIDED' && hasAddress(s)) return false;
+      if (emailFilter === 'PROVIDED' && !hasEmail(s)) return false;
+      if (emailFilter === 'NOT_PROVIDED' && hasEmail(s)) return false;
       return true;
     });
-  }, [schoolsBeforeAvailabilityFilters, phoneFilter, addressFilter]);
+  }, [schoolsBeforeAvailabilityFilters, phoneFilter, addressFilter, emailFilter]);
 
   // Orders for currently selected school
   const schoolOrders = useMemo(() => {
@@ -310,6 +320,16 @@ export const SchoolManager: React.FC<SchoolManagerProps> = ({ orders, currentUse
               <option value="ALL">All Address Status ({schoolsBeforeAvailabilityFilters.length})</option>
               <option value="PROVIDED">Address Provided ({addressProvidedCount})</option>
               <option value="NOT_PROVIDED">Address Not Provided ({addressMissingCount})</option>
+            </select>
+
+            <select
+              value={emailFilter}
+              onChange={(e) => setEmailFilter(e.target.value as 'ALL' | 'PROVIDED' | 'NOT_PROVIDED')}
+              className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-slate-700 text-[11px]"
+            >
+              <option value="ALL">All Email Status ({schoolsBeforeAvailabilityFilters.length})</option>
+              <option value="PROVIDED">Email Provided ({emailProvidedCount})</option>
+              <option value="NOT_PROVIDED">Email Not Provided ({emailMissingCount})</option>
             </select>
           </div>
 
