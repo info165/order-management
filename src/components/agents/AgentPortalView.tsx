@@ -14,11 +14,19 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  PackageCheck
+  PackageCheck,
+  CalendarDays
 } from 'lucide-react';
 import { Order, UserProfile, School } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { TrackingLink } from '../common/TrackingLink';
+import { StatusBadge } from '../common/StatusBadge';
+import {
+  countByFinancialYear,
+  filterByFinancialYear,
+  latestFinancialYear,
+  listFinancialYears
+} from '../../utils/financialYearFilter';
 
 interface AgentPortalViewProps {
   orders: Order[];
@@ -46,10 +54,27 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
     });
   }, [orders, currentUser]);
 
-  // If for some reason the agent has zero orders (e.g. newly registered), provide a clear empty state
-  const totalBookedValue = agentOrders.reduce((sum, o) => sum + (o.orderValue || 0), 0);
-  const totalCollected = agentOrders.reduce((sum, o) => sum + (o.amountReceived || 0), 0);
-  const totalPending = agentOrders.reduce((sum, o) => sum + (o.amountPending ?? Math.max(0, (o.orderValue || 0) - (o.amountReceived || 0))), 0);
+  // Financial-year view. Until the partner picks a year it follows the newest
+  // year they have orders in (so it opens on the current year, like the main
+  // registry, without a year being hard-coded); 'ALL' shows every year.
+  const [fyChoice, setFyChoice] = useState<string | null>(null);
+  const fyYears = useMemo(() => listFinancialYears(agentOrders), [agentOrders]);
+  const fyCounts = useMemo(() => countByFinancialYear(agentOrders), [agentOrders]);
+  const selectedFY = fyChoice ?? latestFinancialYear(agentOrders);
+  const yearOrders = useMemo(() => filterByFinancialYear(agentOrders, selectedFY), [agentOrders, selectedFY]);
+
+  // Cancelled orders stay in the list (marked cancelled) but, like the Orders
+  // Registry, nothing was actually bought, so they don't count toward the cards.
+  // Recomputed live off each order's current status.
+  const countedOrders = useMemo(() => yearOrders.filter(o => o.status !== 'CANCELLED'), [yearOrders]);
+  const cancelledInView = yearOrders.length - countedOrders.length;
+  const schoolsInView = useMemo(() => new Set(countedOrders.map(o => o.schoolName)).size, [countedOrders]);
+
+  // If for some reason the agent has zero orders (e.g. newly registered), provide a clear empty state.
+  // The summary cards follow the selected financial year.
+  const totalBookedValue = countedOrders.reduce((sum, o) => sum + (o.orderValue || 0), 0);
+  const totalCollected = countedOrders.reduce((sum, o) => sum + (o.amountReceived || 0), 0);
+  const totalPending = countedOrders.reduce((sum, o) => sum + (o.amountPending ?? Math.max(0, (o.orderValue || 0) - (o.amountReceived || 0))), 0);
 
   // Schools unique to this agent
   const mySchools = useMemo(() => {
@@ -75,7 +100,7 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
 
   // Filtered orders for table
   const displayOrders = useMemo(() => {
-    return agentOrders.filter(o => {
+    return yearOrders.filter(o => {
       const matchStatus = statusFilter === 'ALL' || o.orderStatus === statusFilter;
       const cleanQ = searchQuery.toLowerCase();
       const matchSearch =
@@ -85,7 +110,7 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
         (o.category && o.category.toLowerCase().includes(cleanQ));
       return matchStatus && matchSearch;
     });
-  }, [agentOrders, statusFilter, searchQuery]);
+  }, [yearOrders, statusFilter, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -96,10 +121,15 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
             <span className="font-semibold uppercase tracking-wider text-[10px]">My Regional Orders</span>
             <FileText className="w-4 h-4 text-amber-600" />
           </div>
-          <div className="text-2xl font-black text-slate-900">{agentOrders.length}</div>
+          <div className="text-2xl font-black text-slate-900">{countedOrders.length}</div>
           <div className="text-[11px] text-slate-500">
-            Across {mySchools.length} institutional schools
+            Across {schoolsInView} institutional schools
           </div>
+          {cancelledInView > 0 && (
+            <div className="text-[10px] font-medium text-rose-600">
+              {cancelledInView} cancelled · not counted
+            </div>
+          )}
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-1">
@@ -163,7 +193,7 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
                   : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              Territory Orders ({agentOrders.length})
+              Territory Orders ({yearOrders.length})
             </button>
             <button
               type="button"
@@ -186,6 +216,49 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
         {/* TAB 1: TERRITORY ORDERS */}
         {activeTab === 'orders' && (
           <div>
+            {/* Financial year: one segment per year the partner has orders in, with
+                how many, plus "All FY". The cards above and the list below follow it. */}
+            <div className="px-4 pt-4 pb-3 border-b border-slate-100 bg-white flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-slate-400 text-xs font-semibold flex items-center gap-1">
+                <CalendarDays className="w-3.5 h-3.5" /> Financial Year:
+              </span>
+              <div
+                role="tablist"
+                aria-label="Financial year"
+                className="inline-flex items-center gap-0.5 rounded-xl bg-slate-100 p-1 ring-1 ring-slate-200/70"
+              >
+                {[
+                  ...fyYears.map(y => ({ id: y, label: y, count: fyCounts[y] || 0 })),
+                  { id: 'ALL', label: 'All FY', count: agentOrders.length }
+                ].map(opt => {
+                  const active = selectedFY === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setFyChoice(opt.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        active
+                          ? 'bg-white text-amber-900 shadow-sm ring-1 ring-amber-300/70'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                          active ? 'bg-amber-500/15 text-amber-800' : 'bg-slate-200/80 text-slate-500'
+                        }`}
+                      >
+                        {opt.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Search & Status Filters */}
             <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3 bg-white">
               <div className="relative w-full md:w-80">
@@ -279,15 +352,22 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
 
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
-                              order.dispatchStatus === 'DELIVERED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                              order.dispatchStatus === 'DISPATCHED' ? 'bg-sky-50 text-sky-800 border-sky-200' :
-                              order.dispatchStatus === 'PARTIALLY_DISPATCHED' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                              order.dispatchStatus === 'IN_TRANSIT' ? 'bg-blue-50 text-blue-800 border-blue-200' :
-                              'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}>
-                              {order.dispatchStatus || 'PENDING'}
-                            </span>
+                            {/* A cancelled order is only marked cancelled on its main status, so
+                                its dispatch status still reads NOT_READY - show it as cancelled
+                                here instead, like the Orders Registry does. */}
+                            {order.status === 'CANCELLED' ? (
+                              <StatusBadge status="CANCELLED" type="order" compact />
+                            ) : (
+                              <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+                                order.dispatchStatus === 'DELIVERED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                                order.dispatchStatus === 'DISPATCHED' ? 'bg-sky-50 text-sky-800 border-sky-200' :
+                                order.dispatchStatus === 'PARTIALLY_DISPATCHED' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                                order.dispatchStatus === 'IN_TRANSIT' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                'bg-slate-100 text-slate-600 border-slate-200'
+                              }`}>
+                                {order.dispatchStatus || 'PENDING'}
+                              </span>
+                            )}
                           </div>
                           {order.docketNumber && (
                             <div className="mt-1 flex items-center gap-1.5">
@@ -299,17 +379,23 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
 
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
-                              order.paymentStatus === 'PAID' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                              order.paymentStatus === 'PARTIALLY_PAID' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                              'bg-rose-50 text-rose-800 border-rose-200'
-                            }`}>
-                              {order.paymentStatus === 'PAID' ? 'RECEIVED' : order.paymentStatus === 'PARTIALLY_PAID' ? 'PARTIAL' : 'PENDING'}
-                            </span>
+                            {order.status === 'CANCELLED' ? (
+                              <StatusBadge status="CANCELLED" type="payment" compact />
+                            ) : (
+                              <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+                                order.paymentStatus === 'PAID' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                                order.paymentStatus === 'PARTIALLY_PAID' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                                'bg-rose-50 text-rose-800 border-rose-200'
+                              }`}>
+                                {order.paymentStatus === 'PAID' ? 'RECEIVED' : order.paymentStatus === 'PARTIALLY_PAID' ? 'PARTIAL' : 'PENDING'}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                            Rec: ₹{(order.amountReceived || 0).toLocaleString('en-IN')}
-                          </div>
+                          {order.status !== 'CANCELLED' && (
+                            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                              Rec: ₹{(order.amountReceived || 0).toLocaleString('en-IN')}
+                            </div>
+                          )}
                         </td>
 
                         <td className="px-4 py-3 text-center">
