@@ -561,7 +561,7 @@ export const VendorMaster: React.FC<Props> = ({
                     return (
                       <label
                         key={m.materialId}
-                        className="flex items-center gap-2 text-xs text-slate-800 dark:text-slate-200 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-750 p-1.5 rounded-lg"
+                        className="flex items-center gap-2 text-xs text-slate-800 dark:text-slate-200 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 rounded-lg"
                       >
                         <input
                           type="checkbox"

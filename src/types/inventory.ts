@@ -34,6 +34,7 @@ export interface BOMItem {
   quantity?: number;        // Required units per parent unit
   quantityPerCatalogue?: number; // Alias for quantity
   unitCostOverride?: number;
+  imageUrl?: string;        // Specific image or provision preview for this BOM item
   subComponents?: BOMItem[];// Hierarchical nested sub-materials/components
   subItems?: BOMItem[];     // Alias for subComponents
 }
@@ -49,6 +50,11 @@ export interface Catalogue {
   salesOrderPkgKeywords?: string[];
   standardPrice?: number;
   totalBomCost?: number;
+  imageUrl?: string;        // Catalogue package / kit hero photo
+  pdfUrl?: string;          // Uploaded PDF catalogue/brochure/datasheet URL or Base64
+  pdfFileName?: string;     // PDF original file name
+  pdfFileSize?: number;     // PDF file size in bytes
+  pdfUploadedAt?: string;   // Timestamp when PDF was attached
   items: BOMItem[];         // Hierarchical Bill of Materials
   bomItems?: BOMItem[];     // Alias for items
   isCustomCatalogue?: boolean; // Marked as bespoke / custom catalogue
