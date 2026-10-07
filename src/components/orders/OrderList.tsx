@@ -28,6 +28,14 @@ import { exportOrdersToExcel } from '../../services/importExportService';
 import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder, getOrderIdsWithTds } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { CheckboxFilterDropdown } from './CheckboxFilterDropdown';
+import {
+  agentOptionsFrom,
+  categoryOptionsFrom,
+  companyOptionsFrom,
+  keepSelectedVisible,
+  schoolOptionsFrom
+} from '../../utils/orderFilterOptions';
+import { orderPassesFilters, type FilterColumn, type OrderFilterState } from '../../utils/orderFiltering';
 import { useColumnResize } from './useColumnResize';
 import { OrderProcurementBadge } from '../inventory/OrderProcurementBadge';
 import { CombinedPaymentModal } from './CombinedPaymentModal';
@@ -255,62 +263,66 @@ export const OrderList: React.FC<OrderListProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Options lists for multi-select popovers
-  const schoolOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    orders.forEach(o => {
-      if (o.schoolName) {
-        counts.set(o.schoolName, (counts.get(o.schoolName) || 0) + 1);
-      }
-    });
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({ value: name, label: name, count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [orders]);
+  // Options lists for multi-select popovers - a filter inside a filter. Each
+  // list is built from the orders that pass EVERY other active filter (search
+  // box, financial year, overdue buttons, and the ticks in the other columns),
+  // leaving out only its own column's ticks so a second value can still be
+  // ticked. Counts are within that set too. A value that is already ticked but
+  // has no matching orders stays listed (count 0) so it can be unticked.
+  const filterState = useMemo<OrderFilterState>(() => ({
+    searchQuery,
+    selectedFY,
+    overdueDelivery: filterOverdueDelivery,
+    overduePayment: filterOverduePayment,
+    todayStr,
+    contractSearch: colContractSearch,
+    schools: colSelectedSchools,
+    categories: colSelectedCategories,
+    agents: colSelectedAgents,
+    companies: colSelectedCompanies,
+    statuses: colSelectedStatuses,
+    dispatchStatuses: colSelectedDispatchStatuses,
+    paymentStatuses: colSelectedPaymentStatuses,
+    valueFilter: colValueFilter,
+    isAgentView: isAgent
+  }), [
+    searchQuery, selectedFY, filterOverdueDelivery, filterOverduePayment, todayStr, colContractSearch,
+    colSelectedSchools, colSelectedCategories, colSelectedAgents, colSelectedCompanies,
+    colSelectedStatuses, colSelectedDispatchStatuses, colSelectedPaymentStatuses, colValueFilter, isAgent
+  ]);
+  const scopeFor = (column: FilterColumn) => orders.filter(o => orderPassesFilters(o, filterState, column));
+  const schoolScope = useMemo(() => scopeFor('school'), [orders, filterState]);
+  const categoryScope = useMemo(() => scopeFor('category'), [orders, filterState]);
+  const agentScope = useMemo(() => scopeFor('agent'), [orders, filterState]);
+  const companyScope = useMemo(() => scopeFor('company'), [orders, filterState]);
+  const statusScope = useMemo(() => scopeFor('status'), [orders, filterState]);
+  const dispatchScope = useMemo(() => scopeFor('dispatch'), [orders, filterState]);
+  const paymentScope = useMemo(() => scopeFor('payment'), [orders, filterState]);
+  const partnerNames = useMemo(() => new Map(agentOptionsFrom(orders).map(o => [o.value, o.label])), [orders]);
 
-  const categoryOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    orders.forEach(o => {
-      if (o.category) {
-        counts.set(o.category, (counts.get(o.category) || 0) + 1);
-      }
-    });
-    return Array.from(counts.entries())
-      .map(([name, count]) => ({ value: name, label: name, count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [orders]);
+  const schoolOptions = useMemo(
+    () => keepSelectedVisible(schoolOptionsFrom(schoolScope), colSelectedSchools),
+    [schoolScope, colSelectedSchools]
+  );
 
-  const agentOptions = useMemo(() => {
-    const counts = new Map<string, { name: string; count: number }>();
-    orders.forEach(o => {
-      const id = o.agentId || 'AGT-DIRECT';
-      const name = o.agentName || 'In-House / Direct';
-      const existing = counts.get(id);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        counts.set(id, { name, count: 1 });
-      }
-    });
-    return Array.from(counts.entries())
-      .map(([id, info]) => ({ value: id, label: info.name, count: info.count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [orders]);
+  const categoryOptions = useMemo(
+    () => keepSelectedVisible(categoryOptionsFrom(categoryScope), colSelectedCategories),
+    [categoryScope, colSelectedCategories]
+  );
 
-  const companyOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    orders.forEach(o => {
-      const comp = o.company || 'FIPL';
-      counts.set(comp, (counts.get(comp) || 0) + 1);
-    });
-    return Array.from(counts.entries())
-      .map(([comp, count]) => ({ value: comp, label: comp, count }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [orders]);
+  const agentOptions = useMemo(
+    () => keepSelectedVisible(agentOptionsFrom(agentScope), colSelectedAgents, id => partnerNames.get(id) || id),
+    [agentScope, colSelectedAgents, partnerNames]
+  );
+
+  const companyOptions = useMemo(
+    () => keepSelectedVisible(companyOptionsFrom(companyScope), colSelectedCompanies),
+    [companyScope, colSelectedCompanies]
+  );
 
   const statusOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    orders.forEach(o => {
+    statusScope.forEach(o => {
       counts.set(o.status, (counts.get(o.status) || 0) + 1);
     });
     return [
@@ -322,11 +334,11 @@ export const OrderList: React.FC<OrderListProps> = ({
       { value: 'CLOSED', label: 'Closed' },
       { value: 'CANCELLED', label: 'Cancelled' }
     ].map(opt => ({ ...opt, count: counts.get(opt.value) || 0 }));
-  }, [orders]);
+  }, [statusScope]);
 
   const dispatchOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    orders.forEach(o => {
+    dispatchScope.forEach(o => {
       counts.set(o.dispatchStatus, (counts.get(o.dispatchStatus) || 0) + 1);
     });
     return [
@@ -336,11 +348,11 @@ export const OrderList: React.FC<OrderListProps> = ({
       { value: 'DISPATCHED', label: 'Dispatched' },
       { value: 'DELIVERED', label: 'Delivered' }
     ].map(opt => ({ ...opt, count: counts.get(opt.value) || 0 }));
-  }, [orders]);
+  }, [dispatchScope]);
 
   const paymentOptions = useMemo(() => {
     const counts = new Map<string, number>();
-    orders.forEach(o => {
+    paymentScope.forEach(o => {
       counts.set(o.paymentStatus, (counts.get(o.paymentStatus) || 0) + 1);
     });
     return [
@@ -349,7 +361,7 @@ export const OrderList: React.FC<OrderListProps> = ({
       { value: 'PAYMENT_PENDING', label: 'Payment Pending' },
       { value: 'INVOICE_GENERATED', label: 'Invoice Generated' }
     ].map(opt => ({ ...opt, count: counts.get(opt.value) || 0 }));
-  }, [orders]);
+  }, [paymentScope]);
 
   // Handle Sort Toggles - Always defaults to SL. NO. ascending
   const handleSort = (columnKey: string) => {
