@@ -65,7 +65,8 @@ import {
   limit,
   onSnapshot,
   writeBatch,
-  deleteField
+  deleteField,
+  runTransaction
 } from 'firebase/firestore';
 
 // In-memory runtime storage with localStorage backup for resilient and instantaneous user experience
@@ -722,6 +723,41 @@ async function syncDocToFirestoreOrThrow(collectionName: string, docId: string, 
   }
 }
 
+// Creates a document ONLY if nothing exists at that id yet, as one atomic step on
+// the database's side. Two people (or two browsers) racing for the same id can
+// never both win: the loser is told the id is taken, along with the record that
+// holds it. Unlike the merge write used elsewhere, this can never overwrite an
+// existing document. Throws if the database can't be reached or refuses the write.
+async function createDocIfAbsent(
+  collectionName: string,
+  docId: string,
+  data: any
+): Promise<{ created: boolean; existing?: any }> {
+  const ref = doc(db, collectionName, docId);
+  const cleaned = cleanFirestorePayload(data);
+  return runTransaction(db, async tx => {
+    const snap = await tx.get(ref);
+    if (snap.exists()) return { created: false, existing: snap.data() };
+    tx.set(ref, cleaned);
+    return { created: true };
+  });
+}
+
+// The highest order serial number the DATABASE has right now - not this browser's
+// copy, which can be stale or just the built-in seed list. Throws if unreachable.
+async function getLiveMaxOrderSerial(): Promise<number> {
+  const snap = await getDocsFromServer(query(collection(db, 'orders'), orderBy('serialNumber', 'desc'), limit(1)));
+  if (snap.empty) return 0;
+  const n = Number((snap.docs[0].data() as any).serialNumber);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Every school id the DATABASE has right now. Throws if unreachable.
+async function getLiveSchoolIds(): Promise<string[]> {
+  const snap = await getDocsFromServer(collection(db, 'schools'));
+  return snap.docs.map(d => d.id);
+}
+
 export async function deleteDocFromFirestore(collectionName: string, docId: string): Promise<boolean> {
   try {
     await deleteDoc(doc(db, collectionName, docId));
@@ -1073,30 +1109,38 @@ export async function createOrder(
     throw new Error('Partners cannot create orders directly. Please contact operations.');
   }
 
-  // Calculate highest existing serial number reliably
-  const maxSerial = memoryOrders.reduce((max, o) => {
+  const idPrefix = memorySettings.orderIdPrefix || 'ORD-2026';
+
+  // Highest serial number this browser knows about...
+  const cacheMaxSerial = memoryOrders.reduce((max, o) => {
     const num = typeof o.serialNumber === 'number' ? o.serialNumber : parseInt(String(o.serialNumber), 10);
     return Math.max(max, isNaN(num) ? 0 : num);
   }, 0);
-  const serialNumber = maxSerial + 1;
 
-  const currentCount = memoryOrders.length + 1;
-  const orderIdNumber = Math.max(currentCount, serialNumber);
-  let orderId = `${memorySettings.orderIdPrefix || 'ORD-2026'}-${String(orderIdNumber).padStart(5, '0')}`;
-  let collisionCounter = 1;
-  while (memoryOrders.some(o => o.orderId === orderId)) {
-    orderId = `${memorySettings.orderIdPrefix || 'ORD-2026'}-${String(orderIdNumber + collisionCounter).padStart(5, '0')}`;
-    collisionCounter++;
+  // ...and the highest the DATABASE has right now. This browser's copy can be
+  // old, or just the built-in seed list: on 8 Sept 2026 four orders created
+  // that way all got ORD-2026-00123 and overwrote each other. So the live value
+  // is asked for and the larger one wins. If the database can't be reached,
+  // nothing is created rather than guessing a number.
+  let liveMaxSerial: number;
+  try {
+    liveMaxSerial = await getLiveMaxOrderSerial();
+  } catch (err) {
+    console.warn('Could not read the latest order number from the database:', err);
+    throw new Error('Could not check the database for the next free order number, so nothing was created. Please check your connection and try again.');
   }
+
+  let serialNumber = Math.max(cacheMaxSerial, liveMaxSerial) + 1;
+  let orderIdNumber = Math.max(memoryOrders.length + 1, serialNumber);
 
   const now = new Date().toISOString();
   const finalVal = orderInput.orderValue || 0;
   const isPaid = orderInput.paymentStatus === 'PAID';
 
-  const newOrder: Order = {
+  const buildOrder = (id: string, serial: number): Order => ({
     ...orderInput,
-    serialNumber,
-    orderId,
+    serialNumber: serial,
+    orderId: id,
     orderValue: finalVal,
     taxAmount: 0,
     grossOrderValue: finalVal,
@@ -1109,16 +1153,60 @@ export async function createOrder(
     createdByName: user.name,
     isArchived: false,
     isDeleted: false
-  };
-
-  // Maintain ascending order of serialNumber and persist immediately
-  memoryOrders = [...memoryOrders, newOrder].sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
-  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
-
-  // Sync to Firestore in background without blocking order creation
-  syncDocToFirestore('orders', orderId, newOrder).catch(err => {
-    console.warn(`Firestore sync note for ${orderId}:`, err);
   });
+
+  // Claim the number on the database itself, in one atomic step that can never
+  // overwrite an existing order. If someone else (another browser, creating at
+  // the same moment) already holds it, move on to the next free number.
+  const MAX_ORDER_ID_ATTEMPTS = 25;
+  const idFor = (n: number) => `${idPrefix}-${String(n).padStart(5, '0')}`;
+  let newOrder: Order | null = null;
+  // From here on the id number and the serial number always move together, so
+  // every order this creates has serial == id number; ids are unique (claimed
+  // atomically below), so serials are too.
+  for (let attempt = 0; attempt < MAX_ORDER_ID_ATTEMPTS && !newOrder; attempt++) {
+    // Another call in this same browser may have finished meanwhile (two orders
+    // submitted back to back): stay above everything it now holds, and skip
+    // numbers it already knows are taken without a database call.
+    for (const o of memoryOrders) {
+      const s = Number(o.serialNumber);
+      if (Number.isFinite(s) && s >= serialNumber) serialNumber = s + 1;
+    }
+    orderIdNumber = Math.max(orderIdNumber, serialNumber);
+    while (memoryOrders.some(o => o.orderId === idFor(orderIdNumber))) orderIdNumber++;
+    serialNumber = Math.max(serialNumber, orderIdNumber);
+    const candidate = buildOrder(idFor(orderIdNumber), serialNumber);
+    let claim: Awaited<ReturnType<typeof createDocIfAbsent>>;
+    try {
+      claim = await createDocIfAbsent('orders', candidate.orderId, candidate);
+    } catch (err) {
+      console.warn(`Could not save new order ${candidate.orderId} to the database:`, err);
+      throw new Error(
+        (err as any)?.code === 'permission-denied'
+          ? 'You do not have permission to create orders.'
+          : 'Could not save the new order to the database, so nothing was created. Please check your connection and try again.'
+      );
+    }
+    if (claim.created) {
+      newOrder = candidate;
+    } else {
+      // Taken. Try the next number, keeping our serial above the one that holds it.
+      const theirSerial = Number(claim.existing?.serialNumber);
+      if (Number.isFinite(theirSerial)) serialNumber = Math.max(serialNumber, theirSerial + 1);
+      orderIdNumber = Math.max(orderIdNumber + 1, serialNumber);
+      serialNumber = Math.max(serialNumber, orderIdNumber);
+    }
+  }
+  if (!newOrder) {
+    throw new Error('Could not find a free order number after several tries, so nothing was created. Please try again.');
+  }
+  const orderId = newOrder.orderId;
+
+  // Reflect it locally. The live listener can deliver this very order before we
+  // get here, so replace rather than add - it must never appear twice.
+  memoryOrders = [...memoryOrders.filter(o => o.orderId !== orderId), newOrder]
+    .sort((a, b) => (a.serialNumber || 0) - (b.serialNumber || 0));
+  saveStorage(STORAGE_KEYS.ORDERS, memoryOrders);
 
   // Initial timeline entry
   const timelineItem: OrderStatusHistoryItem = {
@@ -3466,31 +3554,61 @@ export async function createSchool(schoolInput: Omit<School, 'schoolId' | 'creat
   // that count could - and did - collide with a real existing schoolId,
   // silently overwriting it via the merge write below. Same collision-loop
   // fix already applied to createOrder()'s orderId generation.
-  const existingIds = new Set(memorySchools.map(s => s.schoolId));
-  const maxNumericId = memorySchools.reduce((max, s) => {
-    const match = /^SCH-(\d+)$/.exec(s.schoolId);
+  //
+  // That check only knew this browser's own list, which can be old or just the
+  // built-in seed list, so the DATABASE's current ids are read and merged in,
+  // and the id is then claimed atomically - two people adding schools at the
+  // same moment can never both get it, and an existing school is never
+  // overwritten. If the database can't be reached the school is not added.
+  let liveIds: string[];
+  try {
+    liveIds = await getLiveSchoolIds();
+  } catch (err) {
+    console.warn('Could not read the school ids from the database:', err);
+    throw new Error('Could not check the database for the next free school number, so the school was not added. Please check your connection and try again.');
+  }
+  const existingIds = new Set([...memorySchools.map(s => s.schoolId), ...liveIds]);
+  const maxNumericId = Array.from(existingIds).reduce((max, id) => {
+    const match = /^SCH-(\d+)$/.exec(id);
     return match ? Math.max(max, parseInt(match[1], 10)) : max;
   }, 0);
-  let schoolId = `SCH-${String(maxNumericId + 1).padStart(3, '0')}`;
-  let collisionCounter = 1;
-  while (existingIds.has(schoolId)) {
-    schoolId = `SCH-${String(maxNumericId + 1 + collisionCounter).padStart(3, '0')}`;
-    collisionCounter++;
-  }
   const now = new Date().toISOString();
-  const newSchool: School = {
-    ...schoolInput,
-    schoolId,
-    createdAt: now,
-    updatedAt: now
-  };
-  memorySchools = [newSchool, ...memorySchools];
-  saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
-  try {
-    await syncDocToFirestore('schools', schoolId, newSchool);
-  } catch (err) {
-    console.warn(`Firestore sync note for school ${schoolId}:`, err);
+  const MAX_SCHOOL_ID_ATTEMPTS = 25;
+  let nextNumber = maxNumericId + 1;
+  let newSchool: School | null = null;
+  for (let attempt = 0; attempt < MAX_SCHOOL_ID_ATTEMPTS && !newSchool; attempt++) {
+    while (existingIds.has(`SCH-${String(nextNumber).padStart(3, '0')}`)) nextNumber++;
+    const candidate: School = {
+      ...schoolInput,
+      schoolId: `SCH-${String(nextNumber).padStart(3, '0')}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    let claim: Awaited<ReturnType<typeof createDocIfAbsent>>;
+    try {
+      claim = await createDocIfAbsent('schools', candidate.schoolId, candidate);
+    } catch (err) {
+      console.warn(`Could not save new school ${candidate.schoolId} to the database:`, err);
+      throw new Error(
+        (err as any)?.code === 'permission-denied'
+          ? 'You do not have permission to add schools.'
+          : 'Could not save the new school to the database, so it was not added. Please check your connection and try again.'
+      );
+    }
+    if (claim.created) {
+      newSchool = candidate;
+    } else {
+      existingIds.add(candidate.schoolId);
+      nextNumber++;
+    }
   }
+  if (!newSchool) {
+    throw new Error('Could not find a free school number after several tries, so the school was not added. Please try again.');
+  }
+  const schoolId = newSchool.schoolId;
+  // The live listener can deliver this school before we get here - replace, never duplicate.
+  memorySchools = [newSchool, ...memorySchools.filter(s => s.schoolId !== schoolId)];
+  saveStorage(STORAGE_KEYS.SCHOOLS, memorySchools);
 
   await writeActivityLog({
     userId: user.userId,
