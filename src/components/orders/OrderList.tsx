@@ -28,6 +28,8 @@ import { exportOrdersToExcel } from '../../services/importExportService';
 import { getAgents, bulkUpdateOrderAgent, subscribeToRealtimeCommissionPayments, isCommissionPaymentPaid, subscribeToRealtimeSchools, softDeleteOrder, getOrderIdsWithTds } from '../../services/dataService';
 import { ColumnFilterPopover, NumericFilterValue } from './ColumnFilterPopover';
 import { CheckboxFilterDropdown } from './CheckboxFilterDropdown';
+import { SchoolCommissionPanel } from '../admin/SchoolCommissionPanel';
+import type { CommissionPayment } from '../../types';
 import {
   agentOptionsFrom,
   categoryOptionsFrom,
@@ -206,6 +208,8 @@ export const OrderList: React.FC<OrderListProps> = ({
   // flattening every record's orderIds into one lookup set rather than
   // assuming a 1:1 relationship.
   const [commissionPaidOrderIds, setCommissionPaidOrderIds] = useState<Set<string>>(new Set());
+  // The same records in full, for the per-school "commission paid" panel.
+  const [commissionPayments, setCommissionPayments] = useState<CommissionPayment[]>([]);
   React.useEffect(() => {
     if (!showCommissionPaidBadge) return;
     const unsubscribe = subscribeToRealtimeCommissionPayments((payments) => {
@@ -214,6 +218,7 @@ export const OrderList: React.FC<OrderListProps> = ({
       // payment should mark an order with the "CB" badge.
       payments.filter(isCommissionPaymentPaid).forEach(p => p.orderIds.forEach(oid => ids.add(oid)));
       setCommissionPaidOrderIds(ids);
+      setCommissionPayments(payments);
     });
     return unsubscribe;
   }, [showCommissionPaidBadge]);
@@ -641,6 +646,16 @@ export const OrderList: React.FC<OrderListProps> = ({
     });
   }, [filteredOrders, sortConfig]);
 
+  // The one school the list is narrowed to (every visible row is that school's),
+  // for the CB page's commission panel; null when the rows span several schools
+  // or there are none.
+  const singleSchoolInView = useMemo(() => {
+    if (!showCommissionPaidBadge || filteredOrders.length === 0) return null;
+    const first = filteredOrders[0];
+    const sameSchool = filteredOrders.every(o => (o.schoolId || '') === (first.schoolId || '') && o.schoolName === first.schoolName);
+    return sameSchool ? { schoolId: first.schoolId, schoolName: first.schoolName } : null;
+  }, [showCommissionPaidBadge, filteredOrders]);
+
   // Calculated Metrics for Spreadsheet Status Bar
   const totalDisplayValue = useMemo(() => {
     // Cancelled orders show "CANCELLED" instead of a value in their own row
@@ -1052,6 +1067,14 @@ export const OrderList: React.FC<OrderListProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {singleSchoolInView && (
+        <SchoolCommissionPanel
+          payments={commissionPayments}
+          schoolId={singleSchoolInView.schoolId}
+          schoolName={singleSchoolInView.schoolName}
+        />
       )}
 
       {/* Main Continuous Spreadsheet Viewport with Sticky Header & Resizable Columns */}
