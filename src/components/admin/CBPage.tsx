@@ -102,6 +102,7 @@ export const CBPage: React.FC<CBPageProps> = ({
               onClick: (selectedOrderIds) => setCommissionOrderIds(selectedOrderIds)
             }}
             showCommissionPaidBadge
+            showCommissionPanel
             requireSchoolSelection
             freezeCheckboxColumn
           />

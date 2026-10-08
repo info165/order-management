@@ -91,6 +91,10 @@ interface OrderListProps {
   // opt-in only, so it stays invisible (and doesn't even subscribe to
   // commissionPayments) everywhere else.
   showCommissionPaidBadge?: boolean;
+  // The per-school "commission paid" panel above the table. Separate from the
+  // badge switch because the main Orders Registry turns the badge on for the
+  // Super Admin too - the panel belongs on the /cb page only.
+  showCommissionPanel?: boolean;
   // getDisplaySerialNo() needs the FULL, unfiltered order list to compute a
   // real SL. NO. - every other OrderList caller already passes that as
   // `orders` itself, but the CB page pre-filters `orders` down to just one
@@ -123,6 +127,7 @@ export const OrderList: React.FC<OrderListProps> = ({
   initialFilterCategory,
   extraBulkAction,
   showCommissionPaidBadge,
+  showCommissionPanel,
   allOrders,
   requireSchoolSelection,
   freezeCheckboxColumn
@@ -650,11 +655,11 @@ export const OrderList: React.FC<OrderListProps> = ({
   // for the CB page's commission panel; null when the rows span several schools
   // or there are none.
   const singleSchoolInView = useMemo(() => {
-    if (!showCommissionPaidBadge || filteredOrders.length === 0) return null;
+    if (!showCommissionPaidBadge || !showCommissionPanel || filteredOrders.length === 0) return null;
     const first = filteredOrders[0];
     const sameSchool = filteredOrders.every(o => (o.schoolId || '') === (first.schoolId || '') && o.schoolName === first.schoolName);
     return sameSchool ? { schoolId: first.schoolId, schoolName: first.schoolName } : null;
-  }, [showCommissionPaidBadge, filteredOrders]);
+  }, [showCommissionPaidBadge, showCommissionPanel, filteredOrders]);
 
   // Calculated Metrics for Spreadsheet Status Bar
   const totalDisplayValue = useMemo(() => {
@@ -1067,14 +1072,6 @@ export const OrderList: React.FC<OrderListProps> = ({
             </button>
           </div>
         </div>
-      )}
-
-      {singleSchoolInView && (
-        <SchoolCommissionPanel
-          payments={commissionPayments}
-          schoolId={singleSchoolInView.schoolId}
-          schoolName={singleSchoolInView.schoolName}
-        />
       )}
 
       {/* Main Continuous Spreadsheet Viewport with Sticky Header & Resizable Columns */}
@@ -1865,6 +1862,16 @@ export const OrderList: React.FC<OrderListProps> = ({
           </div>
         </div>
       </div>
+
+      {/* CB page only: the school's commission payments, under the order table */}
+      {singleSchoolInView && (
+        <SchoolCommissionPanel
+          payments={commissionPayments}
+          schoolId={singleSchoolInView.schoolId}
+          schoolName={singleSchoolInView.schoolName}
+          orders={allOrders ?? orders}
+        />
+      )}
 
       {/* Bulk Delete Confirmation Modal (admins only) */}
       {showCombinedPayment && isAdmin && selectedOrdersForDelete.length >= 2 && (
