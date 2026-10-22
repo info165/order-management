@@ -1225,8 +1225,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Modal Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-start justify-between gap-4 border-b border-slate-800 shrink-0">
+        {/* Modal Header - desktop/tablet only; completely unchanged. The
+            premium mobile-only version below replaces it under sm, reusing
+            every one of the same fields and the same onClose prop. */}
+        <div className="hidden sm:flex px-6 py-4 bg-slate-900 text-white items-start justify-between gap-4 border-b border-slate-800 shrink-0">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-base font-bold text-amber-400">
@@ -1258,6 +1260,60 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Modal Header - premium mobile-only version. Same fields as the
+            desktop header above (order no, contract number, FY, order type,
+            school name/type, the 3 status badges, the same onClose prop) -
+            just laid out for a narrow screen instead of one crowded
+            flex-wrap row: a top line for the order number and close button,
+            a pill row for contract/FY/type, the school name on its own
+            full-width line with its type as a plain subtitle underneath,
+            and the status badges in their own row beneath that. The subtle
+            gradient background and amber top highlight line match the
+            premium dark-card styling already used on the CB page elsewhere
+            in this app, for visual consistency. */}
+        <div className="sm:hidden relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-900 text-white border-b border-slate-800 shrink-0">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+          <div className="relative px-4 pt-2.5 pb-2.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-sm font-bold text-amber-400 truncate">
+                {displaySerialNo ? `Order No - ${displaySerialNo}` : order.orderId}
+              </span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1 -mr-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono border border-white/10">
+                {activeOrder.orderNumber}
+              </span>
+              <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono border border-white/10">
+                FY {activeOrder.financialYear}
+              </span>
+              <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300 font-mono border border-white/10">
+                {activeOrder.orderType}
+              </span>
+            </div>
+
+            <div>
+              <h2 className="text-sm font-bold text-white tracking-tight leading-snug break-words">
+                {activeOrder.schoolName}
+              </h2>
+              <span className="text-[10.5px] font-normal text-slate-400">{activeOrder.schoolType}</span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <StatusBadge status={activeOrder.status} type="order" />
+              <StatusBadge status={activeOrder.status === 'CANCELLED' ? 'CANCELLED' : activeOrder.paymentStatus} type="payment" />
+              <StatusBadge status={activeOrder.dispatchStatus} type="dispatch" />
+            </div>
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -1406,6 +1462,84 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   </div>
                 );
               })()}
+
+              {/* Mobile-only quick download links for Tax Invoice and GeM
+                  Portal Invoice, right under Amount Pending. Purely a
+                  read-only shortcut to the exact same two files already
+                  uploaded via their own tiles further down this screen
+                  (companyInvoiceUrl / gemInvoiceUrl, same state this modal
+                  already holds) - no new field, no new write, nothing
+                  uploaded from here, just a download link when a file
+                  exists and a plain "Not uploaded" row when it doesn't.
+                  Each document's row is independent of the other's state. */}
+              <div className="sm:hidden bg-gradient-to-br from-white to-slate-50/60 rounded-2xl border border-slate-200/80 shadow-sm p-4 space-y-2.5">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Download Documents</span>
+                </div>
+
+                {companyInvoiceUrl ? (
+                  <a
+                    href={companyInvoiceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={companyInvoiceFileName || 'Tax_Invoice.pdf'}
+                    className="group flex items-center gap-3 px-3.5 py-3 rounded-xl bg-gradient-to-r from-emerald-50 via-emerald-50 to-emerald-100/60 border border-emerald-200 shadow-sm active:scale-[0.98] transition-transform"
+                  >
+                    <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-600 text-white shadow-sm shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-emerald-900 truncate">Tax Invoice</span>
+                      <span className="block text-[10.5px] text-emerald-700/80 font-semibold">Tap to download</span>
+                    </span>
+                    <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white text-emerald-700 shadow-xs shrink-0">
+                      <Download className="w-3.5 h-3.5" />
+                    </span>
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50/70 border border-dashed border-slate-300">
+                    <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-200/70 text-slate-400 shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-slate-500 truncate">Tax Invoice</span>
+                      <span className="block text-[10.5px] text-slate-400 font-semibold">Not uploaded yet</span>
+                    </span>
+                  </div>
+                )}
+
+                {gemInvoiceUrl ? (
+                  <a
+                    href={gemInvoiceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={gemInvoiceFileName || 'GeM_Invoice.pdf'}
+                    className="group flex items-center gap-3 px-3.5 py-3 rounded-xl bg-gradient-to-r from-emerald-50 via-emerald-50 to-emerald-100/60 border border-emerald-200 shadow-sm active:scale-[0.98] transition-transform"
+                  >
+                    <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-600 text-white shadow-sm shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-emerald-900 truncate">GeM Portal Invoice</span>
+                      <span className="block text-[10.5px] text-emerald-700/80 font-semibold">Tap to download</span>
+                    </span>
+                    <span className="flex items-center justify-center w-7 h-7 rounded-full bg-white text-emerald-700 shadow-xs shrink-0">
+                      <Download className="w-3.5 h-3.5" />
+                    </span>
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-slate-50/70 border border-dashed border-slate-300">
+                    <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-200/70 text-slate-400 shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-slate-500 truncate">GeM Portal Invoice</span>
+                      <span className="block text-[10.5px] text-slate-400 font-semibold">Not uploaded yet</span>
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Catalogue & BOM Material Readiness Card - commented out for
                   everyone for now: with no Catalogue/BOM data set up yet, it
@@ -2816,55 +2950,103 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-slate-500 font-semibold">CN / LR Copy:</span>
-                                {cnDoc ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewDoc({ url: cnDoc.fileUrl, title: `Shipment #${s.shipmentNo} - CN Copy`, fileName: cnDoc.fileName })}
-                                      className="text-purple-700 font-semibold hover:underline"
-                                    >
-                                      View
-                                    </button>
-                                    <label className="cursor-pointer text-slate-500 hover:text-purple-700">
-                                      Replace
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {/* CN / LR Copy tile - same visual pattern as the order-level
+                                    Proof of Delivery tile above, scoped to this one shipment.
+                                    Reuses the exact same cnDoc lookup, preview handler and
+                                    upload handler as before; only the markup changed. */}
+                                <div className={`p-2.5 rounded-lg border transition-colors ${cnDoc ? 'bg-purple-50/60 border-purple-200' : 'bg-white border-slate-200'}`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-slate-700">CN / LR Copy</span>
+                                    {cnDoc ? (
+                                      <span className="text-[9.5px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                                    ) : (
+                                      <span className="text-[9.5px] text-slate-400">Pending</span>
+                                    )}
+                                  </div>
+                                  {cnDoc && (
+                                    <p className="text-[10.5px] text-slate-500 mb-1.5 truncate" title={cnDoc.fileName}>
+                                      {cnDoc.fileName}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {cnDoc && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewDoc({ url: cnDoc.fileUrl, title: `Shipment #${s.shipmentNo} - CN Copy`, fileName: cnDoc.fileName })}
+                                          className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10.5px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                                        >
+                                          <Eye className="w-3 h-3 text-purple-700" />
+                                          <span>Preview</span>
+                                        </button>
+                                        <a
+                                          href={cnDoc.fileUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          download={cnDoc.fileName}
+                                          className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10.5px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                                        >
+                                          <Download className="w-3 h-3 text-slate-600" />
+                                          <span>Download</span>
+                                        </a>
+                                      </>
+                                    )}
+                                    <label className="cursor-pointer px-2 py-0.5 bg-purple-700 hover:bg-purple-800 text-white rounded text-[10.5px] font-semibold flex items-center gap-1 transition-colors">
+                                      <UploadCloud className="w-3 h-3" />
+                                      <span>{cnDoc ? 'Replace' : 'Upload'}</span>
                                       <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'cnCopy', e)} />
                                     </label>
-                                  </>
-                                ) : (
-                                  <label className="cursor-pointer text-purple-700 font-semibold hover:underline">
-                                    Upload
-                                    <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'cnCopy', e)} />
-                                  </label>
-                                )}
-                              </div>
+                                  </div>
+                                </div>
 
-                              {/* POD file - independent of the delivery confirmation below,
-                                  same as CN above: can be uploaded any time, before, during
-                                  or after "Mark this shipment delivered" is actually clicked. */}
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-slate-500 font-semibold">Proof of Delivery:</span>
-                                {podDoc ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewDoc({ url: podDoc.fileUrl, title: `Shipment #${s.shipmentNo} - POD`, fileName: podDoc.fileName })}
-                                      className="text-emerald-700 font-semibold hover:underline"
-                                    >
-                                      View
-                                    </button>
-                                    <label className="cursor-pointer text-slate-500 hover:text-emerald-700">
-                                      Replace
+                                {/* POD file - independent of the delivery confirmation below,
+                                    same as CN above: can be uploaded any time, before, during
+                                    or after "Mark this shipment delivered" is actually clicked. */}
+                                <div className={`p-2.5 rounded-lg border transition-colors ${podDoc ? 'bg-emerald-50/60 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold text-slate-700">Proof of Delivery</span>
+                                    {podDoc ? (
+                                      <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Uploaded</span>
+                                    ) : (
+                                      <span className="text-[9.5px] text-slate-400">Pending</span>
+                                    )}
+                                  </div>
+                                  {podDoc && (
+                                    <p className="text-[10.5px] text-slate-500 mb-1.5 truncate" title={podDoc.fileName}>
+                                      {podDoc.fileName}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {podDoc && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewDoc({ url: podDoc.fileUrl, title: `Shipment #${s.shipmentNo} - POD`, fileName: podDoc.fileName })}
+                                          className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10.5px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                                        >
+                                          <Eye className="w-3 h-3 text-emerald-700" />
+                                          <span>Preview</span>
+                                        </button>
+                                        <a
+                                          href={podDoc.fileUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          download={podDoc.fileName}
+                                          className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[10.5px] font-semibold text-slate-800 flex items-center gap-1 transition-colors"
+                                        >
+                                          <Download className="w-3 h-3 text-slate-600" />
+                                          <span>Download</span>
+                                        </a>
+                                      </>
+                                    )}
+                                    <label className="cursor-pointer px-2 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[10.5px] font-semibold flex items-center gap-1 transition-colors">
+                                      <UploadCloud className="w-3 h-3" />
+                                      <span>{podDoc ? 'Replace' : 'Upload'}</span>
                                       <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'podCopy', e)} />
                                     </label>
-                                  </>
-                                ) : (
-                                  <label className="cursor-pointer text-emerald-700 font-semibold hover:underline">
-                                    Upload
-                                    <input type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => handleShipmentFileUpload(s.shipmentId, s.shipmentNo, 'podCopy', e)} />
-                                  </label>
-                                )}
+                                  </div>
+                                </div>
                               </div>
 
                               {delivered ? (
