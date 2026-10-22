@@ -15,7 +15,8 @@ import {
   Clock,
   AlertCircle,
   PackageCheck,
-  CalendarDays
+  CalendarDays,
+  Tag
 } from 'lucide-react';
 import { Order, UserProfile, School } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -114,8 +115,9 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Agent KPI Metrics (the partner's own identity card sits at the right end of this row) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+      {/* Agent KPI Metrics (the partner's own identity card sits at the right end of this row).
+          Desktop/tablet only - the compact mobile version below replaces it. */}
+      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-slate-500">
             <span className="font-semibold uppercase tracking-wider text-[10px]">My Regional Orders</span>
@@ -180,6 +182,59 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
         </div>
       </div>
 
+      {/* Compact mobile-only KPI tiles - same 4 pieces of information (order
+          count/schools, booked value, collected/pending, partner identity)
+          as the desktop cards above, just in a tighter 2x2 grid with
+          smaller padding and fewer secondary lines, since this stacked
+          grid of full-size cards was taking up a lot of vertical space on
+          a phone. Reuses the exact same values, nothing recomputed. */}
+      <div className="sm:hidden grid grid-cols-2 gap-2 text-xs">
+        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="font-semibold uppercase tracking-wide text-[9px]">Orders</span>
+            <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          </div>
+          <div className="text-lg font-black text-slate-900 leading-tight">{countedOrders.length}</div>
+          <div className="text-[9.5px] text-slate-500 truncate">{schoolsInView} schools</div>
+        </div>
+
+        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="font-semibold uppercase tracking-wide text-[9px]">Booked</span>
+            <TrendingUp className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+          </div>
+          <div className="text-sm font-black text-slate-900 font-mono leading-tight truncate">
+            ₹{totalBookedValue.toLocaleString('en-IN')}
+          </div>
+        </div>
+
+        <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-emerald-600 mb-1">
+            <span className="font-semibold uppercase tracking-wide text-[9px]">Collected</span>
+            <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          </div>
+          <div className="text-sm font-black text-emerald-700 font-mono leading-tight truncate">
+            ₹{totalCollected.toLocaleString('en-IN')}
+          </div>
+          <div className="text-[9px] text-amber-600 font-medium truncate">Due ₹{totalPending.toLocaleString('en-IN')}</div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-xl border border-amber-900/40 bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950 p-2.5 text-white shadow-sm">
+          <div className="pointer-events-none absolute -right-6 -top-6 h-16 w-16 rounded-full bg-amber-500/15 blur-xl" />
+          <div className="relative flex items-center gap-2 min-w-0">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 text-sm font-bold text-white shadow-sm ring-1 ring-white/20">
+              {currentUser.name?.charAt(0)?.toUpperCase() || 'P'}
+            </span>
+            <div className="min-w-0 leading-tight">
+              <h1 className="truncate text-xs font-semibold text-white">{currentUser.name}</h1>
+              <span className="font-mono text-[9px] font-bold text-amber-300">
+                {currentUser.agentCode || currentUser.agentId || 'AGENT'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs: Orders / My Schools / Commission Breakdown */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden text-xs">
         <div className="border-b border-slate-200 px-4 pt-3 flex items-center justify-between bg-slate-50/70">
@@ -217,8 +272,9 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
         {activeTab === 'orders' && (
           <div>
             {/* Financial year: one segment per year the partner has orders in, with
-                how many, plus "All FY". The cards above and the list below follow it. */}
-            <div className="px-4 pt-4 pb-3 border-b border-slate-100 bg-white flex flex-wrap items-center gap-x-3 gap-y-2">
+                how many, plus "All FY". The cards above and the list below follow it.
+                Desktop/tablet only; the compact mobile version below replaces it. */}
+            <div className="hidden sm:flex px-4 pt-4 pb-3 border-b border-slate-100 bg-white flex-wrap items-center gap-x-3 gap-y-2">
               <span className="text-slate-400 text-xs font-semibold flex items-center gap-1">
                 <CalendarDays className="w-3.5 h-3.5" /> Financial Year:
               </span>
@@ -259,8 +315,58 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
               </div>
             </div>
 
-            {/* Search & Status Filters */}
-            <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3 bg-white">
+            {/* Compact mobile-only FY + Search strip, replacing the two
+                spacious bordered sections above/below (each with its own
+                p-4/py-4 padding and a "Financial Year:" label line) which
+                took up a lot of vertical space stacked together on a phone.
+                Reuses the exact same state and handlers as the desktop
+                versions (fyYears, fyCounts, selectedFY, setFyChoice,
+                agentOrders.length, searchQuery, setSearchQuery) - just
+                tighter, pill-styled like the rest of this app's mobile
+                views for a consistent premium look. */}
+            <div className="sm:hidden px-3 pt-3 pb-2.5 space-y-2 bg-white border-b border-slate-100">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  ...fyYears.map(y => ({ id: y, label: y, count: fyCounts[y] || 0 })),
+                  { id: 'ALL', label: 'All FY', count: agentOrders.length }
+                ].map(opt => {
+                  const active = selectedFY === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setFyChoice(opt.id)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                        active
+                          ? 'bg-gradient-to-b from-amber-400 to-amber-500 text-slate-950 shadow-sm'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 font-mono text-[9.5px] font-bold ${
+                        active ? 'bg-white/30 text-slate-950' : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        {opt.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search Order ID, School, Docket..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Search & Status Filters - desktop/tablet only; compact mobile
+                version above replaces it. */}
+            <div className="hidden sm:flex p-4 border-b border-slate-200 flex-col md:flex-row items-center justify-between gap-3 bg-white">
               <div className="relative w-full md:w-80">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
@@ -272,7 +378,12 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+              {/* Hidden on mobile only - desktop keeps the full Status filter
+                  row (flex-wrap, unchanged from before: every button stays
+                  visible instead of being cut off). Mobile just shows every
+                  status (statusFilter stays at its current/default "ALL"
+                  value; there's simply no control to change it from here). */}
+              <div className="hidden sm:flex items-center gap-2 w-full md:w-auto flex-wrap">
                 <span className="text-slate-400 text-xs font-semibold mr-1 flex items-center gap-1">
                   <Filter className="w-3.5 h-3.5" /> Status:
                 </span>
@@ -299,8 +410,13 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
               </div>
             </div>
 
-            {/* Orders Table */}
-            <div className="overflow-x-auto">
+            {/* Orders Table - desktop/tablet only; the 8 columns here don't
+                fit a phone screen (this is what was overflowing/cut off).
+                The premium mobile card list below replaces it under sm,
+                reusing the exact same displayOrders data and onSelectOrder
+                callback, styled the same way as the main Order Registry's
+                own mobile card list for consistency. */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                   <tr>
@@ -413,6 +529,87 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile-only card list - same visual pattern as the main Order
+                Registry's own mobile cards (numbered badge, status + price
+                stacked top-right, school name on its own line, category as
+                a yellow-highlighter chip). Tapping a card opens the same
+                order detail as the desktop table's View button, via the
+                exact same onSelectOrder callback. Reuses displayOrders,
+                already filtered by the same search/status/FY state the
+                table uses - no new data, no new reads. */}
+            <div className="sm:hidden p-3 space-y-2">
+              {displayOrders.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-500">
+                  <div className="font-bold text-slate-800 text-sm">
+                    No orders found in your regional territory for this filter.
+                  </div>
+                </div>
+              ) : (
+                displayOrders.map((order, idx) => (
+                  <button
+                    key={order.orderId}
+                    type="button"
+                    onClick={() => onSelectOrder(order)}
+                    className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs cursor-pointer hover:border-amber-300 hover:bg-amber-50/40 active:bg-amber-50/60 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <span
+                        className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
+                        title={`Order ${idx + 1}`}
+                      >
+                        {idx + 1}
+                      </span>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {order.status === 'CANCELLED' ? (
+                          <StatusBadge status="CANCELLED" type="order" compact />
+                        ) : (
+                          <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
+                            order.dispatchStatus === 'DELIVERED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            order.dispatchStatus === 'DISPATCHED' ? 'bg-sky-50 text-sky-800 border-sky-200' :
+                            order.dispatchStatus === 'PARTIALLY_DISPATCHED' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                            order.dispatchStatus === 'IN_TRANSIT' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                            'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}>
+                            {order.dispatchStatus || 'PENDING'}
+                          </span>
+                        )}
+                        {order.status === 'CANCELLED' ? (
+                          <span className="text-[11px] font-bold text-rose-600">CANCELLED</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-slate-800 to-slate-700 shadow-sm ring-1 ring-slate-600/40">
+                            <CurrencyFormatter
+                              amount={order.orderValue}
+                              className="text-sm font-extrabold text-white tracking-tight"
+                            />
+                          </span>
+                        )}
+                        {/* PAID badge - Agent Portal mobile cards only, right
+                            under the price, only for orders whose payment is
+                            fully received. Stacks in the same compact
+                            top-right column as everything above it, so the
+                            card grows by one small pill, not a new row/
+                            section - the page layout stays exactly as fixed
+                            as it was. */}
+                        {order.status !== 'CANCELLED' && order.paymentStatus === 'PAID' && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-[9px] font-extrabold tracking-wide shadow-sm ring-1 ring-emerald-700/30">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            PAID
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
+                      {order.schoolName}
+                    </div>
+                    <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded-lg bg-yellow-300 border border-yellow-400 text-slate-900 text-[11px] font-bold break-words shadow-sm">
+                      <Tag className="w-3 h-3 shrink-0 text-amber-800" />
+                      {order.category || 'Supplies'}
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         )}
