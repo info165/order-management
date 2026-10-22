@@ -554,13 +554,33 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
                     onClick={() => onSelectOrder(order)}
                     className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs cursor-pointer hover:border-amber-300 hover:bg-amber-50/40 active:bg-amber-50/60 transition-colors"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <span
-                        className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
-                        title={`Order ${idx + 1}`}
-                      >
-                        {idx + 1}
-                      </span>
+                    {/* Single compact row instead of three stacked ones - same
+                        restructure as the main Order Registry's mobile cards:
+                        SL No., school name and category sit in the left
+                        column (min-w-0, so it's the side that shrinks/wraps),
+                        status/price/PAID stack in the right column (shrink-0,
+                        stays at its own small natural width). The left side
+                        always gives way first in a flex row, never the
+                        shrink-0 side, so this stays safe from the status
+                        badge getting crowded even with a long school name. */}
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <span
+                          className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
+                          title={`Order ${idx + 1}`}
+                        >
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
+                            {order.schoolName}
+                          </div>
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-lg bg-yellow-300 border border-yellow-400 text-slate-900 text-[11px] font-bold break-words shadow-sm">
+                            <Tag className="w-3 h-3 shrink-0 text-amber-800" />
+                            {order.category || 'Supplies'}
+                          </span>
+                        </div>
+                      </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         {order.status === 'CANCELLED' ? (
                           <StatusBadge status="CANCELLED" type="order" compact />
@@ -600,13 +620,6 @@ export const AgentPortalView: React.FC<AgentPortalViewProps> = ({
                         )}
                       </div>
                     </div>
-                    <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
-                      {order.schoolName}
-                    </div>
-                    <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded-lg bg-yellow-300 border border-yellow-400 text-slate-900 text-[11px] font-bold break-words shadow-sm">
-                      <Tag className="w-3 h-3 shrink-0 text-amber-800" />
-                      {order.category || 'Supplies'}
-                    </span>
                   </button>
                 ))
               )}

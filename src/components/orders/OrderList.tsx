@@ -1986,27 +1986,45 @@ export const OrderList: React.FC<OrderListProps> = ({
                 onClick={() => onSelectOrder(order)}
                 className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs cursor-pointer hover:border-amber-300 hover:bg-amber-50/40 active:bg-amber-50/60 transition-colors"
               >
-                {/* SL No. and status share their own short top row - both are
-                    short, fixed-width elements (a 1-4 digit number and a
-                    badge whose longest label is "PARTIAL DISPATCH") that
-                    always fit side by side on any phone, even the narrowest
-                    ones. The school name below is the only unpredictable-
-                    length text on the card, so it gets its own full-width
-                    line(s) to wrap freely instead of competing with the
-                    status badge for space on the same row - that competition
-                    is what let the badge get crowded/cropped on some phones. */}
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span
-                    className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
-                    title={`Serial No. ${serialNum}`}
-                  >
-                    {serialNum}
-                  </span>
+                {/* Single compact row instead of three stacked ones: SL No.,
+                    school name and category all sit in the left column
+                    (min-w-0, so it's the side that shrinks/wraps), status
+                    and the order value stack in the right column (shrink-0,
+                    stays at its own small natural width). That left/right
+                    split is what keeps the status badge safe from the
+                    school name - the LEFT side always gives way first in
+                    a flex row, never the shrink-0 side - so merging
+                    everything onto one row doesn't reintroduce the
+                    crowding/cropping that having them share a single line
+                    used to cause; the school name just has its own
+                    dedicated block now instead of being inline with the
+                    SL number the way it originally was. */}
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
+                      title={`Serial No. ${serialNum}`}
+                    >
+                      {serialNum}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
+                        {order.schoolName}
+                      </div>
+                      {/* Category as a yellow-highlighter chip (mobile cards
+                          only) - was plain small grey text and hard to see;
+                          this gives it its own colour and weight so it
+                          reads at a glance. */}
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-lg bg-yellow-300 border border-yellow-400 text-slate-900 text-[11px] font-bold break-words shadow-sm">
+                        <Tag className="w-3 h-3 shrink-0 text-amber-800" />
+                        {order.category}
+                      </span>
+                    </div>
+                  </div>
                   {/* Status and the order value share this top-right column,
                       value stacked under the badge - same spot the badge has
-                      always been in, nothing else on the card moved. Mirrors
-                      the desktop table's own CANCELLED-vs-value rule so the
-                      two screens always agree. */}
+                      always been in. Mirrors the desktop table's own
+                      CANCELLED-vs-value rule so the two screens always agree. */}
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <StatusBadge status={order.status} type="order" compact />
                     {order.status === 'CANCELLED' ? (
@@ -2021,16 +2039,6 @@ export const OrderList: React.FC<OrderListProps> = ({
                     )}
                   </div>
                 </div>
-                <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
-                  {order.schoolName}
-                </div>
-                {/* Category as a yellow-highlighter chip (mobile cards only) -
-                    was plain small grey text and hard to see; this gives it
-                    its own colour and weight so it reads at a glance. */}
-                <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded-lg bg-yellow-300 border border-yellow-400 text-slate-900 text-[11px] font-bold break-words shadow-sm">
-                  <Tag className="w-3 h-3 shrink-0 text-amber-800" />
-                  {order.category}
-                </span>
               </button>
             );
           })
