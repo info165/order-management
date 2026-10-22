@@ -1074,8 +1074,9 @@ export const OrderList: React.FC<OrderListProps> = ({
         </div>
       )}
 
-      {/* Main Continuous Spreadsheet Viewport with Sticky Header & Resizable Columns */}
-      <div className="relative border border-slate-200 rounded-xl bg-white shadow-xs overflow-hidden">
+      {/* Main Continuous Spreadsheet Viewport with Sticky Header & Resizable Columns -
+          hidden on phone-width screens in favour of the simplified card list below. */}
+      <div className="relative border border-slate-200 rounded-xl bg-white shadow-xs overflow-hidden hidden sm:block">
         <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-230px)] min-h-[400px]">
           <table className="w-full text-left text-xs border-collapse table-fixed">
             {/* Sticky Header Row */}
@@ -1861,6 +1862,65 @@ export const OrderList: React.FC<OrderListProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Simplified card list for phone-width screens only: SL No., school name,
+          category and status. Search and the filters above still narrow this
+          list the same way they narrow the full table; tapping a card opens
+          the same order detail as a row click does on desktop. Batch actions
+          (bulk select, batch status update) stay desktop-only - there is no
+          checkbox or selection affordance here by design. */}
+      <div className="sm:hidden space-y-2">
+        {sortedOrders.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-500">
+            <div className="font-bold text-slate-800 text-sm">
+              {requireSchoolSelection && !searchQuery.trim() && !isSchoolFiltered
+                ? 'Search or select a school to begin'
+                : 'No orders match your filter criteria'}
+            </div>
+            {hasAnyFilterActive && (
+              <button
+                type="button"
+                onClick={handleResetAllFilters}
+                className="mt-3 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors"
+              >
+                Clear All Filters
+              </button>
+            )}
+          </div>
+        ) : (
+          sortedOrders.map((order, idx) => {
+            const serialNum = isAgent ? idx + 1 : (getDisplaySerialNo(order, allOrders ?? orders) ?? idx + 1);
+            return (
+              <button
+                key={order.orderId}
+                type="button"
+                onClick={() => onSelectOrder(order)}
+                className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs active:bg-amber-50/60 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
+                      title={`Serial No. ${serialNum}`}
+                    >
+                      {serialNum}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
+                        {order.schoolName}
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 break-words">
+                        {order.category}
+                      </div>
+                    </div>
+                  </div>
+                  <StatusBadge status={order.status} type="order" compact className="shrink-0" />
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
 
       {/* CB page only: the school's commission payments, under the order table */}
