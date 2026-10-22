@@ -856,20 +856,11 @@ export const OrderList: React.FC<OrderListProps> = ({
             />
           </div>
 
-          <div className="shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-full bg-gradient-to-b from-amber-50 to-amber-100/70 border border-amber-200 shadow-xs">
-            <span className="text-[9.5px] font-bold uppercase tracking-wide text-amber-700">FY</span>
-            <select
-              value={selectedFY}
-              onChange={(e) => setSelectedFY(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none"
-            >
-              <option value="ALL">All FY</option>
-              <option value="2026-27">2026-27</option>
-              <option value="2025-26">2025-26</option>
-              <option value="2024-25">2024-25</option>
-            </select>
-          </div>
-
+          {/* FY filter removed from mobile on purpose - desktop still has it
+              (hidden sm:flex bar below, completely untouched); mobile just
+              shows whatever financial year is currently selected (defaults
+              to the latest one with orders) without a way to change it from
+              here. */}
           <div className="shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-full bg-gradient-to-b from-amber-50 to-amber-100/70 border border-amber-200 shadow-xs">
             <span className="text-[9.5px] font-bold uppercase tracking-wide text-amber-700">Status</span>
             <select
@@ -1993,7 +1984,7 @@ export const OrderList: React.FC<OrderListProps> = ({
                 key={order.orderId}
                 type="button"
                 onClick={() => onSelectOrder(order)}
-                className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs active:bg-amber-50/60 transition-colors"
+                className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs cursor-pointer hover:border-amber-300 hover:bg-amber-50/40 active:bg-amber-50/60 transition-colors"
               >
                 {/* SL No. and status share their own short top row - both are
                     short, fixed-width elements (a 1-4 digit number and a
@@ -2004,14 +1995,31 @@ export const OrderList: React.FC<OrderListProps> = ({
                     line(s) to wrap freely instead of competing with the
                     status badge for space on the same row - that competition
                     is what let the badge get crowded/cropped on some phones. */}
-                <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-start justify-between gap-2 mb-1.5">
                   <span
-                    className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0"
+                    className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
                     title={`Serial No. ${serialNum}`}
                   >
                     {serialNum}
                   </span>
-                  <StatusBadge status={order.status} type="order" compact />
+                  {/* Status and the order value share this top-right column,
+                      value stacked under the badge - same spot the badge has
+                      always been in, nothing else on the card moved. Mirrors
+                      the desktop table's own CANCELLED-vs-value rule so the
+                      two screens always agree. */}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <StatusBadge status={order.status} type="order" compact />
+                    {order.status === 'CANCELLED' ? (
+                      <span className="text-[11px] font-bold text-rose-600">CANCELLED</span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-slate-800 to-slate-700 shadow-sm ring-1 ring-slate-600/40">
+                        <CurrencyFormatter
+                          amount={order.orderValue}
+                          className="text-sm font-extrabold text-white tracking-tight"
+                        />
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
                   {order.schoolName}
