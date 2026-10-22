@@ -14,7 +14,8 @@ import {
   Columns,
   UserCheck,
   Check,
-  CheckCheck
+  CheckCheck,
+  Tag
 } from 'lucide-react';
 import { Order, OrderStatus, PaymentStatus, DispatchStatus, UserProfile, Agent, School } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
@@ -818,8 +819,95 @@ export const OrderList: React.FC<OrderListProps> = ({
           </div>
         </div>
 
-        {/* Secondary Filter & Spreadsheet Status Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+        {/* Compact "premium" filter strip for mobile only - FY, School, Status
+            and Clear-all as small pill chips that wrap onto a second line if
+            they don't all fit, instead of the 3-4 full-width stacked rows
+            the desktop filter bar below takes on a narrow screen. Reuses the
+            exact same state and change handlers as that desktop bar
+            (selectedFY/setSelectedFY, colSelectedSchools via the same
+            CheckboxFilterDropdown, colSelectedStatuses, handleResetAllFilters)
+            - only the layout for mobile is new, nothing about how filtering
+            itself works changed.
+            Deliberately NOT a horizontally-scrolling row (no overflow-x-auto
+            here): the School chip opens an absolutely-positioned popover
+            panel, and overflow-x-auto on an ancestor forces the browser to
+            also clip the vertical axis (the CSS overflow-x/y coupling rule),
+            which cut that panel off - this is exactly what broke the School
+            filter on phones. flex-wrap avoids that trap entirely while the
+            pills stay narrow enough to still read as one compact strip. */}
+        <div className="sm:hidden pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2">
+          {/* School is first in this row on purpose: its popover panel is a
+              fixed 288px wide and opens anchored to its trigger's own left
+              edge (not centred on screen). Putting it first means that edge
+              sits right at the card's own left padding, with the whole
+              panel comfortably inside even the narrowest real phone
+              screens; placed further right, the panel could run past the
+              right edge of a small screen with no way to reach the rest of
+              it. */}
+          <div className="shrink-0 flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-gradient-to-b from-amber-50 to-amber-100/70 border border-amber-200 shadow-xs">
+            <span className="text-[9.5px] font-bold uppercase tracking-wide text-amber-700">School</span>
+            <CheckboxFilterDropdown
+              allLabel="Schools"
+              noun={{ one: 'school', many: 'schools' }}
+              options={schoolOptions}
+              selectedValues={colSelectedSchools}
+              onChange={setColSelectedSchools}
+              maxTriggerWidthClass="max-w-[108px]"
+            />
+          </div>
+
+          <div className="shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-full bg-gradient-to-b from-amber-50 to-amber-100/70 border border-amber-200 shadow-xs">
+            <span className="text-[9.5px] font-bold uppercase tracking-wide text-amber-700">FY</span>
+            <select
+              value={selectedFY}
+              onChange={(e) => setSelectedFY(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none"
+            >
+              <option value="ALL">All FY</option>
+              <option value="2026-27">2026-27</option>
+              <option value="2025-26">2025-26</option>
+              <option value="2024-25">2024-25</option>
+            </select>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-1 pl-2.5 pr-2 py-1.5 rounded-full bg-gradient-to-b from-amber-50 to-amber-100/70 border border-amber-200 shadow-xs">
+            <span className="text-[9.5px] font-bold uppercase tracking-wide text-amber-700">Status</span>
+            <select
+              value={colSelectedStatuses.length === 1 ? colSelectedStatuses[0] : (colSelectedStatuses.length > 1 ? 'MULTIPLE' : 'ALL')}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'ALL') setColSelectedStatuses([]);
+                else if (val !== 'MULTIPLE') setColSelectedStatuses([val]);
+              }}
+              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none max-w-[92px]"
+            >
+              <option value="ALL">All Statuses</option>
+              {colSelectedStatuses.length > 1 && (
+                <option value="MULTIPLE">Selected ({colSelectedStatuses.length})</option>
+              )}
+              {statusOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label} ({opt.count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {hasAnyFilterActive && (
+            <button
+              type="button"
+              onClick={handleResetAllFilters}
+              className="shrink-0 inline-flex items-center gap-1 text-amber-800 bg-white hover:bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-full text-xs font-bold shadow-xs transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Clear</span>
+            </button>
+          )}
+        </div>
+
+        {/* Secondary Filter & Spreadsheet Status Bar - desktop/tablet only;
+            the compact mobile version above replaces it below sm. */}
+        <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Quick Financial Year selector */}
             <div className="flex items-center gap-1 text-slate-600">
@@ -876,56 +964,65 @@ export const OrderList: React.FC<OrderListProps> = ({
               </select>
             </div>
 
-            {/* Overdue quick toggles */}
-            <button
-              type="button"
-              onClick={() => setFilterOverdueDelivery(!filterOverdueDelivery)}
-              className={`px-2 py-1 rounded border transition-colors flex items-center gap-1 text-xs ${
-                filterOverdueDelivery
-                  ? 'bg-rose-100 text-rose-800 border-rose-300 font-semibold'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <AlertCircle className="w-3 h-3 text-rose-600" />
-              <span>Overdue Delivery</span>
-            </button>
+            {/* Overdue toggles + the two tick legends below are all about
+                columns (Dispatch & Courier, Value/GeM Invoice) that only
+                exist in the desktop table - hidden on mobile, where the
+                simplified card list doesn't show those columns at all, so
+                there'd be nothing for them to explain or filter there.
+                "contents" keeps every child laid out exactly as before in
+                this same flex-wrap row once sm: kicks in. */}
+            <div className="hidden sm:contents">
+              {/* Overdue quick toggles */}
+              <button
+                type="button"
+                onClick={() => setFilterOverdueDelivery(!filterOverdueDelivery)}
+                className={`px-2 py-1 rounded border transition-colors flex items-center gap-1 text-xs ${
+                  filterOverdueDelivery
+                    ? 'bg-rose-100 text-rose-800 border-rose-300 font-semibold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <AlertCircle className="w-3 h-3 text-rose-600" />
+                <span>Overdue Delivery</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setFilterOverduePayment(!filterOverduePayment)}
-              className={`px-2 py-1 rounded border transition-colors flex items-center gap-1 text-xs ${
-                filterOverduePayment
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 font-semibold'
-                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <AlertCircle className="w-3 h-3 text-amber-600" />
-              <span>Overdue Payment</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setFilterOverduePayment(!filterOverduePayment)}
+                className={`px-2 py-1 rounded border transition-colors flex items-center gap-1 text-xs ${
+                  filterOverduePayment
+                    ? 'bg-amber-100 text-amber-900 border-amber-300 font-semibold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <AlertCircle className="w-3 h-3 text-amber-600" />
+                <span>Overdue Payment</span>
+              </button>
 
-            {/* Dispatch & Courier tick legend - explains the CN/POD status
-                marks shown in that column, using the exact same icon +
-                color styling as the table so it reads as one system. */}
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-200 bg-slate-50 text-[11px] text-slate-500">
-              <span className="text-slate-400">Dispatch &amp; Courier:</span>
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
-                <Check className="w-2.5 h-2.5" strokeWidth={3} />
-              </span>
-              <span>CN Copy Uploaded</span>
-              <span className="text-slate-300">•</span>
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
-                <CheckCheck className="w-2.5 h-2.5" strokeWidth={3} />
-              </span>
-              <span>POD Copy Uploaded</span>
-            </div>
+              {/* Dispatch & Courier tick legend - explains the CN/POD status
+                  marks shown in that column, using the exact same icon +
+                  color styling as the table so it reads as one system. */}
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-200 bg-slate-50 text-[11px] text-slate-500">
+                <span className="text-slate-400">Dispatch &amp; Courier:</span>
+                <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
+                  <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                </span>
+                <span>CN Copy Uploaded</span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
+                  <CheckCheck className="w-2.5 h-2.5" strokeWidth={3} />
+                </span>
+                <span>POD Copy Uploaded</span>
+              </div>
 
-            {/* Value column tick legend - explains the GeM Portal Invoice
-                mark shown beside the order value, same styling as above. */}
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-200 bg-slate-50 text-[11px] text-slate-500">
-              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
-                <Check className="w-2.5 h-2.5" strokeWidth={3} />
-              </span>
-              <span>GeM Portal Invoice Uploaded</span>
+              {/* Value column tick legend - explains the GeM Portal Invoice
+                  mark shown beside the order value, same styling as above. */}
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-slate-200 bg-slate-50 text-[11px] text-slate-500">
+                <span className="flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 shrink-0">
+                  <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                </span>
+                <span>GeM Portal Invoice Uploaded</span>
+              </div>
             </div>
           </div>
 
@@ -1898,25 +1995,34 @@ export const OrderList: React.FC<OrderListProps> = ({
                 onClick={() => onSelectOrder(order)}
                 className="w-full text-left rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-xs active:bg-amber-50/60 transition-colors"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <span
-                      className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0 mt-0.5"
-                      title={`Serial No. ${serialNum}`}
-                    >
-                      {serialNum}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
-                        {order.schoolName}
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5 break-words">
-                        {order.category}
-                      </div>
-                    </div>
-                  </div>
-                  <StatusBadge status={order.status} type="order" compact className="shrink-0" />
+                {/* SL No. and status share their own short top row - both are
+                    short, fixed-width elements (a 1-4 digit number and a
+                    badge whose longest label is "PARTIAL DISPATCH") that
+                    always fit side by side on any phone, even the narrowest
+                    ones. The school name below is the only unpredictable-
+                    length text on the card, so it gets its own full-width
+                    line(s) to wrap freely instead of competing with the
+                    status badge for space on the same row - that competition
+                    is what let the badge get crowded/cropped on some phones. */}
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span
+                    className="inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md bg-slate-100 text-slate-900 font-bold text-xs font-mono border border-slate-200/90 shrink-0"
+                    title={`Serial No. ${serialNum}`}
+                  >
+                    {serialNum}
+                  </span>
+                  <StatusBadge status={order.status} type="order" compact />
                 </div>
+                <div className="font-semibold text-sm text-slate-900 leading-snug break-words">
+                  {order.schoolName}
+                </div>
+                {/* Category as a yellow-highlighter chip (mobile cards only) -
+                    was plain small grey text and hard to see; this gives it
+                    its own colour and weight so it reads at a glance. */}
+                <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 rounded-lg bg-yellow-300 border border-yellow-400 text-slate-900 text-[11px] font-bold break-words shadow-sm">
+                  <Tag className="w-3 h-3 shrink-0 text-amber-800" />
+                  {order.category}
+                </span>
               </button>
             );
           })
