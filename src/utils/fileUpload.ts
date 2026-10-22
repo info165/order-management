@@ -100,3 +100,44 @@ export async function processFileForUpload(file: File): Promise<string> {
   }
   return readFileAsDataUrl(file);
 }
+
+// Every attachment in this app is a data: URL (see the note at the top of
+// this file - there's no file storage, just a base64 string in a Firestore
+// field), and every "Download" link/button simply pointed straight at that
+// data: URL with a `download` attribute. That works on desktop browsers,
+// but not on mobile Safari or Chrome-on-iOS (both built on WebKit): neither
+// honours `download` on a data: URL - tapping the link just navigates to it
+// as if it were a web address, which the browser can't render, so it falls
+// back to saving whatever it rendered as a generic .html file instead of
+// the real PDF/image.
+//
+// This works around that by doing the download itself in JavaScript instead
+// of relying on the browser to interpret the `download` attribute: turn the
+// already-in-memory data URL into a real Blob, give that Blob a temporary
+// object URL, and click a throwaway link pointed at THAT - which is the
+// standard, reliably cross-browser way to save in-memory data, including on
+// iPhone. This is purely local to the browser: `fetch()` on a data: URL
+// never leaves the device, and nothing here reads or writes anything in the
+// database - it only repackages a file this screen already has in memory.
+//
+// Falls back to the old behaviour (open the raw URL in a new tab) if the
+// blob conversion fails for any reason, so a download never just silently
+// does nothing.
+export async function downloadDataUrl(url: string, fileName: string): Promise<void> {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    // Give the browser a moment to pick up the click before freeing it.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (err) {
+    console.warn('Blob download failed, falling back to opening the file directly:', err);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
