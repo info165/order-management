@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Receipt, Wallet, Building2, TrendingUp, List, ChevronDown, ChevronRight, ImageOff, X, Trash2, Plus, PackageSearch, Pencil, UploadCloud } from 'lucide-react';
 import { CommissionPayment, Order, UserProfile } from '../../types';
-import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot, updateCommissionPayment, isCommissionPaymentPaid } from '../../services/dataService';
+import { subscribeToRealtimeCommissionPayments, deleteCommissionPaymentScreenshot, deleteCommissionPayment, updateCommissionPayment, isCommissionPaymentPaid } from '../../services/dataService';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { getDisplaySerialNo } from '../../utils/orderDisplay';
 import { StatusBadge } from '../common/StatusBadge';
@@ -59,6 +59,8 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   const [previewScreenshot, setPreviewScreenshot] = useState<{ url: string; fileName?: string; paymentId: string } | null>(null);
   const [deletingScreenshotId, setDeletingScreenshotId] = useState<string | null>(null);
   const [screenshotError, setScreenshotError] = useState<string | null>(null);
+  // Deleting a DRAFT row - never a real payment, see handleDeleteDraft below.
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
   // Which payment row's linked orders are currently expanded - one at a
   // time, toggled by clicking the row itself.
   const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
@@ -187,6 +189,26 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
       setScreenshotError(err.message || 'Could not delete screenshot.');
     } finally {
       setDeletingScreenshotId(null);
+    }
+  };
+
+  // Removes a DRAFT commission calculation only - the button this calls is
+  // only ever rendered for a row already showing as a draft (Unpaid, no
+  // payment details), and deleteCommissionPayment itself re-checks that
+  // against a fresh server read before actually deleting anything, so a
+  // real recorded payment can never be removed this way even if this
+  // screen's own copy of the row were briefly stale. The live subscription
+  // above (subscribeToRealtimeCommissionPayments) removes the row from the
+  // table automatically once the delete succeeds - no local list edit here.
+  const handleDeleteDraft = async (p: CommissionPayment) => {
+    if (!window.confirm(`Delete this draft commission calculation for ${p.schoolName}? This cannot be undone.`)) return;
+    setDeletingDraftId(p.commissionPaymentId);
+    try {
+      await deleteCommissionPayment(p.commissionPaymentId, currentUser);
+    } catch (err: any) {
+      alert(err.message || 'Could not delete this draft.');
+    } finally {
+      setDeletingDraftId(null);
     }
   };
 
@@ -580,17 +602,36 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                           {renderScreenshotCell(p)}
                         </td>
                         <td className="px-4 py-3 align-middle">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditClick(p);
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
-                          >
-                            <Pencil className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(p);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                            {/* Delete is only ever offered for a draft (Unpaid)
+                                row - a real recorded payment has no delete
+                                option here at all. */}
+                            {!isCommissionPaymentPaid(p) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteDraft(p);
+                                }}
+                                disabled={deletingDraftId === p.commissionPaymentId}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-950/40 border border-rose-900/60 hover:border-rose-500/60 hover:text-rose-300 text-rose-400 text-[11px] font-semibold transition-colors disabled:opacity-50"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>{deletingDraftId === p.commissionPaymentId ? 'Deleting…' : 'Delete'}</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                       {renderOrdersPanel(p, 9)}
@@ -678,17 +719,36 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                               {renderScreenshotCell(p)}
                             </td>
                             <td className="px-4 py-3 align-middle">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditClick(p);
-                                }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
-                              >
-                                <Pencil className="w-3 h-3" />
-                                <span>Edit</span>
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditClick(p);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-[11px] font-semibold transition-colors"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                                {/* Delete is only ever offered for a draft
+                                    (Unpaid) row - a real recorded payment has
+                                    no delete option here at all. */}
+                                {!isCommissionPaymentPaid(p) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteDraft(p);
+                                    }}
+                                    disabled={deletingDraftId === p.commissionPaymentId}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-950/40 border border-rose-900/60 hover:border-rose-500/60 hover:text-rose-300 text-rose-400 text-[11px] font-semibold transition-colors disabled:opacity-50"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>{deletingDraftId === p.commissionPaymentId ? 'Deleting…' : 'Delete'}</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                           {renderOrdersPanel(p, 9)}

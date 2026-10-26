@@ -43,6 +43,7 @@ export const CBPage: React.FC<CBPageProps> = ({
     return (
       <CommissionCalculationPage
         orders={orders.filter(o => commissionOrderIds.includes(o.orderId))}
+        allOrders={orders}
         currentUser={currentUser}
         existingDraft={editingDraftPayment ?? undefined}
         onBack={() => {

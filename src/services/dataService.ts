@@ -4657,6 +4657,15 @@ export async function updateCommissionPayment(
     | 'neftUtrNumber'
     | 'transactionUtrPfmsRef'
     | 'remarks'
+    // Only these three - never schoolId/schoolName/agentId/etc. - since
+    // Commission Calculation only ever lets an order be added to an
+    // existing draft when it's already confirmed to belong to the same
+    // school and payee (see addCandidates there), so those identifying
+    // fields can never actually need to change; only which orders are
+    // covered, and the two totals that are derived from them, can.
+    | 'orderIds'
+    | 'totalOrderValue'
+    | 'calculatedAmount'
   >> & {
     // null (as opposed to undefined/omitted) means "explicitly remove this
     // field" - e.g. a screenshot that was attached then removed before
@@ -4688,6 +4697,29 @@ export async function deleteCommissionPaymentScreenshot(paymentId: string, user:
     screenshotDataUrl: deleteField(),
     screenshotFileName: deleteField()
   });
+}
+
+// Deletes a commission calculation that was only ever saved as a DRAFT
+// (see isCommissionPaymentPaid above) - never a real recorded payment. The
+// UI only ever offers this for a row already showing as a draft, but that
+// alone isn't trusted here: a fresh server read happens right before the
+// delete to re-check status itself, so a payment someone just finished and
+// marked Paid in another tab/browser a moment ago can never be deleted out
+// from under them just because this screen's own copy was a little stale.
+export async function deleteCommissionPayment(paymentId: string, user: UserProfile): Promise<void> {
+  if (user.role !== 'SUPER_ADMIN') {
+    throw new Error('Only Super Admin can delete a commission payment draft.');
+  }
+  const ref = doc(db, 'commissionPayments', paymentId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error('This draft no longer exists - it may already have been deleted elsewhere.');
+  }
+  const data = snap.data() as CommissionPayment;
+  if (isCommissionPaymentPaid(data)) {
+    throw new Error('This is a real recorded payment, not a draft, so it cannot be deleted from here.');
+  }
+  await deleteDoc(ref);
 }
 
 export function subscribeToRealtimeCommissionPayments(onUpdate: (payments: CommissionPayment[]) => void): () => void {

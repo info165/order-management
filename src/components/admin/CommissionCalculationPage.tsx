@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw, Save, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Calculator, Wallet, Upload, Camera, X, CheckCircle2, Pencil, Check, RotateCcw, Save, AlertTriangle, Plus } from 'lucide-react';
 import { CommissionPayment, Order, UserProfile } from '../../types';
 import { CurrencyFormatter } from '../common/CurrencyFormatter';
 import { processFileForUpload } from '../../utils/fileUpload';
@@ -9,6 +9,11 @@ type PaymentMode = 'CASH' | 'UPI' | 'ONLINE_TRANSFER' | 'NEFT';
 
 interface CommissionCalculationPageProps {
   orders: Order[];
+  // Every order in the app (same full list CBPage already has) - used only
+  // to search for another of this school's/partner's orders to add to the
+  // calculation (see addCandidates below). Read-only source data; nothing
+  // here ever mutates it.
+  allOrders: Order[];
   currentUser: UserProfile;
   onBack: () => void;
   // Present when reached by clicking a DRAFT row in Transaction Details -
@@ -28,7 +33,17 @@ interface CommissionCalculationPageProps {
 // time - see its `taxableValue` comment), so summing it across the selected
 // orders and dividing by 1.18 the same way gives the combined pre-GST
 // amount, per the exact formula requested: (order 1 + order 2) / 1.18.
-export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders, currentUser, onBack, existingDraft }) => {
+export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps> = ({ orders: initialOrders, allOrders, currentUser, onBack, existingDraft }) => {
+  // The orders this commission payment covers - starts as whatever CBPage
+  // selected, but can be edited from here with handleAddOrder/
+  // handleRemoveOrder below (adding keeps the same name "orders" everywhere
+  // else in this file deliberately, so every existing calculation already
+  // below - total value, taxable amount, payee, the conflict check, the
+  // rendered list, orderIds actually saved - keeps working exactly as
+  // before without needing to be touched; none of it was ever hardcoded to
+  // the original selection, it already all derives from this one list).
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+
   // Who this payment is actually for: the field partner's name if every
   // selected order was placed through the same one, or "Direct Payment to
   // School" if they're all Direct/In-House orders (agentId AGT-DIRECT). A
@@ -145,6 +160,40 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
     ) || null;
   }, [existingPayments, existingDraft, orders]);
 
+  // Other orders this calculation could still add: same school AND same
+  // payee as what's already in the list (never offered otherwise - that's
+  // exactly the "mixed partners" situation this page already blocks
+  // outright on save, so adding one can never create it), not already in
+  // the list, and not already covered by a different saved commission
+  // payment (paid or draft) - the same conflict this page already refuses
+  // to save over, just checked per-candidate up front here so a doomed
+  // pick is never offered in the first place.
+  const addCandidates = useMemo(() => {
+    if (!soleOrder) return [];
+    const includedIds = new Set(orders.map(o => o.orderId));
+    return allOrders.filter(o =>
+      o.schoolId === soleOrder.schoolId &&
+      !includedIds.has(o.orderId) &&
+      (isDirectPayment ? o.agentId === 'AGT-DIRECT' : o.agentId === soleOrder.agentId) &&
+      !existingPayments.some(p => p.commissionPaymentId !== existingDraft?.commissionPaymentId && p.orderIds.includes(o.orderId))
+    );
+  }, [allOrders, orders, soleOrder, isDirectPayment, existingPayments, existingDraft]);
+
+  const [addOrderId, setAddOrderId] = useState('');
+  const handleAddOrder = () => {
+    const found = addCandidates.find(o => o.orderId === addOrderId);
+    if (!found) return;
+    setOrders(prev => [...prev, found]);
+    setAddOrderId('');
+  };
+
+  // Never lets the list drop to zero orders - there would be nothing left
+  // to calculate a payment for.
+  const handleRemoveOrder = (orderId: string) => {
+    if (orders.length <= 1) return;
+    setOrders(prev => prev.filter(o => o.orderId !== orderId));
+  };
+
   // Shared by both "Mark as Paid" and "Save as Draft" - a draft skips the
   // Mode of Payment / Date of Payment requirement (there's genuinely
   // nothing to enter yet, since payment hasn't happened), and is saved
@@ -201,6 +250,15 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
           existingDraft.commissionPaymentId,
           {
             ...paymentDetailFields,
+            // Which orders this payment covers can now be edited on this
+            // page (add/remove above) - without sending these, an order
+            // added or removed here would show correctly while still on
+            // this screen but never actually be saved, which is exactly
+            // the bug this fixes: reopening the draft would show the old,
+            // unchanged order list every time.
+            orderIds: orders.map(o => o.orderId),
+            totalOrderValue,
+            calculatedAmount,
             ...(screenshotRemoved ? { screenshotDataUrl: null, screenshotFileName: null } : {})
           },
           currentUser
@@ -348,13 +406,55 @@ export const CommissionCalculationPage: React.FC<CommissionCalculationPageProps>
             </h2>
               <div className="bg-slate-900 border border-slate-800 rounded-xl divide-y divide-slate-800">
                 {orders.map((o) => (
-                  <div key={o.orderId} className="px-4 py-2.5 flex items-center justify-between text-xs">
+                  <div key={o.orderId} className="px-4 py-2.5 flex items-center justify-between text-xs group">
                     <span className="font-mono text-slate-400">{o.orderId}</span>
-                    <span className="text-slate-300 truncate mx-3">{o.schoolName}</span>
+                    <span className="text-slate-300 truncate mx-3 flex-1">{o.schoolName}</span>
                     <CurrencyFormatter amount={o.orderValue || 0} className="text-slate-200 shrink-0" />
+                    {/* Never offered down to the last remaining order - a
+                        payment has to cover at least one. */}
+                    {orders.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOrder(o.orderId)}
+                        title={`Remove ${o.orderId} from this calculation`}
+                        className="ml-3 p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
+
+              {/* Add another of this school's/partner's orders to the same
+                  calculation - only orders that are free to add (see
+                  addCandidates above) ever show up here, so there's nothing
+                  to pick that would create a conflict or mix payees. */}
+              {addCandidates.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={addOrderId}
+                    onChange={(e) => setAddOrderId(e.target.value)}
+                    className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="">Add another order…</option>
+                    {addCandidates.map((o) => (
+                      <option key={o.orderId} value={o.orderId}>
+                        {o.orderId} - {o.schoolName} - ₹{(o.orderValue || 0).toLocaleString('en-IN')}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddOrder}
+                    disabled={!addOrderId}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:border-amber-500/60 hover:text-amber-400 text-slate-300 text-xs font-semibold transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              )}
 
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
