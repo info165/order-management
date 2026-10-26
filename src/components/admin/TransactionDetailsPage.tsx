@@ -401,12 +401,16 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <div className="p-4 border-b border-slate-900 flex items-center justify-between">
+        {/* Promoted from a plain text link to a proper button - a solid
+            filled secondary style (not amber - that stays this page's one
+            primary action) sized a step larger than Add Payments so it
+            reads as clearly clickable rather than a small caption. */}
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-sm font-bold shadow-md shadow-indigo-600/20 transition-all"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
         </button>
         <button
@@ -420,7 +424,14 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
       </div>
 
       <div className="flex-1 flex items-start justify-center px-6 py-8">
-        <div className="w-full max-w-7xl space-y-6">
+        {/* Widened from max-w-7xl (1280px) - the All Transactions table's
+            own columns already add up to more than that, so this page was
+            capping itself narrower than the table actually needs even on a
+            normal-width monitor, forcing a horizontal scroll that a wider
+            screen didn't actually require. This only raises the ceiling;
+            on a screen too narrow to fit it regardless, the table's own
+            horizontal scroll (unchanged) still kicks in exactly as before. */}
+        <div className="w-full max-w-[1600px] space-y-6">
           {/* Hero header */}
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
@@ -553,7 +564,14 @@ export const TransactionDetailsPage: React.FC<TransactionDetailsPageProps> = ({ 
                       <th className="px-4 py-3 w-32 text-right">Mode of Payment</th>
                       <th className="px-4 py-3 w-32">Date of Payment</th>
                       <th className="px-4 py-3 w-20">Screenshot</th>
-                      <th className="px-4 py-3 w-24">Edit</th>
+                      {/* Widened from w-24 - that was only ever sized for the
+                          single Edit button; once Delete sits next to it on
+                          a draft row, it needs more room so Delete never
+                          gets pushed past this column's edge. The table is
+                          already horizontally scrollable (table-fixed, this
+                          just makes it a bit wider overall), so nothing
+                          else on the page is affected by this. */}
+                      <th className="px-4 py-3 w-48">Edit</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
