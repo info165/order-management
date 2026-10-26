@@ -2244,6 +2244,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <option value="CLOSED">Closed (Payment Reconciled)</option>
                           <option value="ON_HOLD">On Hold</option>
                           <option value="CANCELLED">Cancelled</option>
+                          <option value="RETURNED">Returned</option>
                         </select>
                       </div>
 

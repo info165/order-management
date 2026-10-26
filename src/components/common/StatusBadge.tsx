@@ -58,6 +58,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type = 'order'
       case 'CANCELLED':
         colorStyles = 'bg-rose-50 text-rose-700 border-rose-200';
         break;
+      case 'RETURNED':
+        colorStyles = 'bg-orange-50 text-orange-800 border-orange-300 font-semibold';
+        break;
       default:
         colorStyles = 'bg-slate-50 text-slate-700 border-slate-200';
     }

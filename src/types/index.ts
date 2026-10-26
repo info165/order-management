@@ -124,7 +124,8 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CLOSED'
   | 'CANCELLED'
-  | 'ON_HOLD';
+  | 'ON_HOLD'
+  | 'RETURNED';
 
 export type PaymentStatus =
   | 'NOT_INVOICED'
